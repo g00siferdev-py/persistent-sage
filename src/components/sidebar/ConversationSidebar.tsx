@@ -1,0 +1,342 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  Anchor,
+  Brain,
+  Loader2,
+  MessageSquare,
+  PenLine,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
+import type { StoredAnchor, StoredConversation } from "@/types/chat";
+import { memoryRecallAnchors } from "@/hooks/useNovaMemory";
+
+type Props = {
+  conversations: StoredConversation[];
+  activeId: string | null;
+  onSelect: (id: string) => void;
+  onNewChat: () => void;
+  onRename: (id: string, title: string) => void;
+  onDelete: (id: string) => void;
+  listLoading: boolean;
+  briefing: string;
+  briefingLoading: boolean;
+  anchors: StoredAnchor[];
+  onExtractAnchors: () => void;
+};
+
+function formatUpdated(iso: string): string {
+  const d = Date.parse(iso);
+  if (Number.isNaN(d)) return iso;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(d));
+}
+
+export function ConversationSidebar({
+  conversations,
+  activeId,
+  onSelect,
+  onNewChat,
+  onRename,
+  onDelete,
+  listLoading,
+  briefing,
+  briefingLoading,
+  anchors,
+  onExtractAnchors,
+}: Props) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const [recallQuery, setRecallQuery] = useState("");
+  const [recallBusy, setRecallBusy] = useState(false);
+  const [recallHits, setRecallHits] = useState<StoredAnchor[] | null>(null);
+
+  useEffect(() => {
+    if (editingId) inputRef.current?.focus();
+  }, [editingId]);
+
+  useEffect(() => {
+    setRecallHits(null);
+    setRecallQuery("");
+  }, [activeId]);
+
+  const startEditMouseDown = (c: StoredConversation, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingId(c.id);
+    setEditValue(c.title);
+  };
+
+  const commitRename = (id: string) => {
+    const t = editValue.trim();
+    if (t) onRename(id, t);
+    setEditingId(null);
+    setEditValue("");
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditValue("");
+  };
+
+  const runRecall = async () => {
+    const q = recallQuery.trim();
+    if (!q) {
+      setRecallHits(null);
+      return;
+    }
+    setRecallBusy(true);
+    try {
+      const hits = await memoryRecallAnchors(q, activeId, 20);
+      setRecallHits(hits);
+    } catch {
+      setRecallHits([]);
+    } finally {
+      setRecallBusy(false);
+    }
+  };
+
+  return (
+    <aside className="flex w-80 shrink-0 flex-col border-r border-slate-800/80 bg-slate-900/40">
+      <div className="flex items-center gap-2 border-b border-slate-800/80 px-4 py-3">
+        <img
+          src="/nova-icon.svg"
+          alt=""
+          className="size-9 rounded-lg ring-1 ring-slate-700/80"
+        />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold tracking-tight text-white">
+            Nova
+          </p>
+          <p className="truncate text-xs text-slate-500">Companion</p>
+        </div>
+      </div>
+
+      <div className="p-3">
+        <button
+          type="button"
+          onClick={() => onNewChat()}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white shadow-sm shadow-indigo-500/20 transition hover:bg-indigo-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
+        >
+          <Plus className="size-4" aria-hidden />
+          New chat
+        </button>
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-1 px-2 pb-2">
+        <div className="flex items-center gap-2 px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+          <MessageSquare className="size-3.5" aria-hidden />
+          Conversations
+        </div>
+        <nav className="max-h-[28vh] min-h-0 space-y-0.5 overflow-y-auto pr-1">
+          {listLoading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
+              <Loader2 className="size-4 animate-spin text-indigo-400" aria-hidden />
+              Loading…
+            </div>
+          ) : conversations.length === 0 ? (
+            <p className="px-2 py-4 text-center text-xs text-slate-500">
+              No conversations yet. Start one with New chat.
+            </p>
+          ) : (
+            conversations.map((c) => {
+              const active = c.id === activeId;
+              const editing = editingId === c.id;
+              return (
+                <div
+                  key={c.id}
+                  className={
+                    active
+                      ? "flex items-start gap-1 rounded-lg bg-slate-800/90 px-2 py-2 ring-1 ring-indigo-500/40"
+                      : "flex items-start gap-1 rounded-lg px-2 py-2 transition hover:bg-slate-800/60"
+                  }
+                >
+                  {editing ? (
+                    <input
+                      ref={inputRef}
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          commitRename(c.id);
+                        }
+                        if (e.key === "Escape") cancelEdit();
+                      }}
+                      onBlur={(e) => {
+                        const next = e.relatedTarget as Node | null;
+                        if (next && e.currentTarget.parentElement?.contains(next)) return;
+                        commitRename(c.id);
+                      }}
+                      className="min-w-0 flex-1 rounded border border-slate-600 bg-slate-950 px-2 py-1 text-sm text-white outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => onSelect(c.id)}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <span className="block truncate text-sm font-medium text-white">
+                          {c.title}
+                        </span>
+                        <span
+                          className="block text-xs text-slate-500"
+                          title={`Created ${formatUpdated(c.createdAt)}`}
+                        >
+                          {formatUpdated(c.updatedAt)}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Rename ${c.title}`}
+                        onMouseDown={(e) => startEditMouseDown(c, e)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setEditingId(c.id);
+                            setEditValue(c.title);
+                          }
+                        }}
+                        className="shrink-0 rounded p-1 text-slate-500 transition hover:bg-slate-700/80 hover:text-slate-300"
+                      >
+                        <PenLine className="size-3.5" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Delete ${c.title}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setEditingId(null);
+                          setEditValue("");
+                          onDelete(c.id);
+                        }}
+                        className="shrink-0 rounded p-1 text-slate-500 transition hover:bg-red-950/60 hover:text-red-300"
+                      >
+                        <Trash2 className="size-3.5" aria-hidden />
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </nav>
+
+        <div className="mt-1 min-h-0 flex-1 space-y-3 border-t border-slate-800/80 pt-3">
+          <div className="flex items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <Brain className="size-3.5" aria-hidden />
+            Memory Anchor
+          </div>
+
+          <div className="space-y-2 px-1">
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+              <Sparkles className="size-3 shrink-0 text-indigo-400" aria-hidden />
+              <span>Raw + curated layers · local only</span>
+            </div>
+
+            <div className="max-h-36 overflow-y-auto rounded-lg border border-slate-800/80 bg-slate-950/40 px-2.5 py-2">
+              {briefingLoading ? (
+                <div className="flex items-center gap-2 py-4 text-xs text-slate-500">
+                  <Loader2 className="size-4 animate-spin text-indigo-400" aria-hidden />
+                  Loading briefing…
+                </div>
+              ) : (
+                <pre className="whitespace-pre-wrap break-words font-sans text-[11px] leading-relaxed text-slate-400">
+                  {briefing.trim() || "Open a chat to load the enriched startup briefing."}
+                </pre>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={!activeId || briefingLoading}
+                onClick={() => onExtractAnchors()}
+                className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-800/50 px-2 py-1.5 text-[11px] font-medium text-slate-200 transition hover:bg-slate-800 disabled:opacity-40"
+              >
+                <Anchor className="size-3.5" aria-hidden />
+                Extract raw anchors
+              </button>
+            </div>
+
+            <div>
+              <p className="mb-1 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                Thread anchors
+              </p>
+              <ul className="max-h-24 space-y-1 overflow-y-auto">
+                {anchors.length === 0 ? (
+                  <li className="px-1 text-[11px] text-slate-600">No anchors for this thread.</li>
+                ) : (
+                  anchors.slice(0, 12).map((a) => (
+                    <li
+                      key={a.id}
+                      className="rounded border border-slate-800/60 bg-slate-950/30 px-2 py-1 text-[11px] text-slate-400"
+                    >
+                      <span className="mr-1 rounded bg-slate-800 px-1 text-[9px] uppercase text-indigo-300">
+                        {a.anchorType}
+                      </span>
+                      <span className="text-slate-500">·{a.importance}</span>
+                      <span className="mt-0.5 block text-slate-300">{a.content}</span>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+
+            <div>
+              <p className="mb-1 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                Keyword recall
+              </p>
+              <div className="flex gap-1">
+                <input
+                  value={recallQuery}
+                  onChange={(e) => setRecallQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void runRecall();
+                  }}
+                  placeholder="Search anchors…"
+                  className="min-w-0 flex-1 rounded-lg border border-slate-800/90 bg-slate-950/50 px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-600 outline-none focus:border-indigo-500/40"
+                />
+                <button
+                  type="button"
+                  onClick={() => void runRecall()}
+                  disabled={recallBusy}
+                  className="shrink-0 rounded-lg border border-slate-700/80 bg-slate-800/60 p-1.5 text-slate-300 hover:bg-slate-800"
+                  aria-label="Search"
+                >
+                  {recallBusy ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <Search className="size-3.5" aria-hidden />
+                  )}
+                </button>
+              </div>
+              {recallHits && recallHits.length > 0 ? (
+                <ul className="mt-2 max-h-20 space-y-1 overflow-y-auto">
+                  {recallHits.map((a) => (
+                    <li
+                      key={a.id}
+                      className="rounded bg-slate-900/50 px-2 py-0.5 text-[10px] text-slate-400"
+                    >
+                      {a.content}
+                    </li>
+                  ))}
+                </ul>
+              ) : recallHits && recallHits.length === 0 ? (
+                <p className="mt-1 text-[10px] text-slate-600">No matches.</p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}

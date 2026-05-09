@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  html,
+  body,
+  #root {
+    @apply h-full antialiased;
+  }
+
+  body {
+    @apply bg-slate-950 text-slate-100;
+  }
+}
