@@ -124,6 +124,79 @@ export function useChat() {
     }
   }, []);
 
+  /** Pulse uses the open thread — same session as manual sends (stored in settings.json). */
+  useEffect(() => {
+    void invoke("settings_update", {
+      patch: { pulseConversationId: activeConversationId },
+    }).catch(() => {
+      /* browser / no backend */
+    });
+  }, [activeConversationId]);
+
+  /** Stream events for the active thread (user sends and background Pulse share this path). */
+  useEffect(() => {
+    let unlistenStart: (() => void) | undefined;
+    let unlistenStream: (() => void) | undefined;
+    let unlistenErr: (() => void) | undefined;
+    let unlistenPulse: (() => void) | undefined;
+
+    void listen<ChatStreamStart>("chat:stream-start", (e) => {
+      if (e.payload.conversationId !== activeConversationIdRef.current) return;
+      setStreamAssistant({ thinking: true, text: "" });
+    }).then((fn) => {
+      unlistenStart = fn;
+    });
+
+    void listen<ChatStreamEvent>("chat:stream", (e) => {
+      if (e.payload.conversationId !== activeConversationIdRef.current) return;
+      const { delta, done } = e.payload;
+      if (done) {
+        setStreamAssistant(null);
+        return;
+      }
+      if (delta) {
+        setStreamAssistant((prev) => ({
+          thinking: false,
+          text: (prev?.text ?? "") + delta,
+        }));
+      }
+    }).then((fn) => {
+      unlistenStream = fn;
+    });
+
+    void listen<string>("chat:stream-error", (event) => {
+      if (!activeConversationIdRef.current) return;
+      setError(event.payload);
+      setStreamAssistant(null);
+    }).then((fn) => {
+      unlistenErr = fn;
+    });
+
+    type PulseTickPayload = {
+      ok: boolean;
+      at: string;
+      conversationId?: string;
+      summary?: string;
+      error?: string;
+    };
+
+    void listen<PulseTickPayload>("pulse:tick", (e) => {
+      const cid = e.payload.conversationId;
+      if (!cid || cid !== activeConversationIdRef.current) return;
+      setStreamAssistant(null);
+      void loadActiveThread(cid);
+    }).then((fn) => {
+      unlistenPulse = fn;
+    });
+
+    return () => {
+      unlistenStart?.();
+      unlistenStream?.();
+      unlistenErr?.();
+      unlistenPulse?.();
+    };
+  }, [loadActiveThread]);
+
   /** Briefing + anchors only (e.g. after send) — does not replace `messages` or toggle thread loading. */
   const refreshSidebarContext = useCallback(async (conversationId: string) => {
     try {
@@ -405,45 +478,11 @@ export function useChat() {
       setStreamAssistant(null);
       setError(null);
 
-      const unlisteners: Array<() => void> = [];
-
       try {
         // Invalidate any `loadActiveThread` still awaiting IPC for this (often new) thread. Without
         // this, that load can finish with an empty `get_recent` while `chat_send_message` is still
         // running and then `setMessages([])` wipes the optimistic transcript ("chat disappeared").
         loadSeq.current += 1;
-
-        unlisteners.push(
-          await listen<ChatStreamStart>("chat:stream-start", (event) => {
-            if (event.payload.conversationId !== activeConversationIdRef.current) return;
-            setStreamAssistant({ thinking: true, text: "" });
-          }),
-        );
-
-        unlisteners.push(
-          await listen<ChatStreamEvent>("chat:stream", (event) => {
-            if (event.payload.conversationId !== activeConversationIdRef.current) return;
-            const { delta, done } = event.payload;
-            if (done) {
-              setStreamAssistant(null);
-              return;
-            }
-            if (delta) {
-              setStreamAssistant((prev) => ({
-                thinking: false,
-                text: (prev?.text ?? "") + delta,
-              }));
-            }
-          }),
-        );
-
-        unlisteners.push(
-          await listen<string>("chat:stream-error", (event) => {
-            if (convId !== activeConversationIdRef.current) return;
-            setError(event.payload);
-            setStreamAssistant(null);
-          }),
-        );
 
         const personalityIdForSend =
           activePersonalityIdRef.current.trim() || activePersonalityId.trim() || "default";
@@ -474,13 +513,6 @@ export function useChat() {
         await loadActiveThread(convId);
         await refreshConversations();
       } finally {
-        for (const u of unlisteners) {
-          try {
-            u();
-          } catch {
-            /* ignore */
-          }
-        }
         setStreamAssistant(null);
         setSending(false);
       }

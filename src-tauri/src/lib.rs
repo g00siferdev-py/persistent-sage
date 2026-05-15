@@ -12,6 +12,7 @@ mod agent_tools;
 mod chat;
 mod database_query;
 mod memory;
+mod pulse;
 mod personality;
 mod settings;
 mod provider;
@@ -554,6 +555,10 @@ pub fn run() {
             workspace_root,
             data_directory,
         ))
+        .setup(|app| {
+            pulse::spawn_pulse_loop(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             app_version,
             app_data_paths,

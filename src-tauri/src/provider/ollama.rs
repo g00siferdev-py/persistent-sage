@@ -105,6 +105,34 @@ impl OllamaProvider {
             .insert("tools".into(), json!(Self::build_tools_json(list)));
     }
 
+    /// `/api/chat` final `message.content` may be a string or a list of content parts.
+    fn stringify_message_content(content: &Value) -> String {
+        match content {
+            Value::String(s) => s.clone(),
+            Value::Array(parts) => {
+                let mut acc = String::new();
+                for p in parts {
+                    if let Some(s) = p.as_str() {
+                        if !acc.is_empty() {
+                            acc.push('\n');
+                        }
+                        acc.push_str(s);
+                        continue;
+                    }
+                    if let Some(t) = p.get("text").and_then(|x| x.as_str()) {
+                        if !acc.is_empty() {
+                            acc.push('\n');
+                        }
+                        acc.push_str(t);
+                    }
+                }
+                acc
+            }
+            Value::Null => String::new(),
+            _ => String::new(),
+        }
+    }
+
     fn build_options(request: &CompletionRequest) -> Value {
         let mut o = json!({});
         if let Some(t) = request.temperature {
@@ -157,10 +185,7 @@ impl LLMProviderEngine for OllamaProvider {
         if let Some(err) = v["error"].as_str() {
             return Err(ProviderError::Api(err.to_string()));
         }
-        let content = v["message"]["content"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
+        let content = Self::stringify_message_content(&v["message"]["content"]);
 
         let mut tool_calls = Vec::new();
         if let Some(tc) = v["message"]["tool_calls"].as_array() {

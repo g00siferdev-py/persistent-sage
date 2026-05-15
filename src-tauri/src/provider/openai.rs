@@ -108,10 +108,56 @@ impl OpenAIProvider {
         body
     }
 
+    /// Chat Completions `message.content` may be a string or a parts array (newer models / multimodal).
+    fn stringify_message_content(content: &Value) -> String {
+        match content {
+            Value::String(s) => s.clone(),
+            Value::Array(parts) => {
+                let mut acc = String::new();
+                for p in parts {
+                    if let Some(s) = p.as_str() {
+                        if !acc.is_empty() {
+                            acc.push('\n');
+                        }
+                        acc.push_str(s);
+                        continue;
+                    }
+                    match p.get("type").and_then(|t| t.as_str()) {
+                        Some("text") => {
+                            if let Some(t) = p.get("text").and_then(|x| x.as_str()) {
+                                if !acc.is_empty() {
+                                    acc.push('\n');
+                                }
+                                acc.push_str(t);
+                            }
+                        }
+                        Some("refusal") => {
+                            if let Some(t) = p.get("refusal").and_then(|x| x.as_str()) {
+                                if !acc.is_empty() {
+                                    acc.push('\n');
+                                }
+                                acc.push_str(t);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                acc
+            }
+            Value::Null => String::new(),
+            _ => String::new(),
+        }
+    }
+
     fn parse_message(v: &Value) -> Result<(String, Vec<ToolCall>, Option<String>), ProviderError> {
         let choice = &v["choices"][0];
         let msg = &choice["message"];
-        let content = msg["content"].as_str().unwrap_or("").to_string();
+        let mut content = Self::stringify_message_content(&msg["content"]);
+        if content.is_empty() {
+            if let Some(r) = msg["refusal"].as_str() {
+                content = r.to_string();
+            }
+        }
         let finish = choice["finish_reason"].as_str().map(String::from);
 
         let mut tool_calls = Vec::new();

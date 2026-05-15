@@ -374,132 +374,14 @@ pub struct ChatStreamEvent {
     pub done: bool,
 }
 
-#[tauri::command]
-pub async fn chat_send_message(
-    app: AppHandle,
-    state: State<'_, NovaState>,
-    conversation_id: String,
-    message: String,
-    personality_id: Option<String>,
-) -> Result<ChatSendResult, String> {
-    let content = message.trim().to_string();
-    if content.is_empty() {
-        return Err("message content is empty".into());
-    }
-
-    let pid = personality_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or(DEFAULT_PERSONALITY_ID);
-    state
-        .personality
-        .set_active_profile_id(pid)
-        .map_err(|e| format!("companion persona sync: {e}"))?;
-    ConversationMemory::set_active_personality(&*state.memory, pid);
-    eprintln!(
-        "nova: chat_send_message personality_id={pid} conversation_id={} (PersonalityManager + MemoryAnchor aligned)",
-        conversation_id
-    );
-
-    state
-        .memory
-        .store_message(&conversation_id, MessageRole::User, &content)
-        .map_err(|e| e.to_string())?;
-    eprintln!(
-        "nova: chat persisted user message — thread={} personality_id={pid} chars={}",
-        conversation_id,
-        content.chars().count()
-    );
-
-    let engine: std::sync::Arc<dyn LLMProviderEngine + Send + Sync> =
-        match build_engine(&state.http, &state.settings) {
-            Ok(e) => {
-                *state.llm.write().await = e.clone();
-                e
-            }
-            Err(e) => return Err(e.to_string()),
-        };
-
-    let _ = app.emit(
-        "chat:stream-start",
-        ChatStreamStart {
-            conversation_id: conversation_id.clone(),
-        },
-    );
-
-    let mut briefing = state
-        .memory
-        .get_startup_briefing(&conversation_id)
-        .map_err(|e| e.to_string())?;
-
-    let recall_heuristic = should_auto_memory_recall(&content);
-    eprintln!(
-        "nova: memory auto-recall heuristic for this send: {} (thread={})",
-        recall_heuristic, conversation_id
-    );
-    if recall_heuristic {
-        let recall_q: String = content.chars().take(520).collect();
-        eprintln!(
-            "nova: memory auto-recall invoking hybrid search — query_chars={} (cross-thread: all conversations)",
-            recall_q.chars().count()
-        );
-        match state.memory.memory_recall(&recall_q, None, 12, 14) {
-            Ok(bundle) if !bundle.anchors.is_empty() || !bundle.messages.is_empty() => {
-                eprintln!(
-                    "nova: memory auto-recall retrieved — anchors={}, messages={}",
-                    bundle.anchors.len(),
-                    bundle.messages.len()
-                );
-                let block = format_recall_for_prompt(&bundle, 1_800);
-                let preview: String = block.chars().take(240).collect();
-                let preview = preview.replace('\n', " ");
-                eprintln!("nova: memory auto-recall injecting into system briefing — block_chars={}, preview=\"{preview}…\"", block.chars().count());
-                briefing.push_str("\n\n## Retrieved memory (auto)\n\n");
-                briefing.push_str(&block);
-            }
-            Ok(bundle) => eprintln!(
-                "nova: memory auto-recall: no hits (anchors={}, messages={})",
-                bundle.anchors.len(),
-                bundle.messages.len()
-            ),
-            Err(e) => eprintln!("nova: memory auto-recall failed: {e}"),
-        }
-    }
-
-    let recent = state
-        .memory
-        .get_recent(&conversation_id, 48)
-        .map_err(|e| e.to_string())?;
-
-    let persona = state.personality.system_prompt_prefix();
-    eprintln!(
-        "nova: chat_send_message system_prompt_prefix chars={} (persona aligned to personality_id={pid})",
-        persona.chars().count()
-    );
-    let system_content = {
-        let p = persona.trim();
-        if p.is_empty() {
-            briefing.clone()
-        } else {
-            format!("{p}\n\n---\n\n# Memory & session context\n\n{briefing}")
-        }
-    };
-    eprintln!(
-        "nova: chat LLM system layer chars={} (persona + MemoryAnchor briefing + any auto-recall)",
-        system_content.chars().count()
-    );
-
-    let mut messages: Vec<ChatTurn> = Vec::with_capacity(recent.len() + 1);
-    messages.push(ChatTurn::text("system", system_content));
-    for m in recent {
-        let role = match m.role {
-            MessageRole::User => "user",
-            MessageRole::Assistant => "assistant",
-        };
-        messages.push(ChatTurn::text(role, m.content));
-    }
-
+/// Shared LLM path after `messages` (system + transcript) is built: tools or stream, then persist assistant.
+async fn run_chat_completion(
+    app: &AppHandle,
+    state: &NovaState,
+    conversation_id: &str,
+    engine: &std::sync::Arc<dyn LLMProviderEngine + Send + Sync>,
+    messages: Vec<ChatTurn>,
+) -> Result<String, String> {
     let configured = state.settings.max_tokens();
     let max_tokens = match configured {
         Some(n) => Some(n),
@@ -507,7 +389,6 @@ pub async fn chat_send_message(
     };
 
     let temperature = state.settings.temperature();
-    eprintln!("nova: chat_send_message temperature={temperature}");
 
     let mut tool_definitions: Vec<ToolDefinition> = Vec::new();
     if state.settings.agent_web_tools_enabled() {
@@ -531,12 +412,6 @@ pub async fn chat_send_message(
     let agent_tool_backend = (!tool_definitions.is_empty())
         .then(|| web_tool_backend_for_provider(engine.provider_id()))
         .flatten();
-    if agent_tool_backend.is_some() {
-        eprintln!(
-            "nova: chat agent tools enabled (provider={}) — non-streaming tool loop + synthetic stream",
-            engine.provider_id()
-        );
-    }
 
     let mut full = String::new();
 
@@ -558,7 +433,7 @@ pub async fn chat_send_message(
         {
             Ok(text) => {
                 full = text;
-                emit_synthetic_stream_deltas(&app, &conversation_id, &full);
+                emit_synthetic_stream_deltas(app, conversation_id, &full);
             }
             Err(e) => {
                 let msg = e.to_string();
@@ -587,7 +462,7 @@ pub async fn chat_send_message(
                         let _ = app.emit(
                             "chat:stream",
                             ChatStreamEvent {
-                                conversation_id: conversation_id.clone(),
+                                conversation_id: conversation_id.to_string(),
                                 delta: chunk.delta,
                                 done: false,
                             },
@@ -598,7 +473,7 @@ pub async fn chat_send_message(
                         let _ = app.emit(
                             "chat:stream",
                             ChatStreamEvent {
-                                conversation_id: conversation_id.clone(),
+                                conversation_id: conversation_id.to_string(),
                                 delta: String::new(),
                                 done: true,
                             },
@@ -633,7 +508,7 @@ pub async fn chat_send_message(
             let _ = app.emit(
                 "chat:stream",
                 ChatStreamEvent {
-                    conversation_id: conversation_id.clone(),
+                    conversation_id: conversation_id.to_string(),
                     delta: String::new(),
                     done: true,
                 },
@@ -648,9 +523,121 @@ pub async fn chat_send_message(
 
     state
         .memory
-        .store_message(&conversation_id, MessageRole::Assistant, &reply)
+        .store_message(conversation_id, MessageRole::Assistant, &reply)
         .map_err(|e| e.to_string())?;
 
+    Ok(reply)
+}
+
+/// One user turn on an existing conversation — same path for manual send and scheduled Pulse.
+pub async fn execute_chat_turn(
+    app: &AppHandle,
+    state: &NovaState,
+    conversation_id: &str,
+    message: &str,
+    personality_id: &str,
+) -> Result<String, String> {
+    let content = message.trim();
+    if content.is_empty() {
+        return Err("message content is empty".into());
+    }
+
+    let pid = personality_id.trim();
+    let pid = if pid.is_empty() {
+        DEFAULT_PERSONALITY_ID
+    } else {
+        pid
+    };
+    state
+        .personality
+        .set_active_profile_id(pid)
+        .map_err(|e| format!("companion persona sync: {e}"))?;
+    ConversationMemory::set_active_personality(&*state.memory, pid);
+
+    state
+        .memory
+        .store_message(conversation_id, MessageRole::User, content)
+        .map_err(|e| e.to_string())?;
+
+    let engine: std::sync::Arc<dyn LLMProviderEngine + Send + Sync> =
+        match build_engine(&state.http, &state.settings) {
+            Ok(e) => {
+                *state.llm.write().await = e.clone();
+                e
+            }
+            Err(e) => return Err(e.to_string()),
+        };
+
+    let _ = app.emit(
+        "chat:stream-start",
+        ChatStreamStart {
+            conversation_id: conversation_id.to_string(),
+        },
+    );
+
+    let mut briefing = state
+        .memory
+        .get_startup_briefing(conversation_id)
+        .map_err(|e| e.to_string())?;
+
+    if should_auto_memory_recall(content) {
+        let recall_q: String = content.chars().take(520).collect();
+        match state.memory.memory_recall(&recall_q, None, 12, 14) {
+            Ok(bundle) if !bundle.anchors.is_empty() || !bundle.messages.is_empty() => {
+                let block = format_recall_for_prompt(&bundle, 1_800);
+                briefing.push_str("\n\n## Retrieved memory (auto)\n\n");
+                briefing.push_str(&block);
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!("nova: memory auto-recall failed: {e}"),
+        }
+    }
+
+    let recent = state
+        .memory
+        .get_recent(conversation_id, 48)
+        .map_err(|e| e.to_string())?;
+
+    let persona = state.personality.system_prompt_prefix();
+    let system_content = {
+        let p = persona.trim();
+        if p.is_empty() {
+            briefing.clone()
+        } else {
+            format!("{p}\n\n---\n\n# Memory & session context\n\n{briefing}")
+        }
+    };
+
+    let mut messages: Vec<ChatTurn> = Vec::with_capacity(recent.len() + 1);
+    messages.push(ChatTurn::text("system", system_content));
+    for m in recent {
+        let role = match m.role {
+            MessageRole::User => "user",
+            MessageRole::Assistant => "assistant",
+        };
+        messages.push(ChatTurn::text(role, m.content));
+    }
+
+    run_chat_completion(app, state, conversation_id, &engine, messages).await
+}
+
+#[tauri::command]
+pub async fn chat_send_message(
+    app: AppHandle,
+    state: State<'_, NovaState>,
+    conversation_id: String,
+    message: String,
+    personality_id: Option<String>,
+) -> Result<ChatSendResult, String> {
+    let pid = personality_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_PERSONALITY_ID);
+
+    let reply = execute_chat_turn(&app, &state, conversation_id.trim(), &message, pid).await?;
+
+    let engine = state.llm.read().await.clone();
     let info = engine.model_info();
     Ok(ChatSendResult {
         reply,

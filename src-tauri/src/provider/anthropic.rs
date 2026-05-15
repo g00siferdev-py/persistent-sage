@@ -117,6 +117,12 @@ impl AnthropicProvider {
     fn parse_content_blocks(content: &Value) -> Result<(String, Vec<ToolCall>), ProviderError> {
         let mut text_out = String::new();
         let mut tool_calls = Vec::new();
+        if let Some(s) = content.as_str() {
+            if !s.is_empty() {
+                text_out.push_str(s);
+            }
+            return Ok((text_out, tool_calls));
+        }
         let Some(arr) = content.as_array() else {
             return Ok((String::new(), tool_calls));
         };

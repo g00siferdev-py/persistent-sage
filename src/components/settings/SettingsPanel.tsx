@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Cpu, FolderOpen, Heart, KeyRound, Loader2, Moon, SlidersHorizontal } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
+import {
+  Activity,
+  Cpu,
+  FolderOpen,
+  Heart,
+  KeyRound,
+  Loader2,
+  Moon,
+  SlidersHorizontal,
+  Wrench,
+} from "lucide-react";
 import { CompanionPersonalitySection } from "@/components/settings/CompanionPersonalitySection";
 
 type Props = {
@@ -29,6 +40,10 @@ type SettingsView = {
   databaseAppDataEnabled: boolean;
   /** When true, database_query may run INSERT/UPDATE/DELETE/REPLACE on workspace .db files (DROP/ALTER/CREATE still blocked). */
   databaseAllowWrite: boolean;
+  pulseEnabled: boolean;
+  pulseIntervalMinutes: number;
+  pulseInstructions: string;
+  pulseConversationId?: string | null;
   hasOpenaiApiKey: boolean;
   hasAnthropicApiKey: boolean;
   hasOllamaApiKey: boolean;
@@ -48,6 +63,9 @@ type SettingsPatch = {
   agentWorkspaceEnabled?: boolean;
   databaseAppDataEnabled?: boolean;
   databaseAllowWrite?: boolean;
+  pulseEnabled?: boolean;
+  pulseIntervalMinutes?: number;
+  pulseInstructions?: string;
 };
 
 type ProviderDescriptor = {
@@ -205,7 +223,15 @@ function maxTokensSelectValue(settings: SettingsView | null): string {
   return `legacy:${mt}`;
 }
 
-type SettingsTab = "general" | "companion";
+type SettingsTab = "companion" | "provider" | "tools" | "general";
+
+type PulseTickPayload = {
+  ok: boolean;
+  at: string;
+  conversationId?: string;
+  summary?: string;
+  error?: string;
+};
 
 type DestructiveModal = "memory" | "factory";
 
@@ -245,6 +271,7 @@ export function SettingsPanel({
   const [wiping, setWiping] = useState(false);
   const [dataPaths, setDataPaths] = useState<AppDataPaths | null>(null);
   const [revealPathError, setRevealPathError] = useState<string | null>(null);
+  const [lastPulse, setLastPulse] = useState<PulseTickPayload | null>(null);
 
   const loadVersion = useCallback(async () => {
     try {
@@ -289,6 +316,18 @@ export function SettingsPanel({
     void loadProviders();
     void refreshDataPaths();
   }, [open, refreshSettings, loadProviders, refreshDataPaths]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<PulseTickPayload>("pulse:tick", (e) => {
+      setLastPulse(e.payload);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) {
@@ -488,31 +527,54 @@ export function SettingsPanel({
             <SlidersHorizontal className="size-4 text-slate-400" aria-hidden />
             <h2 className="text-sm font-semibold text-white">Settings</h2>
           </div>
-          <div className="flex gap-1 rounded-lg bg-slate-950/60 p-1">
-            <button
-              type="button"
-              onClick={() => setSettingsTab("general")}
-              className={
-                settingsTab === "general"
-                  ? "flex-1 rounded-md bg-slate-800 px-2 py-1.5 text-xs font-medium text-white shadow-sm"
-                  : "flex-1 rounded-md px-2 py-1.5 text-xs font-medium text-slate-400 transition hover:text-slate-200"
-              }
-            >
-              General
-            </button>
+          <div className="grid grid-cols-2 gap-1">
             <button
               type="button"
               onClick={() => setSettingsTab("companion")}
               className={
                 settingsTab === "companion"
-                  ? "flex-1 rounded-md bg-indigo-900/50 px-2 py-1.5 text-xs font-medium text-white shadow-sm ring-1 ring-indigo-500/30"
-                  : "flex-1 rounded-md px-2 py-1.5 text-xs font-medium text-slate-400 transition hover:text-slate-200"
+                  ? "flex items-center justify-center gap-1 rounded-md bg-indigo-900/50 px-2 py-1.5 text-[11px] font-medium text-white shadow-sm ring-1 ring-indigo-500/30"
+                  : "flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium text-slate-400 transition hover:text-slate-200"
               }
             >
-              <span className="inline-flex items-center justify-center gap-1">
-                <Heart className="size-3" aria-hidden />
-                Companion
-              </span>
+              <Heart className="size-3 shrink-0" aria-hidden />
+              Companion
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettingsTab("provider")}
+              className={
+                settingsTab === "provider"
+                  ? "flex items-center justify-center gap-1 rounded-md bg-slate-800 px-2 py-1.5 text-[11px] font-medium text-white shadow-sm"
+                  : "flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium text-slate-400 transition hover:text-slate-200"
+              }
+            >
+              <Cpu className="size-3 shrink-0" aria-hidden />
+              Provider
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettingsTab("tools")}
+              className={
+                settingsTab === "tools"
+                  ? "flex items-center justify-center gap-1 rounded-md bg-slate-800 px-2 py-1.5 text-[11px] font-medium text-white shadow-sm"
+                  : "flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium text-slate-400 transition hover:text-slate-200"
+              }
+            >
+              <Wrench className="size-3 shrink-0" aria-hidden />
+              Tools
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettingsTab("general")}
+              className={
+                settingsTab === "general"
+                  ? "flex items-center justify-center gap-1 rounded-md bg-slate-800 px-2 py-1.5 text-[11px] font-medium text-white shadow-sm"
+                  : "flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium text-slate-400 transition hover:text-slate-200"
+              }
+            >
+              <SlidersHorizontal className="size-3 shrink-0" aria-hidden />
+              General
             </button>
           </div>
         </div>
@@ -538,21 +600,8 @@ export function SettingsPanel({
             />
           ) : null}
 
-          {settingsTab === "general" ? (
+          {settingsTab === "provider" ? (
             <>
-          <section className="space-y-2">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Appearance
-            </h3>
-            <div className="flex items-center gap-3 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2.5">
-              <Moon className="size-4 text-indigo-300" aria-hidden />
-              <div>
-                <p className="text-sm font-medium text-white">Dark mode</p>
-                <p className="text-xs text-slate-500">Default for Nova</p>
-              </div>
-            </div>
-          </section>
-
           <section className="space-y-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Provider
@@ -946,6 +995,78 @@ export function SettingsPanel({
                 className="h-2 w-full cursor-pointer accent-indigo-500 disabled:opacity-50"
               />
             </div>
+            <label className="block text-xs font-medium text-slate-400" htmlFor="max-tokens-select">
+              Max input tokens
+            </label>
+            <p className="text-[11px] leading-relaxed text-slate-500">
+              Presets match common context sizes. This caps how many tokens the model may produce in its
+              reply (generation budget).{" "}
+              <span className="text-slate-400">
+                <strong className="font-medium text-slate-300">Use model default</strong> lets Nova use this
+                model&apos;s context window from the provider, then apply a safe per-API limit. Explicit values
+                are clamped if the active model cannot honor them.
+              </span>
+            </p>
+            <select
+              id="max-tokens-select"
+              disabled={!settings}
+              value={maxTokensSelectValue(settings)}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v.startsWith("legacy:")) return;
+                const maxTokens = v === "default" ? null : Number.parseInt(v, 10);
+                if (v !== "default" && Number.isNaN(maxTokens)) return;
+
+                flushDebounce();
+                setSettings((s) => (s ? { ...s, maxTokens } : s));
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { maxTokens },
+                    });
+                    setSettings({ ...next, maxTokens: next.maxTokens ?? null });
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+              className="w-full cursor-pointer rounded-lg border border-zinc-600 bg-zinc-900 py-2.5 pl-3 pr-8 text-sm text-zinc-100 outline-none [color-scheme:dark] focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+            >
+              {MAX_TOKEN_SELECT_OPTIONS.map((o) => (
+                <option
+                  key={o.value}
+                  value={o.value}
+                  className="bg-zinc-900 text-zinc-100 dark:bg-zinc-800 dark:text-zinc-100"
+                >
+                  {o.label}
+                </option>
+              ))}
+              {settings &&
+              typeof settings.maxTokens === "number" &&
+              !MAX_TOKEN_SELECT_OPTIONS.some((o) => o.tokens === settings.maxTokens) ? (
+                <option
+                  value={`legacy:${settings.maxTokens}`}
+                  className="bg-zinc-900 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-400"
+                >
+                  Saved value: {settings.maxTokens.toLocaleString()} (pick a preset to replace)
+                </option>
+              ) : null}
+            </select>
+          </section>
+            </>
+          ) : null}
+
+          {settingsTab === "tools" ? (
+            <>
+          <section className="space-y-3">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Assistant tools
+            </h3>
+            <p className="text-[11px] leading-relaxed text-slate-500">
+              Chat-only options for OpenAI, Ollama, and Anthropic. Background Pulse never uses tools.
+            </p>
             <div className="flex items-start gap-3 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
               <input
                 id="agent-web-tools"
@@ -1147,65 +1268,144 @@ export function SettingsPanel({
                 </p>
               </div>
             </div>
-            <label className="block text-xs font-medium text-slate-400" htmlFor="max-tokens-select">
-              Max input tokens
-            </label>
-            <p className="text-[11px] leading-relaxed text-slate-500">
-              Presets match common context sizes. This caps how many tokens the model may produce in its
-              reply (generation budget).{" "}
-              <span className="text-slate-400">
-                <strong className="font-medium text-slate-300">Use model default</strong> lets Nova use this
-                model&apos;s context window from the provider, then apply a safe per-API limit. Explicit values
-                are clamped if the active model cannot honor them.
-              </span>
-            </p>
-            <select
-              id="max-tokens-select"
-              disabled={!settings}
-              value={maxTokensSelectValue(settings)}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v.startsWith("legacy:")) return;
-                const maxTokens = v === "default" ? null : Number.parseInt(v, 10);
-                if (v !== "default" && Number.isNaN(maxTokens)) return;
+          </section>
+            </>
+          ) : null}
 
-                flushDebounce();
-                setSettings((s) => (s ? { ...s, maxTokens } : s));
-                void (async () => {
-                  try {
-                    setError(null);
-                    const next = await invoke<SettingsView>("settings_update", {
-                      patch: { maxTokens },
-                    });
-                    setSettings({ ...next, maxTokens: next.maxTokens ?? null });
-                  } catch (err) {
-                    setError(String(err));
-                    await refreshSettings();
-                  }
-                })();
-              }}
-              className="w-full cursor-pointer rounded-lg border border-zinc-600 bg-zinc-900 py-2.5 pl-3 pr-8 text-sm text-zinc-100 outline-none [color-scheme:dark] focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-            >
-              {MAX_TOKEN_SELECT_OPTIONS.map((o) => (
-                <option
-                  key={o.value}
-                  value={o.value}
-                  className="bg-zinc-900 text-zinc-100 dark:bg-zinc-800 dark:text-zinc-100"
-                >
-                  {o.label}
-                </option>
-              ))}
-              {settings &&
-              typeof settings.maxTokens === "number" &&
-              !MAX_TOKEN_SELECT_OPTIONS.some((o) => o.tokens === settings.maxTokens) ? (
-                <option
-                  value={`legacy:${settings.maxTokens}`}
-                  className="bg-zinc-900 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-400"
-                >
-                  Saved value: {settings.maxTokens.toLocaleString()} (pick a preset to replace)
-                </option>
-              ) : null}
-            </select>
+          {settingsTab === "general" ? (
+            <>
+          <section className="space-y-2">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Appearance
+            </h3>
+            <div className="flex items-center gap-3 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2.5">
+              <Moon className="size-4 text-indigo-300" aria-hidden />
+              <div>
+                <p className="text-sm font-medium text-white">Dark mode</p>
+                <p className="text-xs text-slate-500">Default for Nova</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-3 rounded-lg border border-violet-900/35 bg-violet-950/12 p-3 ring-1 ring-violet-800/25">
+            <div className="flex items-center gap-2">
+              <Activity className="size-4 text-violet-300" aria-hidden />
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-violet-200/90">Pulse</h3>
+            </div>
+            <p className="text-[11px] leading-relaxed text-slate-500">
+              On a timer, Nova posts your instructions as a <strong className="font-medium text-slate-300">normal user
+              message</strong> in the chat you have open — same session, history, tools, and reply stream as if you
+              typed it. Keep that thread selected in the sidebar while Pulse is on.
+            </p>
+            {settings?.pulseConversationId ? (
+              <p className="font-mono text-[10px] text-slate-500" title={settings.pulseConversationId}>
+                Bound thread:{" "}
+                {settings.pulseConversationId.length > 14
+                  ? `${settings.pulseConversationId.slice(0, 12)}…`
+                  : settings.pulseConversationId}
+              </p>
+            ) : (
+              <p className="text-[10px] text-amber-400/90">No thread bound — select a conversation in the sidebar.</p>
+            )}
+            <div className="flex items-start gap-3 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
+              <input
+                id="pulse-enabled"
+                type="checkbox"
+                className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-slate-600 accent-violet-500"
+                checked={settings?.pulseEnabled ?? false}
+                disabled={!settings}
+                onChange={(e) => {
+                  const pulseEnabled = e.target.checked;
+                  setSettings((s) => (s ? { ...s, pulseEnabled } : s));
+                  flushDebounce();
+                  void (async () => {
+                    try {
+                      setError(null);
+                      const next = await invoke<SettingsView>("settings_update", { patch: { pulseEnabled } });
+                      setSettings(next);
+                    } catch (err) {
+                      setError(String(err));
+                      await refreshSettings();
+                    }
+                  })();
+                }}
+              />
+              <div className="min-w-0 space-y-1">
+                <label htmlFor="pulse-enabled" className="cursor-pointer text-xs font-medium text-slate-300">
+                  Enable Pulse
+                </label>
+                <p className="text-[11px] text-slate-500">
+                  Requires a real provider (not Placeholder). The first tick runs after one full interval from app
+                  startup.
+                </p>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-slate-400" htmlFor="pulse-interval">
+                Interval (minutes)
+              </label>
+              <input
+                id="pulse-interval"
+                type="number"
+                min={1}
+                max={1440}
+                disabled={!settings}
+                value={settings?.pulseIntervalMinutes ?? 15}
+                onChange={(e) => {
+                  const raw = Number.parseInt(e.target.value, 10);
+                  const pulseIntervalMinutes = Number.isNaN(raw) ? 15 : Math.min(1440, Math.max(1, raw));
+                  setSettings((s) => (s ? { ...s, pulseIntervalMinutes } : s));
+                  schedulePatch({ pulseIntervalMinutes });
+                }}
+                className="w-full rounded-lg border border-slate-800/90 bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-200 outline-none focus:border-violet-500/50 disabled:opacity-50"
+              />
+              <p className="text-[10px] text-slate-600">1–1440. The background loop picks up changes on the next wait.</p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-slate-400" htmlFor="pulse-instructions">
+                Instructions for each tick
+              </label>
+              <textarea
+                id="pulse-instructions"
+                rows={5}
+                disabled={!settings}
+                value={settings?.pulseInstructions ?? ""}
+                onChange={(e) => {
+                  const pulseInstructions = e.target.value;
+                  setSettings((s) => (s ? { ...s, pulseInstructions } : s));
+                  schedulePatch({ pulseInstructions });
+                }}
+                className="w-full resize-y rounded-lg border border-slate-800/90 bg-slate-950/60 px-3 py-2 text-sm text-slate-200 outline-none focus:border-violet-500/50 disabled:opacity-50"
+                placeholder="What should the model focus on when Pulse fires?"
+              />
+            </div>
+            <div className="space-y-1.5 border-t border-slate-800/70 pt-3">
+              <p className="text-[11px] font-medium text-slate-400">Last result (this session)</p>
+              {lastPulse ? (
+                <div className="rounded-md border border-slate-800/80 bg-slate-950/50 p-2">
+                  {lastPulse.conversationId ? (
+                    <p className="mb-1 font-mono text-[10px] text-slate-500" title={lastPulse.conversationId}>
+                      Thread:{" "}
+                      {lastPulse.conversationId.length > 14
+                        ? `${lastPulse.conversationId.slice(0, 12)}…`
+                        : lastPulse.conversationId}
+                    </p>
+                  ) : null}
+                  <p className="font-mono text-[10px] text-slate-500">{lastPulse.at}</p>
+                  {lastPulse.summary ? (
+                    <p className="mt-2 whitespace-pre-wrap text-[11px] text-slate-200">{lastPulse.summary}</p>
+                  ) : null}
+                  {lastPulse.error ? (
+                    <p className="mt-2 text-[11px] text-amber-200/90">{lastPulse.error}</p>
+                  ) : null}
+                  {!lastPulse.ok && !lastPulse.error && !lastPulse.summary ? (
+                    <p className="mt-1 text-[11px] text-slate-500">Empty response.</p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-600">No tick yet — enable Pulse and wait for an interval.</p>
+              )}
+            </div>
           </section>
 
           <section className="space-y-3 rounded-lg border border-red-900/40 bg-red-950/12 p-3">

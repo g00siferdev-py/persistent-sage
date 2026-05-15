@@ -210,6 +210,17 @@ impl PersonalityManager {
             .unwrap_or_default()
     }
 
+    /// Active companion profile id (must stay aligned with MemoryAnchor for the same chat).
+    #[must_use]
+    pub fn active_profile_id(&self) -> String {
+        self.inner
+            .read()
+            .ok()
+            .map(|f| f.active_profile_id.clone())
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "default".into())
+    }
+
     /// Set which profile supplies the chat persona (`system_prompt_prefix`), persist to disk.
     /// Must stay in sync with MemoryAnchor active personality for the same `profile_id`.
     pub fn set_active_profile_id(&self, profile_id: &str) -> Result<(), PersonalityError> {

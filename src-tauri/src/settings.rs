@@ -81,6 +81,14 @@ pub struct SettingsFile {
     pub database_allow_write: bool,
     #[serde(default = "default_database_app_data")]
     pub database_app_data_enabled: bool,
+    #[serde(default = "default_pulse_enabled")]
+    pub pulse_enabled: bool,
+    #[serde(default = "default_pulse_interval_minutes")]
+    pub pulse_interval_minutes: u32,
+    #[serde(default = "default_pulse_instructions")]
+    pub pulse_instructions: String,
+    /// Conversation id Pulse appends to (same thread as the open chat). Omitted/null = none.
+    pub pulse_conversation_id: Option<String>,
     #[serde(default)]
     pub encrypted_api_keys: HashMap<String, EncryptedApiKeyBlob>,
 }
@@ -99,6 +107,18 @@ fn default_database_allow_write() -> bool {
 
 fn default_database_app_data() -> bool {
     false
+}
+
+fn default_pulse_enabled() -> bool {
+    false
+}
+
+fn default_pulse_interval_minutes() -> u32 {
+    15
+}
+
+fn default_pulse_instructions() -> String {
+    "Briefly check in: any reminders, open loops, or a short note the user might appreciate. Keep it to a few sentences unless they ask for more detail.".into()
 }
 
 fn default_version() -> u32 {
@@ -125,6 +145,10 @@ impl Default for SettingsFile {
             agent_workspace_enabled: false,
             database_allow_write: false,
             database_app_data_enabled: false,
+            pulse_enabled: false,
+            pulse_interval_minutes: 15,
+            pulse_instructions: default_pulse_instructions(),
+            pulse_conversation_id: None,
             encrypted_api_keys: HashMap::new(),
         }
     }
@@ -146,6 +170,10 @@ pub struct SettingsView {
     pub agent_workspace_enabled: bool,
     pub database_allow_write: bool,
     pub database_app_data_enabled: bool,
+    pub pulse_enabled: bool,
+    pub pulse_interval_minutes: u32,
+    pub pulse_instructions: String,
+    pub pulse_conversation_id: Option<String>,
     pub has_openai_api_key: bool,
     pub has_anthropic_api_key: bool,
     pub has_ollama_api_key: bool,
@@ -168,6 +196,10 @@ pub struct SettingsUpdatePayload {
     pub agent_workspace_enabled: Option<bool>,
     pub database_allow_write: Option<bool>,
     pub database_app_data_enabled: Option<bool>,
+    pub pulse_enabled: Option<bool>,
+    pub pulse_interval_minutes: Option<u32>,
+    pub pulse_instructions: Option<String>,
+    pub pulse_conversation_id: Option<JsonValue>,
 }
 
 // --- Crypto ------------------------------------------------------------------
@@ -451,6 +483,10 @@ impl SettingsManager {
             agent_workspace_enabled: inner.agent_workspace_enabled,
             database_allow_write: inner.database_allow_write,
             database_app_data_enabled: inner.database_app_data_enabled,
+            pulse_enabled: inner.pulse_enabled,
+            pulse_interval_minutes: inner.pulse_interval_minutes,
+            pulse_instructions: inner.pulse_instructions.clone(),
+            pulse_conversation_id: inner.pulse_conversation_id.clone(),
             has_openai_api_key: can_decrypt_api_blob(&self.aes_key, inner.encrypted_api_keys.get("openai")),
             has_anthropic_api_key: can_decrypt_api_blob(
                 &self.aes_key,
@@ -640,6 +676,33 @@ impl SettingsManager {
         }
         if let Some(b) = patch.database_app_data_enabled {
             inner.database_app_data_enabled = b;
+        }
+        if let Some(b) = patch.pulse_enabled {
+            inner.pulse_enabled = b;
+        }
+        if let Some(m) = patch.pulse_interval_minutes {
+            inner.pulse_interval_minutes = m.clamp(1, 24 * 60);
+        }
+        if let Some(s) = patch.pulse_instructions {
+            inner.pulse_instructions = s;
+        }
+        if let Some(v) = patch.pulse_conversation_id {
+            inner.pulse_conversation_id = match v {
+                JsonValue::Null => None,
+                JsonValue::String(s) => {
+                    let t = s.trim();
+                    if t.is_empty() {
+                        None
+                    } else {
+                        Some(t.to_string())
+                    }
+                }
+                _ => {
+                    return Err(SettingsError::Crypto(
+                        "pulse_conversation_id must be null or a string".into(),
+                    ));
+                }
+            };
         }
         inner.version = SETTINGS_VERSION;
         drop(inner);
