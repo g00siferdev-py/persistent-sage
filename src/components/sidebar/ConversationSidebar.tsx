@@ -33,6 +33,8 @@ type Props = {
   briefingLoading: boolean;
   anchors: StoredAnchor[];
   onExtractAnchors: () => void;
+  /** Active companion display name (nameplate). */
+  companionName: string;
 };
 
 function formatUpdated(iso: string): string {
@@ -60,6 +62,7 @@ export function ConversationSidebar({
   briefingLoading,
   anchors,
   onExtractAnchors,
+  companionName,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -134,7 +137,7 @@ export function ConversationSidebar({
         />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold tracking-tight text-white">
-            Nova
+            {companionName}
           </p>
           <p className="truncate text-xs text-slate-500">Companion</p>
         </div>

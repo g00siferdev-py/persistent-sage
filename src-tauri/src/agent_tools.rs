@@ -16,7 +16,7 @@ use reqwest::{Method, StatusCode};
 use serde_json::{json, Value};
 use url::Url;
 
-use crate::provider::{ProviderError, ToolDefinition};
+use crate::provider::{ProviderError, ToolCall, ToolDefinition};
 
 const FETCH_MAX_BYTES: usize = 900_000;
 const FETCH_TIMEOUT_SECS: u64 = 25;
@@ -33,13 +33,42 @@ const SEARCH_QUERY_MAX: usize = 400;
 const DDG_HTML_SERP_MAX_BYTES: usize = 512_000;
 const DDG_BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
+/// Appended to the system message when agent tools are enabled so models see available tools
+/// (including Ollama models that only emit XML `<invoke>` blocks in text).
+pub fn tools_system_appendix(tools: &[ToolDefinition]) -> String {
+    if tools.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("\n\n## Built-in tools (enabled)\n\n");
+    out.push_str(
+        "You **must** use these tools when the user asks you to search the web, open a URL, read files, \
+         query a database, or fetch a JS-heavy page — do not claim you cannot browse or access tools.\n\n",
+    );
+    out.push_str(
+        "Call tools via the API's native `tool_calls` / function channel when available. \
+         If the API does not accept tools, output **only** this XML (no markdown fences):\n\n",
+    );
+    out.push_str(
+        "<function_calls>\n<invoke name=\"TOOL_NAME\">\n<parameter name=\"arg\">value</parameter>\n</invoke>\n</function_calls>\n\n",
+    );
+    out.push_str("**Registered tools:**\n");
+    for t in tools {
+        let desc = t.description.as_deref().unwrap_or("(no description)");
+        out.push_str(&format!("- `{}`: {}\n", t.name, desc));
+    }
+    out.push_str(
+        "\nAfter tools run, you receive results in follow-up messages. Summarize for the user in natural language.\n",
+    );
+    out
+}
+
 /// OpenAI function tools offered when agent web tools are enabled.
 pub fn builtin_tool_definitions() -> Vec<ToolDefinition> {
     vec![
         ToolDefinition {
             name: "web_search".into(),
             description: Some(
-                "Search the public web via DuckDuckGo: uses the instant-answer API when it has a snippet, otherwise HTML search result titles and links (not a full page dump). Good for pointers and headlines; for full articles use fetch_url.".into(),
+                "Search the public web via DuckDuckGo: uses the instant-answer API when it has a snippet, otherwise HTML search result titles and links (not a full page dump). Good for pointers and headlines; for full articles use fetch_url or fetch_browser.".into(),
             ),
             parameters: json!({
                 "type": "object",
@@ -52,7 +81,7 @@ pub fn builtin_tool_definitions() -> Vec<ToolDefinition> {
         ToolDefinition {
             name: "fetch_url".into(),
             description: Some(
-                "Fetch a public http(s) URL and return plain-text-ish body (HTML tags stripped, size-capped). Do not use for secrets or authenticated pages.".into(),
+                "Fetch a public http(s) URL with a simple HTTP client (fast, no JavaScript). Returns plain text with HTML stripped. For JS-heavy sites (SPAs, news paywalls) or bot-protected pages, use fetch_browser when enabled.".into(),
             ),
             parameters: json!({
                 "type": "object",
@@ -87,6 +116,40 @@ pub fn builtin_tool_definitions() -> Vec<ToolDefinition> {
             }),
         },
     ]
+}
+
+/// Headless Chromium page fetch (requires system Chrome/Chromium and the browser-fetch setting).
+pub fn browser_fetch_tool_definition(ignore_robots: bool) -> ToolDefinition {
+    let robots_note = if ignore_robots {
+        "robots.txt checks are disabled in Nova settings"
+    } else {
+        "respects robots.txt"
+    };
+    ToolDefinition {
+        name: "fetch_browser".into(),
+        description: Some(format!(
+            "Load a public https URL in headless Chrome: runs JavaScript, uses a real browser user-agent, \
+             keeps cookies in a Nova profile, {robots_note}, and per-host rate limits. Returns structured \
+             JSON (title, headings, paragraphs, links, images). Use for CNN, Reddit, React/Next.js sites \
+             where fetch_url returns empty or 403."
+        )),
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "url": { "type": "string", "description": "Absolute http or https URL" },
+                "wait_until": {
+                    "type": "string",
+                    "enum": ["domcontentloaded", "load", "networkidle"],
+                    "description": "When to capture DOM (default networkidle — best for SPAs)"
+                },
+                "screenshot": {
+                    "type": "boolean",
+                    "description": "If true, save a PNG screenshot under the workspace or data directory and include screenshotPath in the result"
+                }
+            },
+            "required": ["url"]
+        }),
+    }
 }
 
 const WORKSPACE_READ_MAX_BYTES: usize = 900_000;
@@ -888,10 +951,7 @@ pub async fn fetch_url_text(http: &reqwest::Client, raw_url: &str) -> Result<Str
     let url = validate_fetch_url(raw_url)?;
     let res = http
         .get(url.clone())
-        .header(
-            "User-Agent",
-            "Mozilla/5.0 (compatible; NovaCompanion/1.0; +https://github.com/)",
-        )
+        .header("User-Agent", crate::browser_fetch::BROWSER_USER_AGENT)
         .timeout(Duration::from_secs(FETCH_TIMEOUT_SECS))
         .send()
         .await?
@@ -927,6 +987,155 @@ pub async fn fetch_url_text(http: &reqwest::Client, raw_url: &str) -> Result<Str
     Ok(format!("URL: {}\n\n{}", url, out))
 }
 
+// --- Text-embedded tool calls (models that print XML instead of native tool_calls) ---
+
+fn find_ci(haystack: &str, needle: &str) -> Option<usize> {
+    let h = haystack.to_ascii_lowercase();
+    let n = needle.to_ascii_lowercase();
+    h.find(&n)
+}
+
+fn extract_xml_attr(tag_open: &str, attr: &str) -> Option<String> {
+    let lower = tag_open.to_ascii_lowercase();
+    let key = format!("{attr}=");
+    let i = lower.find(&key)?;
+    let rest = &tag_open[i + key.len()..];
+    let q = rest.chars().next()?;
+    if q != '"' && q != '\'' {
+        return None;
+    }
+    let after = &rest[1..];
+    let end = after.find(q)?;
+    Some(after[..end].to_string())
+}
+
+fn parse_parameter_tags(invoke_block: &str) -> serde_json::Map<String, Value> {
+    let mut map = serde_json::Map::new();
+    let mut cursor = invoke_block;
+    while let Some(rel) = find_ci(cursor, "<parameter") {
+        let tag = &cursor[rel..];
+        let Some(name) = extract_xml_attr(tag, "name") else {
+            cursor = &tag[1..];
+            continue;
+        };
+        let Some(gt) = tag.find('>') else {
+            break;
+        };
+        let after_gt = &tag[gt + 1..];
+        let close_rel = find_ci(after_gt, "</parameter>").unwrap_or(after_gt.len());
+        let value = after_gt[..close_rel].trim();
+        if !name.is_empty() {
+            map.insert(name, Value::String(value.to_string()));
+        }
+        cursor = &after_gt[close_rel..];
+    }
+    map
+}
+
+fn parse_one_invoke_block(invoke_block: &str) -> Option<(String, Value)> {
+    let name = extract_xml_attr(invoke_block, "name")?;
+    if name.trim().is_empty() {
+        return None;
+    }
+    let args_map = parse_parameter_tags(invoke_block);
+    if args_map.is_empty() {
+        let gt = invoke_block.find('>')?;
+        let inner = invoke_block[gt + 1..]
+            .split("</invoke>")
+            .next()
+            .unwrap_or("")
+            .trim();
+        if inner.starts_with('{') {
+            if let Ok(v) = serde_json::from_str::<Value>(inner) {
+                if v.is_object() {
+                    return Some((name, v));
+                }
+            }
+        }
+    }
+    Some((name, Value::Object(args_map)))
+}
+
+/// True when the model printed XML-style tool markup in plain text.
+pub fn content_has_embedded_tool_calls(content: &str) -> bool {
+    find_ci(content, "<function_calls").is_some() || find_ci(content, "<invoke").is_some()
+}
+
+/// Focus on the `<function_calls>…</function_calls>` block when the model wraps it in prose or markdown.
+fn extract_tool_calls_fragment(content: &str) -> &str {
+    let lower = content.to_ascii_lowercase();
+    let Some(start) = lower.find("<function_calls") else {
+        return content;
+    };
+    let tail = &content[start..];
+    let tail_lower = &lower[start..];
+    if let Some(end_rel) = tail_lower.rfind("</function_calls>") {
+        let end = end_rel + "</function_calls>".len();
+        &tail[..end.min(tail.len())]
+    } else {
+        tail
+    }
+}
+
+/// Some cloud models (e.g. Kimi via Ollama) emit tool calls as XML in `content` instead of API `tool_calls`.
+pub fn parse_text_embedded_tool_calls(content: &str) -> Vec<ToolCall> {
+    let fragment = extract_tool_calls_fragment(content);
+    if !fragment.to_ascii_lowercase().contains("<invoke") {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    let mut cursor = fragment;
+    let mut idx = 0usize;
+    while let Some(rel) = find_ci(cursor, "<invoke") {
+        let block = &cursor[rel..];
+        let close_rel = find_ci(block, "</invoke>");
+        let end = close_rel.map(|c| c + "</invoke>".len()).unwrap_or(block.len());
+        let invoke_block = &block[..end];
+        if let Some((name, args)) = parse_one_invoke_block(invoke_block) {
+            let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".into());
+            out.push(ToolCall {
+                id: format!("text_tool_{idx}"),
+                name,
+                arguments_json,
+            });
+            idx += 1;
+        }
+        cursor = &block[end..];
+        if close_rel.is_none() {
+            break;
+        }
+    }
+    out
+}
+
+/// Remove XML tool-call markup so it is not shown to the user or re-fed verbatim.
+pub fn strip_embedded_tool_call_markup(content: &str) -> String {
+    let mut out = content.to_string();
+    loop {
+        let Some(start) = find_ci(&out, "<function_calls") else {
+            break;
+        };
+        let tail = &out[start..];
+        let Some(close_rel) = find_ci(tail, "</function_calls>") else {
+            break;
+        };
+        let end = start + close_rel + "</function_calls>".len();
+        out.replace_range(start..end, "");
+    }
+    loop {
+        let Some(start) = find_ci(&out, "<invoke") else {
+            break;
+        };
+        let tail = &out[start..];
+        let Some(close_rel) = find_ci(tail, "</invoke>") else {
+            break;
+        };
+        let end = start + close_rel + "</invoke>".len();
+        out.replace_range(start..end, "");
+    }
+    out.trim().to_string()
+}
+
 /// Run one built-in tool by name; returns text for the `tool` message.
 pub async fn run_builtin_tool(
     http: &reqwest::Client,
@@ -934,11 +1143,22 @@ pub async fn run_builtin_tool(
     data_directory: &Path,
     database_app_data_enabled: bool,
     database_allow_write: bool,
+    browser_ignore_robots: bool,
+    personality: Option<&crate::personality::PersonalityManager>,
     name: &str,
     arguments_json: &str,
 ) -> Result<String, ProviderError> {
+    let n = name.trim();
+    if n == "personality_get" || n == "personality_update" {
+        let mgr = personality.ok_or_else(|| {
+            tool_err("personality self-edit tools are not enabled in Settings")
+        })?;
+        let (body, _) = crate::personality_tools::run_personality_tool(mgr, n, arguments_json)?;
+        return Ok(body);
+    }
+
     let v: Value = serde_json::from_str(arguments_json).map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
-    match name.trim() {
+    match n {
         "web_search" => {
             let q = v["query"].as_str().unwrap_or("").trim();
             ddg_web_search(http, q).await
@@ -946,6 +1166,16 @@ pub async fn run_builtin_tool(
         "fetch_url" => {
             let u = v["url"].as_str().unwrap_or("").trim();
             fetch_url_text(http, u).await
+        }
+        "fetch_browser" => {
+            crate::browser_fetch::fetch_browser_page(
+                http,
+                data_directory,
+                workspace_root,
+                browser_ignore_robots,
+                &v,
+            )
+            .await
         }
         "http_request" => http_request_tool(http, &v).await,
         "workspace_read_file" => {
@@ -1041,6 +1271,36 @@ mod tests {
         let p = resolve_workspace_subpath(&tmp, "./notes/./file.txt").unwrap();
         assert!(p.ends_with("file.txt"), "{p:?}");
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn parse_text_embedded_fetch_browser_invoke() {
+        let s = r#"<function_calls>
+<invoke name="fetch_browser">
+<parameter name="url">https://www.cnn.com</parameter>
+</invoke>
+</function_calls>"#;
+        let calls = parse_text_embedded_tool_calls(s);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "fetch_browser");
+        let v: Value = serde_json::from_str(&calls[0].arguments_json).unwrap();
+        assert_eq!(v["url"].as_str().unwrap(), "https://www.cnn.com");
+    }
+
+    #[test]
+    fn parse_text_embedded_fetch_url_invoke() {
+        let s = r#"<function_calls>
+<invoke name="fetch_url">
+<parameter name="url">https://moltbook.com/skill</parameter>
+</invoke>
+</function_calls>"#;
+        let calls = parse_text_embedded_tool_calls(s);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "fetch_url");
+        let v: Value = serde_json::from_str(&calls[0].arguments_json).unwrap();
+        assert_eq!(v["url"].as_str().unwrap(), "https://moltbook.com/skill");
+        let stripped = strip_embedded_tool_call_markup(s);
+        assert!(!stripped.contains("<invoke"));
     }
 
     #[test]

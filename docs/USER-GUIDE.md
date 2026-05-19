@@ -1,6 +1,6 @@
 # Nova user guide
 
-Complete guide to the Nova desktop application as shipped in **version 0.1.0** (early alpha).
+Complete guide to the Nova desktop application as shipped in **version 0.2.0-beta.1** (open beta).
 
 **Runtime requirement:** `npm run tauri dev` or an installed release build. Browser-only Vite preview cannot access chat, memory, or settings backends.
 
@@ -105,9 +105,12 @@ Open **Settings** from the chat header. Four tabs:
 - Switch, create, or delete personality **profiles**
 - Edit companion name, tone, values, special instructions
 - **Live system prompt preview**
+- **Import Nova JSON** or **Import OpenClaw markdown…** (preview mapped fields, then add a profile)
 - **Save changes** / **Save as new profile**
 
 File on disk: `personality.json`
+
+For migrating a long-running OpenClaw agent with maximum fidelity, see [§ 11 Migrating from OpenClaw](#11-migrating-from-openclaw).
 
 ### 6.2 Provider
 
@@ -124,6 +127,9 @@ File on disk: `personality.json`
 | Toggle | Tools enabled |
 |--------|----------------|
 | **Web tools** | `web_search`, `fetch_url`, `http_request` (HTTPS-only) |
+| **Headless browser fetch** | `fetch_browser` (Chrome/Chromium/Edge; JS-rendered pages) |
+| **Ignore robots.txt** | Optional for `fetch_browser` only (off by default) |
+| **Allow personality self-edit** | `personality_get`, `personality_update` on active profile |
 | **Workspace tools** | Read/write/list under `{data_dir}/workspace` |
 | **App data databases** | `database_query` on `.sqlite` in data folder |
 | **Allow database writes** | INSERT/UPDATE/DELETE via `database_query` (dangerous) |
@@ -203,8 +209,56 @@ Full detail: [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md)
 - [x] Encrypted API keys; **unencrypted** local SQLite
 - [x] Pulse in open thread
 - [x] Image attach for vision models
-- [x] Agent tools (optional)
+- [x] Agent tools (optional), including `fetch_browser`
+- [x] OpenClaw / Nova JSON personality import
 - [x] Portable / custom data directory
+
+---
+
+## 11. Migrating from OpenClaw
+
+Nova can import OpenClaw-style markdown from **Settings → Companion → Import OpenClaw markdown…** (`SOUL.md`, `IDENTITY.md`, `USER.md`, `JOURNAL.md`, `MEMORY.md`, `TOOLS.md`). That path is useful for a quick profile, but it may not capture everything a mature OpenClaw agent accumulated.
+
+**Today, the most effective migration** uses Nova’s workspace and personality self-edit:
+
+### Prerequisites
+
+1. **Settings → Tools → Workspace tools** — on (so the companion can read files in `workspace/`).
+2. **Settings → Tools → Allow personality self-edit** — on (so the companion can call `personality_update` and write `personality.json`).
+3. Know your data folder: **Settings → General → Reveal data folder** → open `workspace/`.
+
+### Step 1 — Copy markdown into workspace
+
+Copy these files from your OpenClaw workspace into Nova’s `workspace/` directory:
+
+- `IDENTITY.md`
+- `SOUL.md`
+- `JOURNAL.md`
+- `USER.md`
+- `MEMORY.md`
+
+(`TOOLS.md` and others are optional; the five above are the usual core set.)
+
+### Step 2 — Prompt the companion
+
+In chat, send a message like:
+
+> Please thoroughly read the following files located in your /workspace/ directory: IDENTITY.md, SOUL.md, JOURNAL.md, USER.md, MEMORY.md. Based on the contents of those files, edit your personality.json file using as much information as possible from those files. Remove any mention of running on the OpenClaw platform, or being dependent on markdown files to assemble your personality. Your personality from now on will be completely dependent on personality.json.
+
+Review the result under **Settings → Companion** (fields and system prompt preview). Send follow-up tweaks in chat if needed.
+
+### Step 3 — Remove workspace markdown
+
+After you are satisfied, delete those `.md` files from `workspace/` so future turns do not treat them as live instructions.
+
+### UI import vs this workflow
+
+| Approach | When to use |
+|----------|-------------|
+| **Import OpenClaw markdown…** | Fast bootstrap; preview before adding a profile |
+| **Workspace + prompt (above)** | Best fidelity for a long-running OpenClaw personality |
+
+We are **still working on** a more efficient, streamlined migration (better mapping, fewer manual steps). Until then, treat the UI import as a starting point and the three-step workflow as the gold standard.
 
 ---
 

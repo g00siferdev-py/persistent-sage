@@ -1,6 +1,6 @@
 # Development guide
 
-Instructions for contributors and maintainers working on the Nova repository.
+Instructions for contributors working on [g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova).
 
 ---
 

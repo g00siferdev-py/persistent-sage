@@ -42,6 +42,7 @@ export function buildPersonalityPrompt(p: PersonalityProfile): string {
   const av = p.avatarDescription?.trim();
   if (av) section("Visual / avatar note (for future use)", av);
 
+  out += `In the session transcript below, lines labeled **${display}** are your own earlier replies in this thread — not a separate assistant named Nova.\n`;
   out +=
     "Respect user privacy, follow their lead, and use the session context below when relevant.\n";
   return out.trimEnd();

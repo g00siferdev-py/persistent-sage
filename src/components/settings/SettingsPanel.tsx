@@ -13,6 +13,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { CompanionPersonalitySection } from "@/components/settings/CompanionPersonalitySection";
+import { SettingsSection, SettingsToggleCard } from "@/components/settings/settingsUi";
 
 type Props = {
   open: boolean;
@@ -34,8 +35,13 @@ type SettingsView = {
   maxTokens?: number | null;
   /** When true and the active provider supports it, the model may call built-in web search / URL fetch tools. */
   agentWebToolsEnabled: boolean;
+  /** When true (and web tools on), the model may use headless Chrome via fetch_browser for JS-heavy sites. */
+  agentBrowserFetchEnabled: boolean;
+  /** When true, fetch_browser skips robots.txt checks (personal use; off by default). */
+  agentBrowserIgnoreRobots: boolean;
   /** When true, the model may read/write/list files only under the app workspace folder (see data paths). */
   agentWorkspaceEnabled: boolean;
+  agentPersonalityEditEnabled: boolean;
   /** When true, database_query may use location=app_data on .db/.sqlite files in the Nova data directory (same folder as the live memory DB). */
   databaseAppDataEnabled: boolean;
   /** When true, database_query may run INSERT/UPDATE/DELETE/REPLACE on workspace .db files (DROP/ALTER/CREATE still blocked). */
@@ -60,7 +66,10 @@ type SettingsPatch = {
   /** Omit = unchanged; null = clear cap */
   maxTokens?: number | null;
   agentWebToolsEnabled?: boolean;
+  agentBrowserFetchEnabled?: boolean;
+  agentBrowserIgnoreRobots?: boolean;
   agentWorkspaceEnabled?: boolean;
+  agentPersonalityEditEnabled?: boolean;
   databaseAppDataEnabled?: boolean;
   databaseAllowWrite?: boolean;
   pulseEnabled?: boolean;
@@ -517,75 +526,52 @@ export function SettingsPanel({
       aria-hidden={!open}
       className={
         open
-          ? "h-full min-h-0 w-80 shrink-0 overflow-hidden border-l border-slate-800/80 bg-slate-900/35 shadow-[-12px_0_40px_rgba(0,0,0,0.35)] transition-[width,opacity] duration-200 ease-out"
+          ? "h-full min-h-0 w-[min(100%,28rem)] shrink-0 overflow-hidden border-l border-slate-800/80 bg-slate-900/35 shadow-[-12px_0_40px_rgba(0,0,0,0.35)] transition-[width,opacity] duration-200 ease-out"
           : "h-full min-h-0 w-0 shrink-0 overflow-hidden border-l border-transparent opacity-0 transition-[width,opacity] duration-200 ease-out"
       }
     >
-      <div className="flex h-full w-80 flex-col" inert={!open}>
-        <div className="flex flex-col gap-2 border-b border-slate-800/80 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <SlidersHorizontal className="size-4 text-slate-400" aria-hidden />
-            <h2 className="text-sm font-semibold text-white">Settings</h2>
-          </div>
-          <div className="grid grid-cols-2 gap-1">
-            <button
-              type="button"
-              onClick={() => setSettingsTab("companion")}
-              className={
-                settingsTab === "companion"
-                  ? "flex items-center justify-center gap-1 rounded-md bg-indigo-900/50 px-2 py-1.5 text-[11px] font-medium text-white shadow-sm ring-1 ring-indigo-500/30"
-                  : "flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium text-slate-400 transition hover:text-slate-200"
-              }
-            >
-              <Heart className="size-3 shrink-0" aria-hidden />
-              Companion
-            </button>
-            <button
-              type="button"
-              onClick={() => setSettingsTab("provider")}
-              className={
-                settingsTab === "provider"
-                  ? "flex items-center justify-center gap-1 rounded-md bg-slate-800 px-2 py-1.5 text-[11px] font-medium text-white shadow-sm"
-                  : "flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium text-slate-400 transition hover:text-slate-200"
-              }
-            >
-              <Cpu className="size-3 shrink-0" aria-hidden />
-              Provider
-            </button>
-            <button
-              type="button"
-              onClick={() => setSettingsTab("tools")}
-              className={
-                settingsTab === "tools"
-                  ? "flex items-center justify-center gap-1 rounded-md bg-slate-800 px-2 py-1.5 text-[11px] font-medium text-white shadow-sm"
-                  : "flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium text-slate-400 transition hover:text-slate-200"
-              }
-            >
-              <Wrench className="size-3 shrink-0" aria-hidden />
-              Tools
-            </button>
-            <button
-              type="button"
-              onClick={() => setSettingsTab("general")}
-              className={
-                settingsTab === "general"
-                  ? "flex items-center justify-center gap-1 rounded-md bg-slate-800 px-2 py-1.5 text-[11px] font-medium text-white shadow-sm"
-                  : "flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium text-slate-400 transition hover:text-slate-200"
-              }
-            >
-              <SlidersHorizontal className="size-3 shrink-0" aria-hidden />
-              General
-            </button>
-          </div>
+      <div className="flex h-full w-[min(100%,28rem)] min-w-[22rem] flex-col" inert={!open}>
+        <div className="flex items-center gap-2 border-b border-slate-800/80 px-4 py-3">
+          <SlidersHorizontal className="size-4 text-slate-400" aria-hidden />
+          <h2 className="text-sm font-semibold text-white">Settings</h2>
         </div>
 
-        <div
-          className={
-            settingsTab === "companion"
-              ? "flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4"
-              : "min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-4"
-          }
-        >
+        <div className="flex min-h-0 flex-1">
+          <nav
+            className="flex w-[6.75rem] shrink-0 flex-col gap-0.5 border-r border-slate-800/80 p-2"
+            aria-label="Settings sections"
+          >
+            {(
+              [
+                ["companion", "Companion", Heart],
+                ["provider", "Provider", Cpu],
+                ["tools", "Tools", Wrench],
+                ["general", "General", SlidersHorizontal],
+              ] as const
+            ).map(([id, label, Icon]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setSettingsTab(id)}
+                className={
+                  settingsTab === id
+                    ? "flex flex-col items-center gap-1 rounded-lg bg-slate-800/90 px-2 py-2.5 text-[10px] font-medium text-white shadow-sm ring-1 ring-slate-600/50"
+                    : "flex flex-col items-center gap-1 rounded-lg px-2 py-2.5 text-[10px] font-medium text-slate-400 transition hover:bg-slate-800/40 hover:text-slate-200"
+                }
+              >
+                <Icon className="size-4 shrink-0" aria-hidden />
+                {label}
+              </button>
+            ))}
+          </nav>
+
+          <div
+            className={
+              settingsTab === "companion"
+                ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 py-4"
+                : "min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto px-4 py-4"
+            }
+          >
           {error ? (
             <p className="rounded-md border border-red-900/60 bg-red-950/40 px-2 py-1.5 text-xs text-red-200">
               {error}
@@ -1060,32 +1046,109 @@ export function SettingsPanel({
 
           {settingsTab === "tools" ? (
             <>
-          <section className="space-y-3">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Assistant tools
-            </h3>
-            <p className="text-[11px] leading-relaxed text-slate-500">
-              Chat-only options for OpenAI, Ollama, and Anthropic. Background Pulse never uses tools.
-            </p>
-            <div className="flex items-start gap-3 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
+          <SettingsSection
+            title="Assistant tools"
+            description="Chat-only options for OpenAI, Ollama, and Anthropic. Background Pulse never uses tools."
+            className="space-y-2"
+          >
+            <div className="space-y-2">
+            <SettingsToggleCard
+              id="agent-web-tools"
+              title="Allow web tools for the assistant"
+              checked={settings?.agentWebToolsEnabled ?? false}
+              disabled={
+                !settings ||
+                !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider)
+              }
+              onChange={(agentWebToolsEnabled) => {
+                setSettings((s) => (s ? { ...s, agentWebToolsEnabled } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { agentWebToolsEnabled },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+              description={
+                <>
+                  When enabled, the model may call built-in tools: public web search (DuckDuckGo) and fetching
+                  http(s) pages you or it names. Requests are sent from this device; local and private URLs are
+                  blocked. Ollama requires a tool-capable model. Off by default.
+                  {settings &&
+                  !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider) ? (
+                    <span className="mt-2 block text-amber-400/90">
+                      Switch provider to OpenAI, Ollama, or Anthropic to use this option.
+                    </span>
+                  ) : null}
+                </>
+              }
+            />
+            <SettingsToggleCard
+              id="agent-personality-edit"
+              title="Allow personality self-edit"
+              checked={settings?.agentPersonalityEditEnabled ?? false}
+              disabled={
+                !settings ||
+                !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider)
+              }
+              onChange={(agentPersonalityEditEnabled) => {
+                setSettings((s) => (s ? { ...s, agentPersonalityEditEnabled } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { agentPersonalityEditEnabled },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+              description={
+                <>
+                  When enabled, the companion may call <span className="font-mono text-slate-300">personality_get</span>{" "}
+                  and <span className="font-mono text-slate-300">personality_update</span> to change the active profile
+                  in <span className="font-mono text-slate-300">personality.json</span>. Saves to disk and updates this
+                  chat&apos;s persona immediately. Off by default.
+                  {settings &&
+                  !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider) ? (
+                    <span className="mt-2 block text-amber-400/90">
+                      Switch provider to OpenAI, Ollama, or Anthropic to use this option.
+                    </span>
+                  ) : null}
+                </>
+              }
+            />
+            <div className="w-full flex items-start gap-3 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
               <input
-                id="agent-web-tools"
+                id="agent-browser-fetch"
                 type="checkbox"
                 className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-slate-600 accent-indigo-500 disabled:cursor-not-allowed"
-                checked={settings?.agentWebToolsEnabled ?? false}
+                checked={settings?.agentBrowserFetchEnabled ?? false}
                 disabled={
                   !settings ||
+                  !settings.agentWebToolsEnabled ||
                   !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider)
                 }
                 onChange={(e) => {
-                  const agentWebToolsEnabled = e.target.checked;
-                  setSettings((s) => (s ? { ...s, agentWebToolsEnabled } : s));
+                  const agentBrowserFetchEnabled = e.target.checked;
+                  setSettings((s) => (s ? { ...s, agentBrowserFetchEnabled } : s));
                   flushDebounce();
                   void (async () => {
                     try {
                       setError(null);
                       const next = await invoke<SettingsView>("settings_update", {
-                        patch: { agentWebToolsEnabled },
+                        patch: { agentBrowserFetchEnabled },
                       });
                       setSettings(next);
                     } catch (err) {
@@ -1095,24 +1158,64 @@ export function SettingsPanel({
                   })();
                 }}
               />
-              <div className="min-w-0 space-y-1">
-                <label htmlFor="agent-web-tools" className="cursor-pointer text-xs font-medium text-slate-300">
-                  Allow web tools for the assistant (OpenAI, Ollama, Anthropic)
+              <div className="w-full space-y-1.5 pl-7">
+                <label htmlFor="agent-browser-fetch" className="cursor-pointer text-xs font-medium text-slate-300">
+                  Headless browser fetch (fetch_browser)
                 </label>
-                <p className="text-[11px] leading-relaxed text-slate-500">
-                  When enabled, the model may call built-in tools: public web search (DuckDuckGo) and fetching
-                  http(s) pages you or it names. Requests are sent from this device; local and private URLs are
-                  blocked. Ollama requires a tool-capable model. Off by default.
+                <p className="text-xs leading-relaxed text-slate-400">
+                  Uses system Chrome, Chromium, or Edge to load pages with JavaScript, a normal browser
+                  user-agent, and a persistent cookie profile. Better for news sites and bot-protected pages.
+                  Requires a browser install or NOVA_CHROME_PATH. In Docker, install{" "}
+                  <span className="font-mono text-slate-400">ca-certificates</span> and set{" "}
+                  <span className="font-mono text-slate-400">NOVA_CHROME_NO_SANDBOX=1</span> if needed.
+                  Off by default.
                 </p>
-                {settings &&
-                !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider) ? (
-                  <p className="text-[11px] text-amber-400/90">
-                    Switch provider to OpenAI, Ollama, or Anthropic to use this option.
-                  </p>
-                ) : null}
               </div>
             </div>
-            <div className="flex items-start gap-3 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
+            <div className="flex w-full items-start gap-3 border-l-2 border-l-indigo-500/35 pl-2 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
+              <input
+                id="agent-browser-ignore-robots"
+                type="checkbox"
+                className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-slate-600 accent-indigo-500 disabled:cursor-not-allowed"
+                checked={settings?.agentBrowserIgnoreRobots ?? false}
+                disabled={
+                  !settings ||
+                  !settings.agentWebToolsEnabled ||
+                  !settings.agentBrowserFetchEnabled ||
+                  !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider)
+                }
+                onChange={(e) => {
+                  const agentBrowserIgnoreRobots = e.target.checked;
+                  setSettings((s) => (s ? { ...s, agentBrowserIgnoreRobots } : s));
+                  flushDebounce();
+                  void (async () => {
+                    try {
+                      setError(null);
+                      const next = await invoke<SettingsView>("settings_update", {
+                        patch: { agentBrowserIgnoreRobots },
+                      });
+                      setSettings(next);
+                    } catch (err) {
+                      setError(String(err));
+                      await refreshSettings();
+                    }
+                  })();
+                }}
+              />
+              <div className="w-full space-y-1.5 pl-7">
+                <label
+                  htmlFor="agent-browser-ignore-robots"
+                  className="cursor-pointer text-xs font-medium text-slate-300"
+                >
+                  Ignore robots.txt for browser fetch
+                </label>
+                <p className="text-xs leading-relaxed text-slate-400">
+                  When enabled, fetch_browser does not block URLs based on robots.txt. For personal
+                  automation on your machine; many news sites disallow bots in robots.txt. Off by default.
+                </p>
+              </div>
+            </div>
+            <div className="w-full flex items-start gap-3 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
               <input
                 id="agent-workspace-tools"
                 type="checkbox"
@@ -1140,14 +1243,14 @@ export function SettingsPanel({
                   })();
                 }}
               />
-              <div className="min-w-0 space-y-1">
+              <div className="w-full space-y-1.5 pl-7">
                 <label
                   htmlFor="agent-workspace-tools"
                   className="cursor-pointer text-xs font-medium text-slate-300"
                 >
                   Allow workspace file tools for the assistant
                 </label>
-                <p className="text-[11px] leading-relaxed text-slate-500">
+                <p className="text-xs leading-relaxed text-slate-400">
                   When enabled, the model may list, read, and write UTF-8 text files in the Nova workspace, and
                   run <span className="font-mono text-slate-400">database_query</span> with{" "}
                   <span className="font-mono text-slate-400">location=&quot;workspace&quot;</span> on{" "}
@@ -1170,7 +1273,7 @@ export function SettingsPanel({
                 ) : null}
               </div>
             </div>
-            <div className="flex items-start gap-3 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
+            <div className="w-full flex items-start gap-3 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
               <input
                 id="database-app-data-enabled"
                 type="checkbox"
@@ -1198,7 +1301,7 @@ export function SettingsPanel({
                   })();
                 }}
               />
-              <div className="min-w-0 space-y-1">
+              <div className="w-full space-y-1.5 pl-7">
                 <label
                   htmlFor="database-app-data-enabled"
                   className="cursor-pointer text-xs font-medium text-slate-300"
@@ -1206,7 +1309,7 @@ export function SettingsPanel({
                   App data directory databases (<span className="font-mono text-slate-400">database_query</span>{" "}
                   <span className="font-mono text-slate-400">location=app_data</span>)
                 </label>
-                <p className="text-[11px] leading-relaxed text-slate-500">
+                <p className="text-xs leading-relaxed text-slate-400">
                   When enabled, the model may query SQLite files in Nova&apos;s data directory — the same resolved
                   path as the live memory database (for example{" "}
                   <span className="font-mono text-slate-400">~/.local/share/nova</span> on Linux, or the portable{" "}
@@ -1227,7 +1330,7 @@ export function SettingsPanel({
                 ) : null}
               </div>
             </div>
-            <div className="flex items-start gap-3 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
+            <div className="w-full flex items-start gap-3 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
               <input
                 id="database-allow-write"
                 type="checkbox"
@@ -1256,11 +1359,11 @@ export function SettingsPanel({
                   })();
                 }}
               />
-              <div className="min-w-0 space-y-1">
+              <div className="w-full space-y-1.5 pl-7">
                 <label htmlFor="database-allow-write" className="cursor-pointer text-xs font-medium text-slate-300">
                   Allow database writes (<span className="font-mono text-slate-400">database_query</span>)
                 </label>
-                <p className="text-[11px] leading-relaxed text-slate-500">
+                <p className="text-xs leading-relaxed text-slate-400">
                   When off (default), <span className="font-mono text-slate-400">database_query</span> is
                   read-only (SELECT and introspection). When on, INSERT/UPDATE/DELETE/REPLACE are allowed on
                   workspace or app-data databases (per toggles above); DROP/ALTER/CREATE/PRAGMA/VACUUM remain
@@ -1268,7 +1371,8 @@ export function SettingsPanel({
                 </p>
               </div>
             </div>
-          </section>
+            </div>
+          </SettingsSection>
             </>
           ) : null}
 
@@ -1512,6 +1616,7 @@ export function SettingsPanel({
           </section>
             </>
           ) : null}
+          </div>
         </div>
       </div>
 

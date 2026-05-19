@@ -128,6 +128,7 @@ export function ChatLayout() {
         briefingLoading={threadLoading && !!activeConversationId}
         anchors={anchors}
         onExtractAnchors={() => void extractAnchorsFromChat()}
+        companionName={activeCompanionLabel}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {backendHint ? (

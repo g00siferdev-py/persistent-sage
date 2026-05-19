@@ -195,6 +195,28 @@ fn anthropic_assistant_with_tool_calls(resp: &CompletionResponse) -> serde_json:
     json!({ "role": "assistant", "content": blocks })
 }
 
+/// Native API tool calls, or XML/invoke blocks some models put in `content` (e.g. Kimi on Ollama Cloud).
+fn resolve_tool_calls(resp: &CompletionResponse) -> Vec<ToolCall> {
+    if !resp.tool_calls.is_empty() {
+        return resp.tool_calls.clone();
+    }
+    crate::agent_tools::parse_text_embedded_tool_calls(&resp.content)
+}
+
+fn completion_for_tool_round(resp: &CompletionResponse, tool_calls: &[ToolCall]) -> CompletionResponse {
+    let content = if tool_calls.is_empty() {
+        resp.content.clone()
+    } else {
+        crate::agent_tools::strip_embedded_tool_call_markup(&resp.content)
+    };
+    CompletionResponse {
+        content,
+        tool_calls: tool_calls.to_vec(),
+        finish_reason: resp.finish_reason.clone(),
+        usage: resp.usage.clone(),
+    }
+}
+
 fn anthropic_user_tool_results(tool_calls: &[ToolCall], bodies: &[String]) -> serde_json::Value {
     let blocks: Vec<serde_json::Value> = tool_calls
         .iter()
@@ -226,6 +248,142 @@ fn web_tool_backend_for_provider(provider_id: &str) -> Option<AgentWebToolBacken
     }
 }
 
+async fn apply_tool_round_messages(
+    http: &reqwest::Client,
+    workspace_root: Option<&Path>,
+    data_directory: &Path,
+    database_app_data_enabled: bool,
+    database_allow_write: bool,
+    browser_ignore_robots: bool,
+    personality: Option<&crate::personality::PersonalityManager>,
+    messages: &mut Vec<ChatTurn>,
+    round: &CompletionResponse,
+    backend: AgentWebToolBackend,
+) -> Result<(), ProviderError> {
+    let mut personality_updated = false;
+    match backend {
+        AgentWebToolBackend::OpenAI => {
+            messages.push(ChatTurn {
+                role: "assistant".into(),
+                content: round.content.clone(),
+                openai_message: Some(assistant_openai_message_with_tool_calls(round)),
+                ollama_message: None,
+                anthropic_message: None,
+            });
+            for tc in &round.tool_calls {
+                let body = crate::agent_tools::run_builtin_tool(
+                    http,
+                    workspace_root,
+                    data_directory,
+                    database_app_data_enabled,
+                    database_allow_write,
+                    browser_ignore_robots,
+                    personality,
+                    &tc.name,
+                    &tc.arguments_json,
+                )
+                .await
+                .unwrap_or_else(|e| format!("Tool error: {e}"));
+                if tc.name == "personality_update" && !body.starts_with("Tool error:") {
+                    personality_updated = true;
+                }
+                messages.push(ChatTurn {
+                    role: "tool".into(),
+                    content: body.clone(),
+                    openai_message: Some(json!({
+                        "role": "tool",
+                        "tool_call_id": &tc.id,
+                        "content": body,
+                    })),
+                    ollama_message: None,
+                    anthropic_message: None,
+                });
+            }
+        }
+        AgentWebToolBackend::Ollama => {
+            messages.push(ChatTurn {
+                role: "assistant".into(),
+                content: round.content.clone(),
+                openai_message: None,
+                ollama_message: Some(ollama_assistant_with_tool_calls(round)),
+                anthropic_message: None,
+            });
+            for tc in &round.tool_calls {
+                let body = crate::agent_tools::run_builtin_tool(
+                    http,
+                    workspace_root,
+                    data_directory,
+                    database_app_data_enabled,
+                    database_allow_write,
+                    browser_ignore_robots,
+                    personality,
+                    &tc.name,
+                    &tc.arguments_json,
+                )
+                .await
+                .unwrap_or_else(|e| format!("Tool error: {e}"));
+                if tc.name == "personality_update" && !body.starts_with("Tool error:") {
+                    personality_updated = true;
+                }
+                messages.push(ChatTurn {
+                    role: "tool".into(),
+                    content: body.clone(),
+                    openai_message: None,
+                    ollama_message: Some(json!({
+                        "role": "tool",
+                        "tool_name": &tc.name,
+                        "content": body,
+                    })),
+                    anthropic_message: None,
+                });
+            }
+        }
+        AgentWebToolBackend::Anthropic => {
+            messages.push(ChatTurn {
+                role: "assistant".into(),
+                content: round.content.clone(),
+                openai_message: None,
+                ollama_message: None,
+                anthropic_message: Some(anthropic_assistant_with_tool_calls(round)),
+            });
+            let mut bodies: Vec<String> = Vec::with_capacity(round.tool_calls.len());
+            for tc in &round.tool_calls {
+                let body = crate::agent_tools::run_builtin_tool(
+                    http,
+                    workspace_root,
+                    data_directory,
+                    database_app_data_enabled,
+                    database_allow_write,
+                    browser_ignore_robots,
+                    personality,
+                    &tc.name,
+                    &tc.arguments_json,
+                )
+                .await
+                .unwrap_or_else(|e| format!("Tool error: {e}"));
+                if tc.name == "personality_update" && !body.starts_with("Tool error:") {
+                    personality_updated = true;
+                }
+                bodies.push(body);
+            }
+            messages.push(ChatTurn {
+                role: "user".into(),
+                content: bodies.join("\n---\n"),
+                openai_message: None,
+                ollama_message: None,
+                anthropic_message: Some(anthropic_user_tool_results(&round.tool_calls, &bodies)),
+            });
+        }
+    }
+    if personality_updated {
+        if let Some(mgr) = personality {
+            crate::personality_tools::refresh_system_persona_in_messages(messages, mgr);
+            eprintln!("nova: refreshed system persona after personality_update");
+        }
+    }
+    Ok(())
+}
+
 /// Non-streaming completion with tool rounds (OpenAI, Ollama, Anthropic).
 async fn agent_complete_with_tools(
     engine: &(dyn LLMProviderEngine + Send + Sync),
@@ -234,6 +392,8 @@ async fn agent_complete_with_tools(
     data_directory: &Path,
     database_app_data_enabled: bool,
     database_allow_write: bool,
+    browser_ignore_robots: bool,
+    personality: Option<&crate::personality::PersonalityManager>,
     mut messages: Vec<ChatTurn>,
     max_tokens: Option<u32>,
     temperature: f32,
@@ -252,113 +412,117 @@ async fn agent_complete_with_tools(
             temperature: Some(temperature),
         };
         let resp = engine.complete(&req).await?;
-        if resp.tool_calls.is_empty() {
+        let tool_calls = resolve_tool_calls(&resp);
+        if tool_calls.is_empty() {
+            if crate::agent_tools::content_has_embedded_tool_calls(&resp.content) {
+                return Err(ProviderError::Api(
+                    "The model returned tool-call XML in plain text, but Nova could not parse or run it. \
+                     Try again, or use a model with native tool support (e.g. gpt-4o, Claude 3+, Llama 3.1+ tools)."
+                        .into(),
+                ));
+            }
             return Ok(resp.content);
         }
-
-        match backend {
-            AgentWebToolBackend::OpenAI => {
-                messages.push(ChatTurn {
-                    role: "assistant".into(),
-                    content: resp.content.clone(),
-                    openai_message: Some(assistant_openai_message_with_tool_calls(&resp)),
-                    ollama_message: None,
-                    anthropic_message: None,
-                });
-                for tc in &resp.tool_calls {
-                    let body = crate::agent_tools::run_builtin_tool(
-                        http,
-                        workspace_root,
-                        data_directory,
-                        database_app_data_enabled,
-                        database_allow_write,
-                        &tc.name,
-                        &tc.arguments_json,
-                    )
-                    .await
-                    .unwrap_or_else(|e| format!("Tool error: {e}"));
-                    messages.push(ChatTurn {
-                        role: "tool".into(),
-                        content: body.clone(),
-                        openai_message: Some(json!({
-                            "role": "tool",
-                            "tool_call_id": &tc.id,
-                            "content": body,
-                        })),
-                        ollama_message: None,
-                        anthropic_message: None,
-                    });
-                }
-            }
-            AgentWebToolBackend::Ollama => {
-                messages.push(ChatTurn {
-                    role: "assistant".into(),
-                    content: resp.content.clone(),
-                    openai_message: None,
-                    ollama_message: Some(ollama_assistant_with_tool_calls(&resp)),
-                    anthropic_message: None,
-                });
-                for tc in &resp.tool_calls {
-                    let body = crate::agent_tools::run_builtin_tool(
-                        http,
-                        workspace_root,
-                        data_directory,
-                        database_app_data_enabled,
-                        database_allow_write,
-                        &tc.name,
-                        &tc.arguments_json,
-                    )
-                    .await
-                    .unwrap_or_else(|e| format!("Tool error: {e}"));
-                    messages.push(ChatTurn {
-                        role: "tool".into(),
-                        content: body.clone(),
-                        openai_message: None,
-                        ollama_message: Some(json!({
-                            "role": "tool",
-                            "tool_name": &tc.name,
-                            "content": body,
-                        })),
-                        anthropic_message: None,
-                    });
-                }
-            }
-            AgentWebToolBackend::Anthropic => {
-                messages.push(ChatTurn {
-                    role: "assistant".into(),
-                    content: resp.content.clone(),
-                    openai_message: None,
-                    ollama_message: None,
-                    anthropic_message: Some(anthropic_assistant_with_tool_calls(&resp)),
-                });
-                let mut bodies: Vec<String> = Vec::with_capacity(resp.tool_calls.len());
-                for tc in &resp.tool_calls {
-                    let body = crate::agent_tools::run_builtin_tool(
-                        http,
-                        workspace_root,
-                        data_directory,
-                        database_app_data_enabled,
-                        database_allow_write,
-                        &tc.name,
-                        &tc.arguments_json,
-                    )
-                    .await
-                    .unwrap_or_else(|e| format!("Tool error: {e}"));
-                    bodies.push(body);
-                }
-                messages.push(ChatTurn {
-                    role: "user".into(),
-                    content: bodies.join("\n---\n"),
-                    openai_message: None,
-                    ollama_message: None,
-                    anthropic_message: Some(anthropic_user_tool_results(&resp.tool_calls, &bodies)),
-                });
-            }
+        if resp.tool_calls.is_empty() {
+            eprintln!(
+                "nova: executing {} tool call(s) parsed from model text (native tool_calls empty)",
+                tool_calls.len()
+            );
         }
+        let round = completion_for_tool_round(&resp, &tool_calls);
+        apply_tool_round_messages(
+            http,
+            workspace_root,
+            data_directory,
+            database_app_data_enabled,
+            database_allow_write,
+            browser_ignore_robots,
+            personality,
+            &mut messages,
+            &round,
+            backend,
+        )
+        .await?;
     }
     Err(ProviderError::Api(
         "Agent stopped after maximum tool rounds — try a narrower question.".into(),
     ))
+}
+
+/// If the model printed tool XML on a non-tool code path, run tools and ask the model again.
+async fn try_complete_after_embedded_tool_xml(
+    engine: &(dyn LLMProviderEngine + Send + Sync),
+    http: &reqwest::Client,
+    workspace_root: Option<&Path>,
+    data_directory: &Path,
+    database_app_data_enabled: bool,
+    database_allow_write: bool,
+    browser_ignore_robots: bool,
+    personality: Option<&crate::personality::PersonalityManager>,
+    mut messages: Vec<ChatTurn>,
+    assistant_xml: &str,
+    max_tokens: Option<u32>,
+    temperature: f32,
+    backend: AgentWebToolBackend,
+    tools: Vec<ToolDefinition>,
+) -> Result<Option<String>, ProviderError> {
+    let calls = crate::agent_tools::parse_text_embedded_tool_calls(assistant_xml);
+    if calls.is_empty() {
+        return Ok(None);
+    }
+    eprintln!(
+        "nova: running {} embedded tool call(s) from model text (not native API)",
+        calls.len()
+    );
+    let resp = CompletionResponse {
+        content: assistant_xml.to_string(),
+        tool_calls: calls.clone(),
+        finish_reason: None,
+        usage: None,
+    };
+    let round = completion_for_tool_round(&resp, &calls);
+    apply_tool_round_messages(
+        http,
+        workspace_root,
+        data_directory,
+        database_app_data_enabled,
+        database_allow_write,
+        browser_ignore_robots,
+        personality,
+        &mut messages,
+        &round,
+        backend,
+    )
+    .await?;
+    let text = agent_complete_with_tools(
+        engine,
+        http,
+        workspace_root,
+        data_directory,
+        database_app_data_enabled,
+        database_allow_write,
+        browser_ignore_robots,
+        personality,
+        messages,
+        max_tokens,
+        temperature,
+        backend,
+        tools,
+    )
+    .await?;
+    Ok(Some(text))
+}
+
+fn user_facing_tool_markup_message(provider_id: &str, has_images: bool) -> String {
+    if has_images && matches!(provider_id, "ollama" | "ollama_cloud") {
+        return "I tried to call a built-in tool, but tools are disabled for this message because an \
+                image is attached with local Ollama. Send the request without an image, or switch provider."
+            .into();
+    }
+    "I tried to call a built-in tool, but tool execution was not active for this turn. In Settings → Tools, \
+     enable **Allow web tools** and/or **Allow personality self-edit**, use OpenAI/Ollama/Anthropic (not Placeholder), \
+     and pick a tool-capable model."
+        .into()
 }
 
 #[derive(Serialize, Clone)]
@@ -381,7 +545,7 @@ async fn run_chat_completion(
     state: &NovaState,
     conversation_id: &str,
     engine: &std::sync::Arc<dyn LLMProviderEngine + Send + Sync>,
-    messages: Vec<ChatTurn>,
+    mut messages: Vec<ChatTurn>,
 ) -> Result<String, String> {
     let configured = state.settings.max_tokens();
     let max_tokens = match configured {
@@ -394,6 +558,11 @@ async fn run_chat_completion(
     let mut tool_definitions: Vec<ToolDefinition> = Vec::new();
     if state.settings.agent_web_tools_enabled() {
         tool_definitions.extend(crate::agent_tools::builtin_tool_definitions());
+        if state.settings.agent_browser_fetch_enabled() {
+            tool_definitions.push(crate::agent_tools::browser_fetch_tool_definition(
+                state.settings.agent_browser_ignore_robots(),
+            ));
+        }
     }
     if state.settings.agent_workspace_enabled() {
         tool_definitions.extend(crate::agent_tools::workspace_tool_definitions());
@@ -403,12 +572,19 @@ async fn run_chat_completion(
     if database_tools_enabled {
         tool_definitions.extend(crate::database_query::tool_definitions());
     }
+    let personality_edit_enabled = state.settings.agent_personality_edit_enabled();
+    if personality_edit_enabled {
+        tool_definitions.extend(crate::personality_tools::tool_definitions());
+    }
     let workspace_root_for_tools = state
         .settings
         .agent_workspace_enabled()
         .then_some(state.workspace_root.as_path());
     let database_app_data_enabled = state.settings.database_app_data_enabled();
     let database_allow_write = state.settings.database_allow_write();
+    let browser_ignore_robots = state.settings.agent_browser_ignore_robots();
+    let personality_for_tools =
+        personality_edit_enabled.then(|| state.personality.as_ref());
 
     let has_images = attachments::messages_include_images(&messages);
     let provider_id = engine.provider_id();
@@ -419,6 +595,39 @@ async fn run_chat_completion(
         .filter(|_| {
             !(has_images && matches!(provider_id, "ollama" | "ollama_cloud"))
         });
+
+    if !tool_definitions.is_empty() {
+        let names: Vec<&str> = tool_definitions.iter().map(|t| t.name.as_str()).collect();
+        eprintln!(
+            "nova: {} agent tool(s) configured: {}",
+            names.len(),
+            names.join(", ")
+        );
+        // Only teach XML tool syntax when Nova will actually execute tools (avoids raw XML on stream path).
+        if agent_tool_backend.is_some() {
+            if let Some(system) = messages
+                .first_mut()
+                .filter(|m| m.role == "system")
+            {
+                system.content
+                    .push_str(&crate::agent_tools::tools_system_appendix(&tool_definitions));
+                if personality_edit_enabled {
+                    system.content
+                        .push_str(crate::personality_tools::personality_system_hint());
+                }
+            }
+        }
+    }
+
+    if !tool_definitions.is_empty() && agent_tool_backend.is_none() {
+        eprintln!(
+            "nova: warning: tools are enabled in settings but inactive this turn \
+             (provider={provider_id}, has_images={has_images}). Enable web tools for your provider \
+             in Settings, or use a tool-capable model without an image attachment."
+        );
+    }
+
+    let messages_for_tool_recovery = messages.clone();
 
     if has_images {
         eprintln!(
@@ -437,6 +646,8 @@ async fn run_chat_completion(
             state.data_directory.as_path(),
             database_app_data_enabled,
             database_allow_write,
+            browser_ignore_robots,
+            personality_for_tools,
             messages,
             max_tokens,
             temperature,
@@ -528,11 +739,47 @@ async fn run_chat_completion(
                 },
             );
         }
+
+        if crate::agent_tools::content_has_embedded_tool_calls(&full) {
+            if let Some(backend) = agent_tool_backend {
+                match try_complete_after_embedded_tool_xml(
+                    engine.as_ref(),
+                    &state.http,
+                    workspace_root_for_tools,
+                    state.data_directory.as_path(),
+                    database_app_data_enabled,
+                    database_allow_write,
+                    browser_ignore_robots,
+                    personality_for_tools,
+                    messages_for_tool_recovery,
+                    &full,
+                    max_tokens,
+                    temperature,
+                    backend,
+                    tool_definitions.clone(),
+                )
+                .await
+                {
+                    Ok(Some(text)) => {
+                        full = text;
+                        emit_synthetic_stream_deltas(app, conversation_id, &full);
+                    }
+                    Ok(None) | Err(_) => {
+                        full = user_facing_tool_markup_message(provider_id, has_images);
+                    }
+                }
+            } else {
+                full = user_facing_tool_markup_message(provider_id, has_images);
+            }
+        }
     }
 
     let mut reply = full;
     if reply.trim().is_empty() {
         reply = "(no text in model response)".into();
+    }
+    if crate::agent_tools::content_has_embedded_tool_calls(&reply) {
+        reply = user_facing_tool_markup_message(provider_id, has_images);
     }
 
     state
@@ -608,9 +855,10 @@ pub async fn execute_chat_turn(
         },
     );
 
+    let companion_label = state.personality.companion_display_name();
     let mut briefing = state
         .memory
-        .get_startup_briefing(conversation_id)
+        .get_startup_briefing(conversation_id, &companion_label)
         .map_err(|e| e.to_string())?;
 
     let recall_source = if !text.is_empty() {
@@ -652,7 +900,16 @@ pub async fn execute_chat_turn(
     let mut messages: Vec<ChatTurn> = Vec::with_capacity(recent.len() + 1);
     messages.push(ChatTurn::text("system", system_content));
     for m in recent {
-        let turn = attachments::chat_turn_from_stored(&provider_id, data_dir, &m)?;
+        let mut turn = attachments::chat_turn_from_stored(&provider_id, data_dir, &m)?;
+        if m.role == MessageRole::Assistant
+            && crate::agent_tools::content_has_embedded_tool_calls(&turn.content)
+        {
+            turn.content = crate::agent_tools::strip_embedded_tool_call_markup(&turn.content);
+            if turn.content.trim().is_empty() {
+                turn.content = "(Earlier tool-call markup was not executed; continue from context below.)"
+                    .into();
+            }
+        }
         messages.push(turn);
     }
 

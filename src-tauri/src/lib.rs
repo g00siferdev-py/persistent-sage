@@ -9,12 +9,14 @@
 //! `main.rs` delegates here so the same setup runs everywhere.
 
 mod agent_tools;
+mod browser_fetch;
 mod attachments;
 mod chat;
 mod database_query;
 mod memory;
 mod pulse;
 mod personality;
+mod personality_tools;
 mod settings;
 mod provider;
 
@@ -396,9 +398,10 @@ fn memory_startup_briefing(
     state: State<NovaState>,
     conversation_id: String,
 ) -> Result<String, String> {
+    let label = state.personality.companion_display_name();
     state
         .memory
-        .get_startup_briefing(&conversation_id)
+        .get_startup_briefing(&conversation_id, &label)
         .map_err(|e| e.to_string())
 }
 
@@ -408,9 +411,10 @@ fn memory_update_startup_briefing(
     state: State<NovaState>,
     conversation_id: String,
 ) -> Result<String, String> {
+    let label = state.personality.companion_display_name();
     state
         .memory
-        .update_startup_briefing(&conversation_id)
+        .update_startup_briefing(&conversation_id, &label)
         .map_err(|e| e.to_string())
 }
 
@@ -499,6 +503,40 @@ fn memory_list_projects(state: State<NovaState>, limit: usize) -> Result<Vec<Sto
         .map_err(|e| e.to_string())
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TextFilePayload {
+    file_name: String,
+    text: String,
+}
+
+/// Read UTF-8 text from absolute paths (OpenClaw markdown import via native file dialog).
+#[tauri::command]
+fn read_text_files(paths: Vec<String>) -> Result<Vec<TextFilePayload>, String> {
+    let mut out = Vec::new();
+    for path in paths {
+        let p = path.trim();
+        if p.is_empty() {
+            continue;
+        }
+        let pb = std::path::Path::new(p);
+        let file_name = pb
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file.md")
+            .to_string();
+        let text = std::fs::read_to_string(pb).map_err(|e| format!("Could not read {file_name}: {e}"))?;
+        out.push(TextFilePayload {
+            file_name,
+            text,
+        });
+    }
+    if out.is_empty() {
+        return Err("No files were read.".into());
+    }
+    Ok(out)
+}
+
 // --- Lifecycle ----------------------------------------------------------------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -538,6 +576,8 @@ pub fn run() {
     }
     eprintln!("nova: resolved data directory {}", data_directory.display());
 
+    browser_fetch::ensure_browser_directories(&data_directory);
+
     let mut workspace_root = data_dir.join("workspace");
     if let Err(e) = std::fs::create_dir_all(&workspace_root) {
         eprintln!(
@@ -549,6 +589,7 @@ pub fn run() {
     eprintln!("nova: agent workspace directory {}", workspace_root.display());
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(NovaState::new(
             memory,
             settings,
@@ -561,6 +602,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            read_text_files,
             app_version,
             app_data_paths,
             reveal_data_directory,

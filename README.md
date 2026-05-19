@@ -6,7 +6,25 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
-**Repository:** [github.com/g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova)
+**Repository:** [github.com/g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova)  
+**Status:** **Open beta** (`0.2.0-beta.1`) — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/project-nova/issues)
+
+---
+
+## Beta testing
+
+Nova is ready for **beta testers** who are comfortable building from source and filing issues when something breaks.
+
+| Step | Action |
+|------|--------|
+| 1 | **Clone** — `git clone https://github.com/g00siferdev-py/project-nova.git && cd project-nova` |
+| 2 | **Install** — Follow **[docs/INSTALL.md](./docs/INSTALL.md)** (Rust, Node LTS, Tauri OS packages) |
+| 3 | **Run** — `npm install` then `npm run tauri dev` |
+| 4 | **Configure** — **Settings → Provider** (API key + model), then start a chat |
+| 5 | **Report** — Open an issue on [g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova/issues) with OS, provider, and steps to reproduce |
+| 6 | **Contribute** — See **[CONTRIBUTING.md](./CONTRIBUTING.md)** |
+
+Pre-built installers may appear under **GitHub Releases** as beta builds are published; until then, source install is the supported path.
 
 ---
 
@@ -15,12 +33,24 @@
 | Guide | Description |
 |-------|-------------|
 | **[docs/INSTALL.md](./docs/INSTALL.md)** | **Fresh install** — prerequisites, clone, build, first-run setup |
-| **[docs/USER-GUIDE.md](./docs/USER-GUIDE.md)** | Day-to-day usage — chat, memory, settings, Pulse, images |
+| **[docs/USER-GUIDE.md](./docs/USER-GUIDE.md)** | Day-to-day usage — chat, memory, settings, Pulse, OpenClaw migration |
 | **[docs/DATA-AND-PRIVACY.md](./docs/DATA-AND-PRIVACY.md)** | What is stored locally; **API keys encrypted**, **database not encrypted** |
 | **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** | Technical overview for developers |
 | **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)** | Dev workflow and pre-push checklist |
-| [CHANGELOG.md](./CHANGELOG.md) | Release notes |
-| [CONTRIBUTING.md](./CONTRIBUTING.md) | How to contribute |
+| [CHANGELOG.md](./CHANGELOG.md) | Release notes (including **0.2.0-beta.1**) |
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | How to test and contribute |
+
+---
+
+## Migrating from OpenClaw
+
+Settings → Companion includes **Import OpenClaw markdown…**, but the **most reliable** way to move a mature OpenClaw personality into Nova today is:
+
+1. Copy `IDENTITY.md`, `SOUL.md`, `JOURNAL.md`, `USER.md`, and `MEMORY.md` into Nova’s **`workspace/`** folder (enable workspace tools).
+2. Prompt the companion to read those files and update **`personality.json`** via personality self-edit (enable in **Settings → Tools**).
+3. Remove the `.md` files from `workspace/` when done.
+
+We are **still improving** one-click migration; see **[docs/USER-GUIDE.md § Migrating from OpenClaw](./docs/USER-GUIDE.md#11-migrating-from-openclaw)** and **[CHANGELOG.md](./CHANGELOG.md)** for the exact prompt and details.
 
 ---
 
@@ -39,9 +69,9 @@ After you build and run Nova, **nothing is stored on a Nova-operated cloud**. Me
 ## Key features
 
 - **Memory Anchor** — SQLite conversations, messages, anchors, projects, and preferences; hybrid FTS recall and startup briefings.
-- **Companion profiles** — Multiple personalities with live system-prompt preview; per-profile thread isolation.
+- **Companion profiles** — Multiple personalities with live system-prompt preview; Nova JSON and OpenClaw markdown import; optional agent self-edit of `personality.json`.
 - **Providers** — OpenAI, Ollama (local), Ollama Cloud, Anthropic, or offline placeholder.
-- **Agent tools** (opt-in) — Web search, URL fetch, HTTPS `http_request`, sandboxed workspace files, optional database query.
+- **Agent tools** (opt-in) — Web search, URL fetch, headless **`fetch_browser`**, HTTPS `http_request`, sandboxed workspace files, optional database query.
 - **Pulse** — Timer-driven check-ins that run as **normal chat turns** in your selected sidebar thread.
 - **Vision** — Attach images in the composer; multimodal payloads for supported models.
 - **Portable layouts** — `NOVA_DATA_DIR` and `NOVA_PORTABLE` for custom or USB data locations.
@@ -71,6 +101,8 @@ First launch creates local data under your OS app directory (or `NOVA_DATA_DIR` 
 |----------|---------|
 | `NOVA_DATA_DIR` | Absolute path for `nova_memory.sqlite`, settings, personalities, workspace, attachments |
 | `NOVA_PORTABLE=1` | Store data in `{executable}/data/` |
+| `NOVA_CHROME_PATH` | Chrome/Chromium/Edge binary for `fetch_browser` |
+| `NOVA_CHROME_NO_SANDBOX` | Set to `1` in Docker or locked-down environments |
 | *(unset)* | OS default application data location |
 
 ```bash
@@ -110,6 +142,7 @@ npm run tauri dev
 | Chat does nothing | Use `npm run tauri dev`, not `npm run dev` |
 | Placeholder replies | Settings → Provider → live backend + API key |
 | Model ignores images | Use a vision model; on Ollama, tools are off for image turns |
+| `fetch_browser` fails | Install Chrome/Chromium or set `NOVA_CHROME_PATH` |
 | Linux build errors | [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) |
 
 More: **[docs/INSTALL.md § Troubleshooting](./docs/INSTALL.md#10-troubleshooting)**
@@ -118,10 +151,12 @@ More: **[docs/INSTALL.md § Troubleshooting](./docs/INSTALL.md#10-troubleshootin
 
 ## Project status
 
-Nova is **early alpha** (0.1.0). Core flows work; security hardening, tests, and polish continue. See [NOVA-STATUS.md](./NOVA-STATUS.md) and [CHANGELOG.md](./CHANGELOG.md).
+Nova **0.2.0-beta.1** is in **open beta**: core chat, memory, personalities, Pulse, vision, and agent tools are usable; migration UX and hardening continue. See [NOVA-STATUS.md](./NOVA-STATUS.md) and [CHANGELOG.md](./CHANGELOG.md).
+
+**Maintainer:** [g00siferdev-py](https://github.com/g00siferdev-py)
 
 ---
 
 ## License
 
-[MIT License](./LICENSE)
+[MIT License](./LICENSE) — Copyright (c) 2026 [g00siferdev-py](https://github.com/g00siferdev-py)

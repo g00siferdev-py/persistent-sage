@@ -75,8 +75,14 @@ pub struct SettingsFile {
     pub max_tokens: Option<u32>,
     #[serde(default = "default_agent_web_tools")]
     pub agent_web_tools_enabled: bool,
+    #[serde(default = "default_agent_browser_fetch")]
+    pub agent_browser_fetch_enabled: bool,
+    #[serde(default = "default_agent_browser_ignore_robots")]
+    pub agent_browser_ignore_robots: bool,
     #[serde(default = "default_agent_workspace")]
     pub agent_workspace_enabled: bool,
+    #[serde(default = "default_agent_personality_edit")]
+    pub agent_personality_edit_enabled: bool,
     #[serde(default = "default_database_allow_write")]
     pub database_allow_write: bool,
     #[serde(default = "default_database_app_data")]
@@ -97,7 +103,19 @@ fn default_agent_web_tools() -> bool {
     false
 }
 
+fn default_agent_browser_fetch() -> bool {
+    false
+}
+
+fn default_agent_browser_ignore_robots() -> bool {
+    false
+}
+
 fn default_agent_workspace() -> bool {
+    false
+}
+
+fn default_agent_personality_edit() -> bool {
     false
 }
 
@@ -142,7 +160,10 @@ impl Default for SettingsFile {
             temperature: 0.7,
             max_tokens: None,
             agent_web_tools_enabled: false,
+            agent_browser_fetch_enabled: false,
+            agent_browser_ignore_robots: false,
             agent_workspace_enabled: false,
+            agent_personality_edit_enabled: false,
             database_allow_write: false,
             database_app_data_enabled: false,
             pulse_enabled: false,
@@ -167,7 +188,10 @@ pub struct SettingsView {
     pub temperature: f32,
     pub max_tokens: Option<u32>,
     pub agent_web_tools_enabled: bool,
+    pub agent_browser_fetch_enabled: bool,
+    pub agent_browser_ignore_robots: bool,
     pub agent_workspace_enabled: bool,
+    pub agent_personality_edit_enabled: bool,
     pub database_allow_write: bool,
     pub database_app_data_enabled: bool,
     pub pulse_enabled: bool,
@@ -193,7 +217,10 @@ pub struct SettingsUpdatePayload {
     /// cannot represent “present null” from JS; use [`JsonValue`]).
     pub max_tokens: Option<JsonValue>,
     pub agent_web_tools_enabled: Option<bool>,
+    pub agent_browser_fetch_enabled: Option<bool>,
+    pub agent_browser_ignore_robots: Option<bool>,
     pub agent_workspace_enabled: Option<bool>,
+    pub agent_personality_edit_enabled: Option<bool>,
     pub database_allow_write: Option<bool>,
     pub database_app_data_enabled: Option<bool>,
     pub pulse_enabled: Option<bool>,
@@ -480,7 +507,10 @@ impl SettingsManager {
             temperature: inner.temperature,
             max_tokens: inner.max_tokens,
             agent_web_tools_enabled: inner.agent_web_tools_enabled,
+            agent_browser_fetch_enabled: inner.agent_browser_fetch_enabled,
+            agent_browser_ignore_robots: inner.agent_browser_ignore_robots,
             agent_workspace_enabled: inner.agent_workspace_enabled,
+            agent_personality_edit_enabled: inner.agent_personality_edit_enabled,
             database_allow_write: inner.database_allow_write,
             database_app_data_enabled: inner.database_app_data_enabled,
             pulse_enabled: inner.pulse_enabled,
@@ -514,10 +544,31 @@ impl SettingsManager {
             .unwrap_or(false)
     }
 
+    pub fn agent_browser_fetch_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.agent_browser_fetch_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn agent_browser_ignore_robots(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.agent_browser_ignore_robots)
+            .unwrap_or(false)
+    }
+
     pub fn agent_workspace_enabled(&self) -> bool {
         self.inner
             .read()
             .map(|g| g.agent_workspace_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn agent_personality_edit_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.agent_personality_edit_enabled)
             .unwrap_or(false)
     }
 
@@ -668,8 +719,17 @@ impl SettingsManager {
         if let Some(b) = patch.agent_web_tools_enabled {
             inner.agent_web_tools_enabled = b;
         }
+        if let Some(b) = patch.agent_browser_fetch_enabled {
+            inner.agent_browser_fetch_enabled = b;
+        }
+        if let Some(b) = patch.agent_browser_ignore_robots {
+            inner.agent_browser_ignore_robots = b;
+        }
         if let Some(b) = patch.agent_workspace_enabled {
             inner.agent_workspace_enabled = b;
+        }
+        if let Some(b) = patch.agent_personality_edit_enabled {
+            inner.agent_personality_edit_enabled = b;
         }
         if let Some(b) = patch.database_allow_write {
             inner.database_allow_write = b;

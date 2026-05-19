@@ -247,7 +247,7 @@ export function ChatMain({
                 }
               >
                 <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                  {m.role === "user" ? "You" : "Nova"}
+                  {m.role === "user" ? "You" : activeCompanionLabel}
                 </p>
                 {messageImageSrc(m) ? (
                   <img
@@ -265,7 +265,7 @@ export function ChatMain({
           {streamAssistant ? (
             <article className="mr-8 rounded-2xl rounded-bl-md border border-indigo-500/30 bg-indigo-500/10 px-4 py-3 text-sm leading-relaxed text-slate-100 shadow-sm">
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                Nova
+                {activeCompanionLabel}
               </p>
               {streamAssistant.thinking && !streamAssistant.text ? (
                 <p className="flex items-center gap-2 text-slate-400">
@@ -344,7 +344,9 @@ export function ChatMain({
             }}
             disabled={threadLoading || sending || !hasActiveConversation}
             placeholder={
-              hasActiveConversation ? "Message Nova…" : 'Click "New chat" in the sidebar first…'
+              hasActiveConversation
+                ? `Message ${activeCompanionLabel}…`
+                : 'Click "New chat" in the sidebar first…'
             }
             className="min-h-[2.75rem] flex-1 resize-none rounded-xl border border-slate-800/90 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 shadow-inner outline-none ring-0 transition focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50"
           />

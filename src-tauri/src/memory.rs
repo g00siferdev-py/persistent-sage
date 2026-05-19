@@ -208,10 +208,18 @@ pub trait ConversationMemory: Send + Sync {
     ) -> Result<Vec<StoredMessage>, MemoryError>;
 
     /// Rich briefing: recent transcript + anchors + projects + preferences.
-    fn get_startup_briefing(&self, conversation_id: &str) -> Result<String, MemoryError>;
+    fn get_startup_briefing(
+        &self,
+        conversation_id: &str,
+        assistant_label: &str,
+    ) -> Result<String, MemoryError>;
 
     /// Recomputes the rich briefing (same output as [`Self::get_startup_briefing`]).
-    fn update_startup_briefing(&self, conversation_id: &str) -> Result<String, MemoryError>;
+    fn update_startup_briefing(
+        &self,
+        conversation_id: &str,
+        assistant_label: &str,
+    ) -> Result<String, MemoryError>;
 
     fn list_conversations(&self) -> Result<Vec<StoredConversation>, MemoryError>;
 
@@ -850,7 +858,11 @@ impl MemoryAnchor {
     }
 
     /// Builds the enriched briefing (transcript + anchors + projects + prefs).
-    fn compose_enriched_briefing(&self, conversation_id: &str) -> Result<String, MemoryError> {
+    fn compose_enriched_briefing(
+        &self,
+        conversation_id: &str,
+        assistant_label: &str,
+    ) -> Result<String, MemoryError> {
         self.assert_conversation_exists(conversation_id)?;
 
         let recent = self.get_recent(conversation_id, BRIEFING_MESSAGE_WINDOW)?;
@@ -860,7 +872,14 @@ impl MemoryAnchor {
 
         let mut out = String::new();
 
-        out.push_str("# Nova session context\n\n");
+        let companion = assistant_label.trim();
+        let companion = if companion.is_empty() {
+            "Companion"
+        } else {
+            companion
+        };
+
+        out.push_str(&format!("# Session context ({companion})\n\n"));
 
         out.push_str("## Recent transcript\n");
         if recent.is_empty() {
@@ -869,7 +888,7 @@ impl MemoryAnchor {
             for m in &recent {
                 let label = match m.role {
                     MessageRole::User => "User",
-                    MessageRole::Assistant => "Nova",
+                    MessageRole::Assistant => companion,
                 };
                 let snippet: String = m.content.chars().take(BRIEFING_SNIPPET_CHARS).collect();
                 let suffix = if m.content.chars().count() > BRIEFING_SNIPPET_CHARS {
@@ -1594,12 +1613,20 @@ impl ConversationMemory for MemoryAnchor {
         Ok(batch)
     }
 
-    fn get_startup_briefing(&self, conversation_id: &str) -> Result<String, MemoryError> {
-        self.compose_enriched_briefing(conversation_id)
+    fn get_startup_briefing(
+        &self,
+        conversation_id: &str,
+        assistant_label: &str,
+    ) -> Result<String, MemoryError> {
+        self.compose_enriched_briefing(conversation_id, assistant_label)
     }
 
-    fn update_startup_briefing(&self, conversation_id: &str) -> Result<String, MemoryError> {
-        self.compose_enriched_briefing(conversation_id)
+    fn update_startup_briefing(
+        &self,
+        conversation_id: &str,
+        assistant_label: &str,
+    ) -> Result<String, MemoryError> {
+        self.compose_enriched_briefing(conversation_id, assistant_label)
     }
 
     fn list_conversations(&self) -> Result<Vec<StoredConversation>, MemoryError> {

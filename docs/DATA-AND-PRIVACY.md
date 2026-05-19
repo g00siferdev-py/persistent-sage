@@ -144,7 +144,7 @@ Always **quit Nova** before copying or restoring `nova_memory.sqlite` manually.
 
 ## Compliance-oriented notes
 
-Nova is **early alpha** software. It does not implement:
+Nova is **open beta** software (`0.2.0-beta.1`). It does not implement:
 
 - Database encryption
 - Multi-user access control

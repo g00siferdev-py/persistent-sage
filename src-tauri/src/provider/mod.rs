@@ -17,8 +17,8 @@ pub use ollama::{
 pub use openai::{fetch_openai_model_ids, OpenAIProvider};
 pub use placeholder::PlaceholderEngine;
 pub use types::{
-    ChatSendResult, ChatTurn, CompletionRequest, CompletionResponse, ModelInfo, ProviderDescriptor,
-    StreamChunk, TokenUsage, ToolCall, ToolDefinition,
+    ChatSendResult, ChatTurn, CompletionRequest, CompletionResponse, ProviderDescriptor,
+    StreamChunk, ToolCall, ToolDefinition,
 };
 
 use std::sync::Arc;

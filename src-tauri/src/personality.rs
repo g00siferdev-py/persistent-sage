@@ -127,6 +127,9 @@ pub fn build_system_prompt(p: &PersonalityProfile) -> String {
         }
     }
 
+    out.push_str(&format!(
+        "In the session transcript below, lines labeled **{display}** are your own earlier replies in this thread — not a separate assistant named Nova.\n",
+    ));
     out.push_str(
         "Respect user privacy, follow their lead, and use the session context below when relevant.\n",
     );
@@ -210,6 +213,22 @@ impl PersonalityManager {
             .unwrap_or_default()
     }
 
+    /// Display name for the active companion (UI labels, memory briefing transcript).
+    pub fn companion_display_name(&self) -> String {
+        self.inner
+            .read()
+            .ok()
+            .map(|f| {
+                let n = active_profile(&f).companion_name.trim();
+                if n.is_empty() {
+                    "Nova".to_string()
+                } else {
+                    n.to_string()
+                }
+            })
+            .unwrap_or_else(|| "Nova".to_string())
+    }
+
     /// Active companion profile id (must stay aligned with MemoryAnchor for the same chat).
     #[must_use]
     pub fn active_profile_id(&self) -> String {
@@ -245,6 +264,77 @@ impl PersonalityManager {
         }
         eprintln!("nova: PersonalityManager set_active_profile_id -> {id} (persisting)");
         self.persist_unlocked()
+    }
+
+    /// Update only the active profile; unspecified fields are left unchanged. Persists to disk.
+    ///
+    /// `avatar_description`: `None` = unchanged; `Some(None)` = clear; `Some(Some(s))` = set.
+    pub fn patch_active_profile(
+        &self,
+        profile_name: Option<&str>,
+        companion_name: Option<&str>,
+        core_personality: Option<&str>,
+        tone_of_voice: Option<&str>,
+        background_story: Option<&str>,
+        core_values: Option<&str>,
+        relationship_style: Option<&str>,
+        special_instructions: Option<&str>,
+        avatar_description: Option<Option<String>>,
+    ) -> Result<PersonalitySnapshot, PersonalityError> {
+        {
+            let mut inner = self
+                .inner
+                .write()
+                .map_err(|_| PersonalityError::Invalid("lock poisoned".into()))?;
+            let active_id = inner.active_profile_id.clone();
+            let idx = inner
+                .profiles
+                .iter()
+                .position(|prof| prof.id == active_id)
+                .unwrap_or(0);
+            let p = inner
+                .profiles
+                .get_mut(idx)
+                .ok_or_else(|| PersonalityError::Invalid("no personality profiles".into()))?;
+
+            if let Some(n) = profile_name {
+                let t = n.trim();
+                if t.is_empty() {
+                    return Err(PersonalityError::Invalid("profileName cannot be empty".into()));
+                }
+                p.profile_name = t.to_string();
+            }
+            if let Some(n) = companion_name {
+                let t = n.trim();
+                if t.is_empty() {
+                    return Err(PersonalityError::Invalid("companionName cannot be empty".into()));
+                }
+                p.companion_name = t.to_string();
+            }
+            if let Some(s) = core_personality {
+                p.core_personality = s.to_string();
+            }
+            if let Some(s) = tone_of_voice {
+                p.tone_of_voice = s.to_string();
+            }
+            if let Some(s) = background_story {
+                p.background_story = s.to_string();
+            }
+            if let Some(s) = core_values {
+                p.core_values = s.to_string();
+            }
+            if let Some(s) = relationship_style {
+                p.relationship_style = s.to_string();
+            }
+            if let Some(s) = special_instructions {
+                p.special_instructions = s.to_string();
+            }
+            if let Some(av) = avatar_description {
+                p.avatar_description = av;
+            }
+        }
+        self.persist_unlocked()?;
+        self.snapshot()
     }
 
     pub fn replace_all(&self, mut file: PersonalityFile) -> Result<(), PersonalityError> {

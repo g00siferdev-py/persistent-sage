@@ -5,6 +5,7 @@
   "windows": ["main"],
   "permissions": [
     "nova-invoke-allowlist",
+    "dialog:default",
     "core:path:default",
     "core:window:default",
     "core:webview:default",

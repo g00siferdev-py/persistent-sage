@@ -21,7 +21,8 @@ Nova is a **Tauri 2** desktop application: a **React 19** frontend talks to a **
 │  provider/ — OpenAI, Ollama, Anthropic, Placeholder         │
 │  attachments.rs — vision payloads                           │
 │  pulse.rs — scheduled ticks in open thread                  │
-│  agent_tools.rs · database_query.rs                         │
+│  agent_tools.rs · browser_fetch.rs · personality_tools.rs   │
+│  database_query.rs                                          │
 └───────────────────────────┬─────────────────────────────────┘
                             │
         ┌───────────────────┼───────────────────┐
@@ -100,6 +101,8 @@ Merged when enabled in settings (`chat.rs`):
 | Source | Tools |
 |--------|-------|
 | Web | `web_search`, `fetch_url`, `http_request` |
+| Browser | `fetch_browser` (headless Chrome; `browser_fetch.rs`) |
+| Personality | `personality_get`, `personality_update` (opt-in; `personality_tools.rs`) |
 | Workspace | `workspace_read_file`, `workspace_write_file`, `workspace_list_directory` |
 | Database | `database_query` (optional app-data DB, optional writes) |
 
@@ -131,6 +134,8 @@ Commands are allowlisted in `src-tauri/permissions/nova-invoke-allowlist.toml`. 
 |----------|--------|
 | `NOVA_DATA_DIR` | Pin all app data to one directory |
 | `NOVA_PORTABLE=1` | `{exe}/data/` layout + stricter SQLite pragmas |
+| `NOVA_CHROME_PATH` | Chrome/Chromium/Edge for `fetch_browser` |
+| `NOVA_CHROME_NO_SANDBOX` | Sandbox flags for containerized Chrome |
 
 ---
 

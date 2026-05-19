@@ -241,7 +241,20 @@ Then run `npm run tauri dev`, send a test message, and confirm the sidebar shows
 
 ---
 
-## 12. Next steps
+## 12. Beta testing
+
+Nova **0.2.0-beta.1** is in **open beta**. After you complete § 11 (verify install):
+
+1. Configure a live provider and send several chat turns.
+2. Try **Settings → Companion** (personalities, optional OpenClaw import).
+3. If you use OpenClaw today, follow **[USER-GUIDE.md § Migrating from OpenClaw](./USER-GUIDE.md#11-migrating-from-openclaw)** and report results on GitHub.
+4. File issues at [github.com/g00siferdev-py/project-nova/issues](https://github.com/g00siferdev-py/project-nova/issues).
+
+See also [CONTRIBUTING.md](../CONTRIBUTING.md) and [README.md § Beta testing](../README.md#beta-testing).
+
+---
+
+## 13. Next steps
 
 - [USER-GUIDE.md](./USER-GUIDE.md) — Day-to-day usage
 - [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md) — Encryption and local storage

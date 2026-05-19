@@ -22,9 +22,12 @@ import {
 } from "@/lib/personalityPrompt";
 import {
   appendImportedProfiles,
-  openclawFilesToProfile,
   parsePersonalityJson,
+  previewFieldSummary,
+  previewOpenclawImport,
+  type OpenclawImportPreview,
 } from "@/lib/personalityImport";
+import { pickOpenclawMarkdownFiles, type PickedTextFile } from "@/lib/pickOpenclawFiles";
 
 type Snapshot = {
   file: PersonalityFile;
@@ -65,6 +68,10 @@ export function CompanionPersonalitySection({
   const [saveMode, setSaveMode] = useState<"changes" | "new" | null>(null);
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const openclawInputRef = useRef<HTMLInputElement>(null);
+  const openclawPreviewRef = useRef<HTMLDivElement>(null);
+  const [openclawPreview, setOpenclawPreview] = useState<OpenclawImportPreview | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
 
   const syncMemoryProfile = useCallback(
     (profileId: string) => {
@@ -72,6 +79,13 @@ export function CompanionPersonalitySection({
     },
     [onActiveProfileMemorySync],
   );
+
+  /** Persist personality.json before memory sync (backend only knows saved profile ids). */
+  const persistFile = useCallback(async (next: PersonalityFile): Promise<PersonalityFile> => {
+    const snap = await invoke<Snapshot>("personality_save", { file: next });
+    setFile(snap.file);
+    return snap.file;
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -117,8 +131,17 @@ export function CompanionPersonalitySection({
 
   const setActiveId = (id: string) => {
     if (!file) return;
-    setFile({ ...file, activeProfileId: id });
-    syncMemoryProfile(id);
+    const nextFile: PersonalityFile = { ...file, activeProfileId: id };
+    setFile(nextFile);
+    void (async () => {
+      setLoadErr(null);
+      try {
+        const saved = await persistFile(nextFile);
+        syncMemoryProfile(saved.activeProfileId);
+      } catch (e) {
+        setLoadErr(String(e));
+      }
+    })();
   };
 
   const addProfile = () => {
@@ -128,24 +151,42 @@ export function CompanionPersonalitySection({
         ? crypto.randomUUID()
         : `p-${Date.now()}`;
     const next: PersonalityProfile = emptyProfile(id, "New profile");
-    setFile({
+    const nextFile: PersonalityFile = {
       ...file,
       profiles: [...file.profiles, next],
       activeProfileId: id,
-    });
-    syncMemoryProfile(id);
+    };
+    setFile(nextFile);
+    void (async () => {
+      setLoadErr(null);
+      try {
+        const saved = await persistFile(nextFile);
+        syncMemoryProfile(saved.activeProfileId);
+      } catch (e) {
+        setLoadErr(String(e));
+      }
+    })();
   };
 
   const deleteActiveProfile = () => {
     if (!file || file.profiles.length <= 1) return;
     const rest = file.profiles.filter((p) => p.id !== file.activeProfileId);
     const nextActive = rest[0]?.id ?? "default";
-    setFile({
+    const nextFile: PersonalityFile = {
       ...file,
       profiles: rest,
       activeProfileId: nextActive,
-    });
-    syncMemoryProfile(nextActive);
+    };
+    setFile(nextFile);
+    void (async () => {
+      setLoadErr(null);
+      try {
+        const saved = await persistFile(nextFile);
+        syncMemoryProfile(saved.activeProfileId);
+      } catch (e) {
+        setLoadErr(String(e));
+      }
+    })();
   };
 
   const saveChanges = async () => {
@@ -199,33 +240,87 @@ export function CompanionPersonalitySection({
       if (!ok) return;
       const next = appendImportedProfiles(file, parsed.profiles);
       setFile(next);
-      syncMemoryProfile(next.activeProfileId);
+      const saved = await persistFile(next);
+      syncMemoryProfile(saved.activeProfileId);
     } catch (err) {
       setLoadErr(String(err));
     }
   };
 
-  const onPickOpenclaw = () => openclawInputRef.current?.click();
+  const processOpenclawFiles = async (parts: PickedTextFile[]) => {
+    if (!file) {
+      setImportMsg("Personality data is still loading — wait a moment and try again.");
+      return;
+    }
+    setLoadErr(null);
+    setImportMsg(null);
+    setImportBusy(true);
+    try {
+      const preview = previewOpenclawImport(parts);
+      setOpenclawPreview(preview);
+      requestAnimationFrame(() => {
+        openclawPreviewRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    } catch (err) {
+      setOpenclawPreview(null);
+      setImportMsg(String(err));
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+  const onPickOpenclaw = async () => {
+    setImportMsg(null);
+    try {
+      const fromDialog = await pickOpenclawMarkdownFiles();
+      if (fromDialog !== null) {
+        if (fromDialog.length === 0) return;
+        await processOpenclawFiles(fromDialog);
+        return;
+      }
+    } catch (err) {
+      setImportMsg(String(err));
+      return;
+    }
+    openclawInputRef.current?.click();
+  };
 
   const onOpenclawSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.target;
     const list = input.files;
-    input.value = "";
-    if (!list?.length || !file) return;
-    setLoadErr(null);
+    if (!list?.length) return;
     try {
-      const parts: { fileName: string; text: string }[] = [];
+      const parts: PickedTextFile[] = [];
       for (let i = 0; i < list.length; i++) {
         const f = list[i]!;
         parts.push({ fileName: f.name, text: await readFileText(f) });
       }
-      const profile = openclawFilesToProfile(parts);
-      const next = appendImportedProfiles(file, [profile]);
-      setFile(next);
-      syncMemoryProfile(next.activeProfileId);
-    } catch (err) {
-      setLoadErr(String(err));
+      await processOpenclawFiles(parts);
+    } finally {
+      input.value = "";
     }
+  };
+
+  const confirmOpenclawImport = () => {
+    if (!file || !openclawPreview || openclawPreview.fatalError) return;
+    const next = appendImportedProfiles(file, [openclawPreview.profile]);
+    setFile(next);
+    void (async () => {
+      setLoadErr(null);
+      try {
+        const saved = await persistFile(next);
+        syncMemoryProfile(saved.activeProfileId);
+        setOpenclawPreview(null);
+        setImportMsg(null);
+      } catch (e) {
+        setLoadErr(String(e));
+      }
+    })();
+  };
+
+  const cancelOpenclawImport = () => {
+    setOpenclawPreview(null);
+    setImportMsg(null);
   };
 
   const saveAsNewProfile = async () => {
@@ -366,8 +461,9 @@ export function CompanionPersonalitySection({
               or one profile object. <span className="font-medium text-slate-300">OpenClaw</span> — select{" "}
               <span className="font-mono">SOUL.md</span>, <span className="font-mono">IDENTITY.md</span>,{" "}
               <span className="font-mono">USER.md</span>, <span className="font-mono">JOURNAL.md</span>,{" "}
-              <span className="font-mono">MEMORY.md</span>, <span className="font-mono">TOOLS.md</span> together (any
-              subset); we map them into Nova fields and add one new profile. Then use{" "}
+              <span className="font-mono">MEMORY.md</span>, <span className="font-mono">TOOLS.md</span> (any subset).
+              OpenClaw templates use bullet lists (<span className="font-mono">- Name:</span>, etc.) — we map those
+              into Nova fields, show a preview, then add one profile. Use{" "}
               <span className="text-indigo-300">Save changes</span> to persist.
             </p>
             <input
@@ -381,12 +477,20 @@ export function CompanionPersonalitySection({
             <input
               ref={openclawInputRef}
               type="file"
-              accept=".md,.markdown,text/markdown"
+              accept=".md,.markdown,.txt,text/markdown,text/plain"
               multiple
               className="sr-only"
               aria-hidden
               onChange={(ev) => void onOpenclawSelected(ev)}
             />
+            {importBusy ? (
+              <p className="mt-2 text-[11px] text-slate-400">Reading markdown files…</p>
+            ) : null}
+            {importMsg ? (
+              <p className="mt-2 rounded border border-amber-900/50 bg-amber-950/30 px-2 py-1.5 text-[11px] text-amber-200">
+                {importMsg}
+              </p>
+            ) : null}
             <div className="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -398,13 +502,103 @@ export function CompanionPersonalitySection({
               </button>
               <button
                 type="button"
-                onClick={onPickOpenclaw}
+                onClick={() => void onPickOpenclaw()}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-slate-900/80 px-3 py-2 text-xs font-medium text-amber-100 hover:bg-slate-800"
               >
                 <FileText className="size-3.5 shrink-0" aria-hidden />
                 Import OpenClaw markdown…
               </button>
             </div>
+            {openclawPreview ? (
+              <div
+                ref={openclawPreviewRef}
+                className="mt-3 rounded-lg border border-indigo-500/35 bg-indigo-950/25 p-3"
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-200/90">
+                  OpenClaw import preview
+                </p>
+                {openclawPreview.fatalError ? (
+                  <p className="mt-2 text-[11px] text-red-300">{openclawPreview.fatalError}</p>
+                ) : null}
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Files:{" "}
+                  <span className="font-mono text-slate-300">
+                    {openclawPreview.filesFound.length > 0
+                      ? openclawPreview.filesFound.map((f) => `${f.toUpperCase()}.md`).join(", ")
+                      : "(none recognized)"}
+                  </span>
+                  {openclawPreview.unrecognizedFileNames.length > 0 ? (
+                    <span className="text-amber-300/90">
+                      {" "}
+                      · skipped: {openclawPreview.unrecognizedFileNames.join(", ")}
+                    </span>
+                  ) : null}
+                </p>
+                {openclawPreview.missingRecommended.length > 0 ? (
+                  <p className="mt-1 text-[11px] text-amber-300/90">
+                    Not included (optional): {openclawPreview.missingRecommended.join(", ")}
+                  </p>
+                ) : null}
+                {openclawPreview.warnings.map((w) => (
+                  <p key={w} className="mt-1 text-[11px] text-amber-300/90">
+                    {w}
+                  </p>
+                ))}
+                <dl className="mt-3 grid gap-2 text-[11px]">
+                  <div className="grid grid-cols-[7rem_1fr] gap-2">
+                    <dt className="text-slate-500">Companion</dt>
+                    <dd className="text-slate-200">{openclawPreview.profile.companionName}</dd>
+                  </div>
+                  <div className="grid grid-cols-[7rem_1fr] gap-2">
+                    <dt className="text-slate-500">Core personality</dt>
+                    <dd className="text-slate-400">
+                      {previewFieldSummary(openclawPreview.profile.corePersonality)}
+                    </dd>
+                  </div>
+                  <div className="grid grid-cols-[7rem_1fr] gap-2">
+                    <dt className="text-slate-500">Tone</dt>
+                    <dd className="text-slate-400">
+                      {previewFieldSummary(openclawPreview.profile.toneOfVoice)}
+                    </dd>
+                  </div>
+                  <div className="grid grid-cols-[7rem_1fr] gap-2">
+                    <dt className="text-slate-500">Background</dt>
+                    <dd className="text-slate-400">
+                      {previewFieldSummary(openclawPreview.profile.backgroundStory)}
+                    </dd>
+                  </div>
+                  <div className="grid grid-cols-[7rem_1fr] gap-2">
+                    <dt className="text-slate-500">User relationship</dt>
+                    <dd className="text-slate-400">
+                      {previewFieldSummary(openclawPreview.profile.relationshipStyle)}
+                    </dd>
+                  </div>
+                  <div className="grid grid-cols-[7rem_1fr] gap-2">
+                    <dt className="text-slate-500">Special instructions</dt>
+                    <dd className="text-slate-400">
+                      {previewFieldSummary(openclawPreview.profile.specialInstructions, 160)}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={confirmOpenclawImport}
+                    disabled={Boolean(openclawPreview.fatalError)}
+                    className="rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-400 disabled:opacity-40"
+                  >
+                    Add profile to list
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelOpenclawImport}
+                    className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="rounded-lg border border-slate-800/90 bg-slate-950/50 p-3">
@@ -416,7 +610,7 @@ export function CompanionPersonalitySection({
                 >
                   Switch profile
                 </label>
-                <p className="mt-0.5 max-w-[16rem] text-[11px] leading-snug text-slate-500">
+                <p className="mt-0.5 text-xs leading-snug text-slate-500">
                   Pick a saved profile — the form below updates immediately with that profile&apos;s fields.
                 </p>
               </div>
