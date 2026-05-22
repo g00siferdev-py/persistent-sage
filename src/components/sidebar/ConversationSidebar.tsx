@@ -32,6 +32,7 @@ type Props = {
   briefing: string;
   briefingLoading: boolean;
   anchors: StoredAnchor[];
+  extractingAnchors?: boolean;
   onExtractAnchors: () => void;
   /** Active companion display name (nameplate). */
   companionName: string;
@@ -61,6 +62,7 @@ export function ConversationSidebar({
   briefing,
   briefingLoading,
   anchors,
+  extractingAnchors = false,
   onExtractAnchors,
   companionName,
 }: Props) {
@@ -113,11 +115,11 @@ export function ConversationSidebar({
       setRecallError(null);
       return;
     }
-    const scope = activeId && activeId.length > 0 ? activeId : null;
     setRecallBusy(true);
     setRecallError(null);
     try {
-      const bundle = await memoryRecall(q, scope, 16, 8);
+      // Global search across all threads for this companion (matches chat auto-recall).
+      const bundle = await memoryRecall(q, null, 16, 8);
       setRecallBundle(bundle);
     } catch (e) {
       setRecallBundle(null);
@@ -128,15 +130,15 @@ export function ConversationSidebar({
   };
 
   return (
-    <aside className="flex h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-r border-slate-800/80 bg-slate-900/40">
-      <div className="flex items-center gap-2 border-b border-slate-800/80 px-4 py-3">
+    <aside className="flex h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-r border-slate-200 dark:border-slate-800/80 bg-slate-100 dark:bg-slate-900/40">
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800/80 px-4 py-3">
         <img
           src="/nova-icon.svg"
           alt=""
           className="size-9 rounded-lg ring-1 ring-slate-700/80"
         />
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold tracking-tight text-white">
+          <p className="truncate text-sm font-semibold tracking-tight text-slate-900 dark:text-white">
             {companionName}
           </p>
           <p className="truncate text-xs text-slate-500">Companion</p>
@@ -147,7 +149,7 @@ export function ConversationSidebar({
         <button
           type="button"
           onClick={() => onNewChat()}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white shadow-sm shadow-indigo-500/20 transition hover:bg-indigo-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-slate-900 dark:text-white shadow-sm shadow-indigo-500/20 transition hover:bg-indigo-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
         >
           <Plus className="size-4" aria-hidden />
           New chat
@@ -165,7 +167,7 @@ export function ConversationSidebar({
               type="button"
               title="Hide thread list from this sidebar only — does not delete SQLite data"
               onClick={() => onClearThreadListFromView()}
-              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-700/80 bg-slate-900/60 px-2 py-1 text-[10px] font-medium normal-case tracking-normal text-slate-400 transition hover:border-slate-600 hover:bg-slate-800/80 hover:text-slate-200"
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-300 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-900/60 px-2 py-1 text-[10px] font-medium normal-case tracking-normal text-slate-600 dark:text-slate-400 transition hover:border-slate-300 dark:border-slate-600 hover:bg-slate-200 dark:bg-slate-800/80 hover:text-slate-800 dark:text-slate-200"
             >
               <ListX className="size-3.5" aria-hidden />
               Clear view
@@ -180,13 +182,13 @@ export function ConversationSidebar({
             </div>
           ) : threadListHiddenFromSidebar && hasThreadsInDatabase ? (
             <div className="space-y-3 px-2 py-4">
-              <p className="text-center text-xs leading-relaxed text-slate-400">
+              <p className="text-center text-xs leading-relaxed text-slate-600 dark:text-slate-400">
                 Thread list is hidden from this panel only. Nothing was removed from your database.
               </p>
               <button
                 type="button"
                 onClick={() => onRestoreThreadListFromView()}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-600 bg-slate-800/60 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800"
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-200/80 dark:bg-slate-800/60 px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 transition hover:bg-slate-200 dark:bg-slate-800"
               >
                 <ListRestart className="size-3.5" aria-hidden />
                 Show threads from database
@@ -205,8 +207,8 @@ export function ConversationSidebar({
                   key={c.id}
                   className={
                     active
-                      ? "flex items-start gap-1 rounded-lg bg-slate-800/90 px-2 py-2 ring-1 ring-indigo-500/40"
-                      : "flex items-start gap-1 rounded-lg px-2 py-2 transition hover:bg-slate-800/60"
+                      ? "flex items-start gap-1 rounded-lg bg-slate-200 dark:bg-slate-800/90 px-2 py-2 ring-1 ring-indigo-500/40"
+                      : "flex items-start gap-1 rounded-lg px-2 py-2 transition hover:bg-slate-200/80 dark:bg-slate-800/60"
                   }
                 >
                   {editing ? (
@@ -226,7 +228,7 @@ export function ConversationSidebar({
                         if (next && e.currentTarget.parentElement?.contains(next)) return;
                         commitRename(c.id);
                       }}
-                      className="min-w-0 flex-1 rounded border border-slate-600 bg-slate-950 px-2 py-1 text-sm text-white outline-none focus:ring-1 focus:ring-indigo-500"
+                      className="min-w-0 flex-1 rounded border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-950 px-2 py-1 text-sm text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500"
                     />
                   ) : (
                     <>
@@ -235,7 +237,7 @@ export function ConversationSidebar({
                         onClick={() => onSelect(c.id)}
                         className="min-w-0 flex-1 text-left"
                       >
-                        <span className="block truncate text-sm font-medium text-white">
+                        <span className="block truncate text-sm font-medium text-slate-900 dark:text-white">
                           {c.title}
                         </span>
                         <span
@@ -256,7 +258,7 @@ export function ConversationSidebar({
                             setEditValue(c.title);
                           }
                         }}
-                        className="shrink-0 rounded p-1 text-slate-500 transition hover:bg-slate-700/80 hover:text-slate-300"
+                        className="shrink-0 rounded p-1 text-slate-500 transition hover:bg-slate-300 dark:hover:bg-slate-700/80 hover:text-slate-700 dark:text-slate-300"
                       >
                         <PenLine className="size-3.5" aria-hidden />
                       </button>
@@ -282,7 +284,7 @@ export function ConversationSidebar({
           )}
         </nav>
 
-        <div className="mt-1 min-h-0 flex-1 space-y-3 border-t border-slate-800/80 pt-3">
+        <div className="mt-1 min-h-0 flex-1 space-y-3 border-t border-slate-200 dark:border-slate-800/80 pt-3">
           <div className="flex items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             <Brain className="size-3.5" aria-hidden />
             Memory Anchor
@@ -295,20 +297,20 @@ export function ConversationSidebar({
                 <span>Raw + curated layers · local only</span>
               </p>
               <p>
-                Chat messages live in the main transcript (SQLite). <strong className="text-slate-400">Recent anchors</strong>{" "}
-                lists extracted snippets only — use <strong className="text-slate-400">Extract raw anchors</strong> or recall
+                Chat messages live in the main transcript (SQLite). <strong className="text-slate-600 dark:text-slate-400">Recent anchors</strong>{" "}
+                lists extracted snippets only — use <strong className="text-slate-600 dark:text-slate-400">Extract raw anchors</strong> or recall
                 search below; they are not auto-filled from every reply.
               </p>
             </div>
 
-            <div className="max-h-36 overflow-y-auto rounded-lg border border-slate-800/80 bg-slate-950/40 px-2.5 py-2">
+            <div className="max-h-36 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 px-2.5 py-2">
               {briefingLoading ? (
                 <div className="flex items-center gap-2 py-4 text-xs text-slate-500">
                   <Loader2 className="size-4 animate-spin text-indigo-400" aria-hidden />
                   Loading briefing…
                 </div>
               ) : (
-                <pre className="whitespace-pre-wrap break-words font-sans text-[11px] leading-relaxed text-slate-400">
+                <pre className="whitespace-pre-wrap break-words font-sans text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
                   {briefing.trim() || "Open a chat to load the enriched startup briefing."}
                 </pre>
               )}
@@ -317,12 +319,16 @@ export function ConversationSidebar({
             <div className="flex gap-2">
               <button
                 type="button"
-                disabled={!activeId || briefingLoading}
+                disabled={!activeId || briefingLoading || extractingAnchors}
                 onClick={() => onExtractAnchors()}
-                className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-800/50 px-2 py-1.5 text-[11px] font-medium text-slate-200 transition hover:bg-slate-800 disabled:opacity-40"
+                className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-800/50 px-2 py-1.5 text-[11px] font-medium text-slate-800 dark:text-slate-200 transition hover:bg-slate-200 dark:bg-slate-800 disabled:opacity-40"
               >
-                <Anchor className="size-3.5" aria-hidden />
-                Extract raw anchors
+                {extractingAnchors ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <Anchor className="size-3.5" aria-hidden />
+                )}
+                {extractingAnchors ? "Extracting…" : "Extract raw anchors"}
               </button>
             </div>
 
@@ -337,18 +343,18 @@ export function ConversationSidebar({
                   recentAnchorsByDate.slice(0, 10).map((a) => (
                     <li
                       key={a.id}
-                      className="rounded border border-slate-800/60 bg-slate-950/30 px-2 py-1 text-[11px] text-slate-400"
+                      className="rounded border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-2 py-1 text-[11px] text-slate-600 dark:text-slate-400"
                     >
                       <span className="mr-1 text-[9px] text-slate-600">
                         {new Intl.DateTimeFormat(undefined, { dateStyle: "short" }).format(
                           new Date(a.createdAt),
                         )}
                       </span>
-                      <span className="mr-1 rounded bg-slate-800 px-1 text-[9px] uppercase text-indigo-300">
+                      <span className="mr-1 rounded bg-slate-200 dark:bg-slate-800 px-1 text-[9px] uppercase text-indigo-300">
                         {a.anchorType}
                       </span>
                       <span className="text-slate-500">·{a.importance}</span>
-                      <span className="mt-0.5 block text-slate-300">{a.content}</span>
+                      <span className="mt-0.5 block text-slate-700 dark:text-slate-300">{a.content}</span>
                     </li>
                   ))
                 )}
@@ -367,13 +373,13 @@ export function ConversationSidebar({
                     if (e.key === "Enter") void runRecall();
                   }}
                   placeholder="Search anchors & messages…"
-                  className="min-w-0 flex-1 rounded-lg border border-slate-800/90 bg-slate-950/50 px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-600 outline-none focus:border-indigo-500/40"
+                  className="min-w-0 flex-1 rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/50 px-2 py-1 text-[11px] text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/40"
                 />
                 <button
                   type="button"
                   onClick={() => void runRecall()}
                   disabled={recallBusy}
-                  className="shrink-0 rounded-lg border border-slate-700/80 bg-slate-800/60 p-1.5 text-slate-300 hover:bg-slate-800"
+                  className="shrink-0 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-slate-200/80 dark:bg-slate-800/60 p-1.5 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:bg-slate-800"
                   aria-label="Search"
                 >
                   {recallBusy ? (
@@ -394,7 +400,7 @@ export function ConversationSidebar({
                       {recallBundle.anchors.map((a) => (
                         <li
                           key={a.id}
-                          className="rounded bg-slate-900/50 px-2 py-0.5 text-[10px] text-slate-400"
+                          className="rounded bg-slate-100 dark:bg-slate-900/50 px-2 py-0.5 text-[10px] text-slate-600 dark:text-slate-400"
                         >
                           <span className="text-indigo-400/90">{a.anchorType}</span> · {a.content}
                         </li>
@@ -402,13 +408,13 @@ export function ConversationSidebar({
                     </ul>
                   ) : null}
                   {recallBundle.messages.length > 0 ? (
-                    <ul className="space-y-1 border-t border-slate-800/60 pt-1">
+                    <ul className="space-y-1 border-t border-slate-200 dark:border-slate-800/60 pt-1">
                       {recallBundle.messages.map((m) => (
                         <li
                           key={m.id}
-                          className="rounded bg-slate-900/40 px-2 py-0.5 text-[10px] text-slate-500"
+                          className="rounded bg-slate-100 dark:bg-slate-900/40 px-2 py-0.5 text-[10px] text-slate-500"
                         >
-                          <span className="font-medium text-slate-400">{m.role}</span>:{" "}
+                          <span className="font-medium text-slate-600 dark:text-slate-400">{m.role}</span>:{" "}
                           {m.content.length > 160 ? `${m.content.slice(0, 160)}…` : m.content}
                         </li>
                       ))}

@@ -13,6 +13,7 @@ import {
 import type { ChatMessage } from "@/types/chat";
 import type { StreamAssistantState } from "@/hooks/useChat";
 import { readImageFileAsDataUrl } from "@/lib/chatAttachments";
+import { settingsLayoutLabel, type SettingsLayoutMode } from "@/lib/settingsLayout";
 
 export type CompanionHeaderOption = {
   id: string;
@@ -37,8 +38,8 @@ type Props = {
   sending: boolean;
   streamAssistant: StreamAssistantState;
   error: string | null;
-  settingsOpen: boolean;
-  onToggleSettings: () => void;
+  settingsLayoutMode: SettingsLayoutMode;
+  onCycleSettingsLayout: () => void;
   onSendMessage: (text: string, image?: PendingComposerImage | null) => void;
   /** Active provider + model accept images (from `chat_vision_supported`). */
   visionSupported: boolean;
@@ -69,8 +70,8 @@ export function ChatMain({
   sending,
   streamAssistant,
   error,
-  settingsOpen,
-  onToggleSettings,
+  settingsLayoutMode,
+  onCycleSettingsLayout,
   onSendMessage,
   visionSupported,
   activeCompanionProfileId,
@@ -133,19 +134,19 @@ export function ChatMain({
   };
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900/80">
-      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-800/80 px-4 py-3">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-gradient-to-b from-slate-100 dark:from-slate-950 via-slate-100 dark:via-slate-950 to-slate-200 dark:to-slate-900/80">
+      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200 dark:border-slate-800/80 px-4 py-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Sparkles className="size-4 shrink-0 text-indigo-400" aria-hidden />
           <div className="min-w-0">
-            <h1 className="truncate text-sm font-semibold text-white">{title}</h1>
+            <h1 className="truncate text-sm font-semibold text-slate-900 dark:text-white">{title}</h1>
             <p className="truncate text-xs text-slate-500" title={subtitle}>
               {subtitle}
             </p>
           </div>
         </div>
         <div
-          className="flex shrink-0 items-center gap-2 rounded-xl border border-indigo-500/35 bg-indigo-950/40 px-2.5 py-1.5 shadow-inner shadow-indigo-950/30"
+          className="flex shrink-0 items-center gap-2 rounded-xl border border-indigo-500/35 bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-1.5 shadow-inner shadow-indigo-200/50 dark:shadow-indigo-950/30"
           title={`Active companion: ${activeCompanionLabel}. Choose who to talk to before starting a new chat.`}
         >
           <Users className="size-4 shrink-0 text-indigo-300" aria-hidden />
@@ -172,7 +173,7 @@ export function ChatMain({
                 });
               }}
               disabled={threadLoading}
-              className="h-9 max-w-[min(18rem,calc(100vw-12rem))] min-w-[11rem] appearance-none rounded-lg border border-indigo-400/40 bg-slate-950/90 py-1.5 pl-2.5 pr-8 text-xs font-semibold text-white outline-none transition hover:border-indigo-400/60 focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/30 disabled:opacity-50"
+              className="h-9 max-w-[min(18rem,calc(100vw-12rem))] min-w-[11rem] appearance-none rounded-lg border border-indigo-400/40 bg-white/95 dark:bg-slate-950/90 py-1.5 pl-2.5 pr-8 text-xs font-semibold text-slate-900 dark:text-white outline-none transition hover:border-indigo-400/60 focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/30 disabled:opacity-50"
               title="This companion receives new chats and uses their isolated memory"
             >
               {companionOptions.map((o) => (
@@ -188,13 +189,16 @@ export function ChatMain({
         </div>
         <button
           type="button"
-          onClick={onToggleSettings}
-          aria-expanded={settingsOpen}
+          onClick={onCycleSettingsLayout}
+          aria-expanded={settingsLayoutMode !== "hidden"}
           aria-controls="nova-settings-panel"
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-700/80 bg-slate-900/60 px-3 py-1.5 text-xs font-medium text-slate-200 shadow-sm transition hover:border-slate-600 hover:bg-slate-800/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+          title={`Settings: ${settingsLayoutLabel(settingsLayoutMode)} — click to cycle Hidden → Compact → Full`}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-900/60 px-3 py-1.5 text-xs font-medium text-slate-800 dark:text-slate-200 shadow-sm transition hover:border-slate-300 dark:border-slate-600 hover:bg-slate-200 dark:bg-slate-800/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
         >
-          <PanelRightOpen className="size-4 text-slate-400" aria-hidden />
-          {settingsOpen ? "Hide" : "Settings"}
+          <PanelRightOpen className="size-4 text-slate-600 dark:text-slate-400" aria-hidden />
+          {settingsLayoutMode === "hidden"
+            ? "Settings"
+            : `Settings · ${settingsLayoutLabel(settingsLayoutMode)}`}
         </button>
       </header>
 
@@ -212,17 +216,17 @@ export function ChatMain({
         className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 py-4"
       >
         {threadLoading ? (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-slate-950/70 backdrop-blur-[2px]">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/80 dark:bg-slate-950/70 backdrop-blur-[2px]">
             <Loader2
               className="size-8 animate-spin text-indigo-400"
               aria-hidden
             />
-            <p className="text-sm text-slate-400">Loading history & context…</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400">Loading history & context…</p>
           </div>
         ) : null}
         <div className="mx-auto flex max-w-3xl flex-col gap-4">
           {messages.length === 0 && !threadLoading ? (
-            <p className="rounded-xl border border-dashed border-slate-800/90 bg-slate-900/30 px-4 py-8 text-center text-sm text-slate-500">
+            <p className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800/90 bg-slate-50 dark:bg-slate-900/30 px-4 py-8 text-center text-sm text-slate-500">
               {hasActiveConversation ? (
                 <>
                   No messages in this conversation yet. Say hello below — everything
@@ -230,7 +234,7 @@ export function ChatMain({
                 </>
               ) : (
                 <>
-                  No chat thread is open. Click <strong className="text-slate-300">New chat</strong>{" "}
+                  No chat thread is open. Click <strong className="text-slate-700 dark:text-slate-300">New chat</strong>{" "}
                   in the sidebar to create one — your threads live in local SQLite (not in the git
                   repo), so a new machine starts empty until you add a chat.
                 </>
@@ -242,8 +246,8 @@ export function ChatMain({
                 key={m.id}
                 className={
                   m.role === "user"
-                    ? "ml-8 rounded-2xl rounded-br-md border border-slate-800/80 bg-slate-900/70 px-4 py-3 text-sm leading-relaxed text-slate-100 shadow-sm"
-                    : "mr-8 rounded-2xl rounded-bl-md border border-indigo-500/20 bg-indigo-500/10 px-4 py-3 text-sm leading-relaxed text-slate-100 shadow-sm"
+                    ? "ml-8 rounded-2xl rounded-br-md border border-slate-200 dark:border-slate-800/80 bg-slate-100 dark:bg-slate-900/70 px-4 py-3 text-sm leading-relaxed text-slate-900 dark:text-slate-100 shadow-sm"
+                    : "mr-8 rounded-2xl rounded-bl-md border border-indigo-500/20 bg-indigo-500/10 px-4 py-3 text-sm leading-relaxed text-slate-900 dark:text-slate-100 shadow-sm"
                 }
               >
                 <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
@@ -253,7 +257,7 @@ export function ChatMain({
                   <img
                     src={messageImageSrc(m)!}
                     alt=""
-                    className="mb-2 max-h-64 max-w-full rounded-lg border border-slate-700/80 object-contain"
+                    className="mb-2 max-h-64 max-w-full rounded-lg border border-slate-300 dark:border-slate-700/80 object-contain"
                   />
                 ) : null}
                 {m.content ? (
@@ -263,17 +267,17 @@ export function ChatMain({
             ))
           )}
           {streamAssistant ? (
-            <article className="mr-8 rounded-2xl rounded-bl-md border border-indigo-500/30 bg-indigo-500/10 px-4 py-3 text-sm leading-relaxed text-slate-100 shadow-sm">
+            <article className="mr-8 rounded-2xl rounded-bl-md border border-indigo-500/30 bg-indigo-500/10 px-4 py-3 text-sm leading-relaxed text-slate-900 dark:text-slate-100 shadow-sm">
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                 {activeCompanionLabel}
               </p>
               {streamAssistant.thinking && !streamAssistant.text ? (
-                <p className="flex items-center gap-2 text-slate-400">
+                <p className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                   <Loader2 className="size-4 shrink-0 animate-spin text-indigo-400" aria-hidden />
                   <span>Thinking…</span>
                 </p>
               ) : (
-                <p className="whitespace-pre-wrap text-slate-100">{streamAssistant.text}</p>
+                <p className="whitespace-pre-wrap text-slate-900 dark:text-slate-100">{streamAssistant.text}</p>
               )}
             </article>
           ) : null}
@@ -281,13 +285,13 @@ export function ChatMain({
         </div>
       </div>
 
-      <footer className="shrink-0 border-t border-slate-800/80 p-4">
+      <footer className="shrink-0 border-t border-slate-200 dark:border-slate-800/80 p-4">
         <form
           onSubmit={handleSubmit}
           className="mx-auto flex max-w-3xl flex-col gap-2"
         >
           {pendingImage ? (
-            <div className="relative inline-flex w-fit max-w-full items-start gap-2 rounded-xl border border-slate-700/80 bg-slate-900/60 p-2">
+            <div className="relative inline-flex w-fit max-w-full items-start gap-2 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-900/60 p-2">
               <img
                 src={pendingImage.previewUrl}
                 alt="Attached"
@@ -296,7 +300,7 @@ export function ChatMain({
               <button
                 type="button"
                 onClick={clearPendingImage}
-                className="absolute -right-2 -top-2 rounded-full border border-slate-600 bg-slate-800 p-0.5 text-slate-300 hover:bg-slate-700"
+                className="absolute -right-2 -top-2 rounded-full border border-slate-300 dark:border-slate-600 bg-slate-200 dark:bg-slate-800 p-0.5 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700"
                 aria-label="Remove attached image"
               >
                 <X className="size-3.5" aria-hidden />
@@ -323,7 +327,7 @@ export function ChatMain({
                 ? "Attach image"
                 : "Current model does not support images — switch to a vision model in Settings → Provider (e.g. gpt-4o, Claude 3+, llava, kimi)."
             }
-            className="inline-flex shrink-0 items-center justify-center self-end rounded-xl border border-slate-700/80 bg-slate-900/60 px-3 py-2 text-slate-300 transition hover:border-slate-600 hover:bg-slate-800/80 disabled:pointer-events-none disabled:opacity-40"
+            className="inline-flex shrink-0 items-center justify-center self-end rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-900/60 px-3 py-2 text-slate-700 dark:text-slate-300 transition hover:border-slate-300 dark:border-slate-600 hover:bg-slate-200 dark:bg-slate-800/80 disabled:pointer-events-none disabled:opacity-40"
             aria-label="Attach image"
           >
             <ImagePlus className="size-4" aria-hidden />
@@ -348,12 +352,12 @@ export function ChatMain({
                 ? `Message ${activeCompanionLabel}…`
                 : 'Click "New chat" in the sidebar first…'
             }
-            className="min-h-[2.75rem] flex-1 resize-none rounded-xl border border-slate-800/90 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 shadow-inner outline-none ring-0 transition focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50"
+            className="min-h-[2.75rem] flex-1 resize-none rounded-xl border border-slate-200 dark:border-slate-800/90 bg-slate-100 dark:bg-slate-900/60 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 shadow-inner outline-none ring-0 transition focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50"
           />
           <button
             type="submit"
             disabled={!canSend}
-            className="inline-flex shrink-0 items-center justify-center gap-2 self-end rounded-xl bg-indigo-500 px-3 py-2 text-white shadow-sm shadow-indigo-500/25 transition hover:bg-indigo-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 disabled:pointer-events-none disabled:opacity-40"
+            className="inline-flex shrink-0 items-center justify-center gap-2 self-end rounded-xl bg-indigo-500 px-3 py-2 text-slate-900 dark:text-white shadow-sm shadow-indigo-500/25 transition hover:bg-indigo-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 disabled:pointer-events-none disabled:opacity-40"
             aria-label="Send message"
           >
             {sending ? (

@@ -4,6 +4,12 @@ import { useChat } from "@/hooks/useChat";
 import { ChatMain } from "@/components/chat/ChatMain";
 import { ConversationSidebar } from "@/components/sidebar/ConversationSidebar";
 import { SettingsPanel } from "@/components/settings/SettingsPanel";
+import {
+  cycleSettingsLayoutMode,
+  loadSettingsLayoutMode,
+  saveSettingsLayoutMode,
+  type SettingsLayoutMode,
+} from "@/lib/settingsLayout";
 
 /** Subset of `settings_get` for the main-window provider hint (no secrets). */
 type SettingsForHint = {
@@ -20,9 +26,20 @@ function truncate(s: string, max: number): string {
 }
 
 export function ChatLayout() {
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsLayoutMode, setSettingsLayoutMode] = useState<SettingsLayoutMode>(() =>
+    loadSettingsLayoutMode(),
+  );
   const [backendHint, setBackendHint] = useState<string | null>(null);
-  const prevSettingsOpen = useRef(false);
+  const prevSettingsLayoutMode = useRef<SettingsLayoutMode>(settingsLayoutMode);
+
+  const setSettingsLayout = useCallback((mode: SettingsLayoutMode) => {
+    setSettingsLayoutMode(mode);
+    saveSettingsLayoutMode(mode);
+  }, []);
+
+  const cycleSettingsLayout = useCallback(() => {
+    setSettingsLayout(cycleSettingsLayoutMode(settingsLayoutMode));
+  }, [settingsLayoutMode, setSettingsLayout]);
 
   const loadBackendHint = useCallback(async () => {
     try {
@@ -82,6 +99,7 @@ export function ChatLayout() {
     renameConversation,
     deleteConversation,
     extractAnchorsFromChat,
+    extractingAnchors,
     sendMessage,
     visionSupported,
     refreshVisionSupported,
@@ -92,12 +110,12 @@ export function ChatLayout() {
   } = useChat();
 
   useEffect(() => {
-    if (prevSettingsOpen.current && !settingsOpen) {
+    if (prevSettingsLayoutMode.current !== "hidden" && settingsLayoutMode === "hidden") {
       void loadBackendHint();
       void refreshVisionSupported();
     }
-    prevSettingsOpen.current = settingsOpen;
-  }, [settingsOpen, loadBackendHint, refreshVisionSupported]);
+    prevSettingsLayoutMode.current = settingsLayoutMode;
+  }, [settingsLayoutMode, loadBackendHint, refreshVisionSupported]);
 
   const title = useMemo(() => {
     if (!activeConversationId) return "Nova";
@@ -127,6 +145,7 @@ export function ChatLayout() {
         briefing={briefing}
         briefingLoading={threadLoading && !!activeConversationId}
         anchors={anchors}
+        extractingAnchors={extractingAnchors}
         onExtractAnchors={() => void extractAnchorsFromChat()}
         companionName={activeCompanionLabel}
       />
@@ -148,8 +167,8 @@ export function ChatLayout() {
           sending={sending}
           streamAssistant={streamAssistant}
           error={error}
-          settingsOpen={settingsOpen}
-          onToggleSettings={() => setSettingsOpen((v) => !v)}
+          settingsLayoutMode={settingsLayoutMode}
+          onCycleSettingsLayout={() => cycleSettingsLayout()}
           onSendMessage={(text, image) =>
             void sendMessage(text, image
               ? { base64: image.base64, mime: image.mime, previewUrl: image.previewUrl }
@@ -165,7 +184,8 @@ export function ChatLayout() {
         />
       </div>
       <SettingsPanel
-        open={settingsOpen}
+        layoutMode={settingsLayoutMode}
+        onLayoutModeChange={setSettingsLayout}
         chatActiveProfileId={activePersonalityId}
         onCompanionActiveProfileChange={(profileId) =>
           void applyActivePersonality(profileId)

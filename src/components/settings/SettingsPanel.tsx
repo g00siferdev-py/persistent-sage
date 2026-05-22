@@ -8,20 +8,136 @@ import {
   Heart,
   KeyRound,
   Loader2,
+  Maximize2,
+  Minimize2,
   Moon,
   SlidersHorizontal,
   Wrench,
+  X,
 } from "lucide-react";
 import { CompanionPersonalitySection } from "@/components/settings/CompanionPersonalitySection";
 import { SettingsSection, SettingsToggleCard } from "@/components/settings/settingsUi";
+import { useTheme } from "@/hooks/useTheme";
+import type { SettingsLayoutMode } from "@/lib/settingsLayout";
+import { toolDisplayName, toolLabelList } from "@/lib/toolDisplayNames";
 
 type Props = {
-  open: boolean;
+  layoutMode: SettingsLayoutMode;
+  onLayoutModeChange: (mode: SettingsLayoutMode) => void;
   /** When the user switches companion profile, refresh MemoryAnchor scope and chat threads. */
   onCompanionActiveProfileChange?: (profileId: string) => void | Promise<void>;
   /** Profile id currently used for chat memory (from `useChat`). */
   chatActiveProfileId?: string;
 };
+
+const TOOLS_SECTION_INFO = (
+  <>
+    Chat-only options for OpenAI, Ollama, and Anthropic. Background Pulse never uses tools. Tool names below are what
+    your companion sees in plain language; the app still uses internal ids for API calls.
+  </>
+);
+
+const WEB_TOOLS_WHEN_ENABLED = (
+  <ul className="mt-2 list-inside list-disc space-y-0.5 text-[10px] leading-relaxed text-slate-500">
+    <li>{toolDisplayName("web_search")}</li>
+    <li>{toolDisplayName("fetch_url")}</li>
+    <li>{toolDisplayName("http_request")}</li>
+  </ul>
+);
+
+const WEB_TOOLS_INFO = (
+  <>
+    When enabled, your companion may use: <strong className="font-medium text-slate-700 dark:text-slate-300">{toolLabelList(["web_search", "fetch_url", "http_request"])}</strong>.
+    Web Search uses DuckDuckGo; Fetch URL loads public pages as plain text. Requests leave this device; local and
+    private URLs are blocked. Requires a tool-capable model. Off by default.
+  </>
+);
+
+const PERSONALITY_EDIT_INFO = (
+  <>
+    When enabled, your companion may use <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("personality_get")}</strong> and{" "}
+    <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("personality_update")}</strong> to read or change the active profile in{" "}
+    <span className="font-mono text-slate-600 dark:text-slate-400">personality.json</span>. Saves to disk and updates this chat&apos;s persona immediately. Off by default.
+  </>
+);
+
+const BROWSER_FETCH_INFO = (
+  <>
+    Uses system Chrome, Chromium, or Edge to load pages with JavaScript, a normal browser user-agent, and a
+    persistent cookie profile. Better for news sites and bot-protected pages. Requires a browser install or{" "}
+    <span className="font-mono text-slate-600 dark:text-slate-400">NOVA_CHROME_PATH</span>. In Docker, install{" "}
+    <span className="font-mono text-slate-600 dark:text-slate-400">ca-certificates</span> and set{" "}
+    <span className="font-mono text-slate-600 dark:text-slate-400">NOVA_CHROME_NO_SANDBOX=1</span> if needed. Off by default.
+  </>
+);
+
+const BROWSER_ROBOTS_INFO = (
+  <>
+    When enabled, <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("fetch_browser")}</strong> does not
+    block URLs based on robots.txt. For personal automation on your machine; many news sites disallow bots in
+    robots.txt. Off by default.
+  </>
+);
+
+const WORKSPACE_TOOLS_INFO = (
+  <>
+    When enabled, your companion may use{" "}
+    <strong className="font-medium text-slate-700 dark:text-slate-300">
+      {toolLabelList([
+        "workspace_list_directory",
+        "workspace_read_file",
+        "workspace_write_file",
+      ])}
+    </strong>{" "}
+    in the Nova workspace, and <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("database_query")}</strong> on{" "}
+    <span className="font-mono text-slate-600 dark:text-slate-400">.db</span> / <span className="font-mono text-slate-600 dark:text-slate-400">.sqlite</span> files there
+    (workspace location). Paths are relative; <span className="font-mono text-slate-600 dark:text-slate-400">..</span> is rejected. Off by default.
+    For the live app database folder, enable App data directory databases below instead.
+  </>
+);
+
+const APP_DATA_DB_INFO = (
+  <>
+    When enabled, your companion may use <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("database_query")}</strong> on
+    SQLite files in Nova&apos;s data directory — the same resolved path as the live memory database (for example{" "}
+    <span className="font-mono text-slate-600 dark:text-slate-400">~/.local/share/nova</span> on Linux, or the portable{" "}
+    <span className="font-mono text-slate-600 dark:text-slate-400">data/</span> folder next to the executable). Use a filename only (e.g.{" "}
+    <span className="font-mono text-slate-600 dark:text-slate-400">nova_memory.sqlite</span>), no subdirectories. Off by default.
+  </>
+);
+
+const DB_WRITE_INFO = (
+  <>
+    When off (default), <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("database_query")}</strong> is
+    read-only (SELECT and introspection). When on, INSERT/UPDATE/DELETE/REPLACE are allowed. Requires{" "}
+    <strong className="font-medium text-slate-700 dark:text-slate-300">Workspace file tools</strong> and/or{" "}
+    <strong className="font-medium text-slate-700 dark:text-slate-300">Database Query on app data</strong> enabled above. DROP/ALTER/CREATE/PRAGMA/VACUUM
+    remain blocked.
+  </>
+);
+
+function providerSupportsTools(settings: SettingsView | null): boolean {
+  return Boolean(
+    settings &&
+      ["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider),
+  );
+}
+
+function providerToolsFootnote(settings: SettingsView | null): string | undefined {
+  if (providerSupportsTools(settings)) return undefined;
+  return "Switch provider to OpenAI, Ollama, or Anthropic.";
+}
+
+function settingsPanelWidth(mode: SettingsLayoutMode): string {
+  switch (mode) {
+    case "hidden":
+      return "w-0 min-w-0";
+    case "compact":
+      return "w-[min(100%,26rem)] min-w-[20rem]";
+    case "full":
+      return "w-[min(92vw,44rem)] min-w-[28rem]";
+  }
+}
 
 type SettingsView = {
   selectedProvider: string;
@@ -50,6 +166,9 @@ type SettingsView = {
   pulseIntervalMinutes: number;
   pulseInstructions: string;
   pulseConversationId?: string | null;
+  memoryLlmExtractionEnabled: boolean;
+  memorySemanticEnabled: boolean;
+  embeddingModel: string;
   hasOpenaiApiKey: boolean;
   hasAnthropicApiKey: boolean;
   hasOllamaApiKey: boolean;
@@ -75,7 +194,26 @@ type SettingsPatch = {
   pulseEnabled?: boolean;
   pulseIntervalMinutes?: number;
   pulseInstructions?: string;
+  memoryLlmExtractionEnabled?: boolean;
+  memorySemanticEnabled?: boolean;
+  embeddingModel?: string;
 };
+
+const MEMORY_LLM_INFO = (
+  <>
+    After each user message, Nova asks your chat provider to extract durable facts (health, preferences,
+    accessibility) as curated anchors. Uses a small JSON completion — not the full reply. Off falls back to
+    keyword heuristics only.
+  </>
+);
+
+const MEMORY_SEMANTIC_INFO = (
+  <>
+    Embeds anchor text in the background (small batches). During chat, your companion can use{" "}
+    <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("memory_search")}</strong> for semantic lookup — not a blocking
+    network call on every message. Requires OpenAI, Ollama/Ollama Cloud, or local Ollama when using Anthropic chat.
+  </>
+);
 
 type ProviderDescriptor = {
   id: string;
@@ -179,20 +317,20 @@ function ModelPickRow({
   const safeValue = optionIds.includes(value) ? value : optionIds[0] ?? "";
   return (
     <>
-      <label className="block text-xs font-medium text-slate-400" htmlFor={htmlFor}>
+      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor={htmlFor}>
         {label}
       </label>
       <div className="flex items-center gap-2">
         <select
           id={htmlFor}
           title="Select model…"
-          className="min-w-0 flex-1 cursor-pointer rounded-lg border border-slate-800/90 bg-slate-950/60 py-2 pl-3 pr-2 font-mono text-sm text-slate-200 outline-none focus:border-indigo-500/50 disabled:cursor-not-allowed disabled:opacity-50 [color-scheme:dark]"
+          className="min-w-0 flex-1 cursor-pointer rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 py-2 pl-3 pr-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50 disabled:cursor-not-allowed disabled:opacity-50 [color-scheme:light] dark:[color-scheme:dark]"
           value={safeValue}
           disabled={disabled || optionIds.length === 0}
           onChange={(e) => onChangeModel(e.target.value)}
         >
           {optionIds.map((id) => (
-            <option key={id} value={id} className="bg-slate-900">
+            <option key={id} value={id} className="bg-slate-100 dark:bg-slate-900">
               {id}
             </option>
           ))}
@@ -201,9 +339,9 @@ function ModelPickRow({
           type="button"
           disabled={disabled || loading}
           onClick={() => void onRefresh()}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-[11px] font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-2.5 py-2 text-[11px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {loading ? <Loader2 className="size-4 shrink-0 animate-spin text-slate-300" aria-hidden /> : null}
+          {loading ? <Loader2 className="size-4 shrink-0 animate-spin text-slate-700 dark:text-slate-300" aria-hidden /> : null}
           <span className="whitespace-nowrap">{refreshLabel}</span>
         </button>
       </div>
@@ -254,10 +392,14 @@ type AppDataPaths = {
 };
 
 export function SettingsPanel({
-  open,
+  layoutMode,
+  onLayoutModeChange,
   onCompanionActiveProfileChange,
   chatActiveProfileId,
 }: Props) {
+  const { isDark, setDarkMode } = useTheme();
+  const open = layoutMode !== "hidden";
+  const panelDense = layoutMode === "full";
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const [backend, setBackend] = useState<string | null>(null);
   const [settings, setSettings] = useState<SettingsView | null>(null);
@@ -277,6 +419,8 @@ export function SettingsPanel({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [destructiveModal, setDestructiveModal] = useState<DestructiveModal | null>(null);
   const [wipeConfirmInput, setWipeConfirmInput] = useState("");
+  const [memoryReindexing, setMemoryReindexing] = useState(false);
+  const [memoryReindexResult, setMemoryReindexResult] = useState<string | null>(null);
   const [wiping, setWiping] = useState(false);
   const [dataPaths, setDataPaths] = useState<AppDataPaths | null>(null);
   const [revealPathError, setRevealPathError] = useState<string | null>(null);
@@ -520,25 +664,66 @@ export function SettingsPanel({
     }
   };
 
+  const panelWidthClass = settingsPanelWidth(layoutMode);
+
   return (
     <aside
       id="nova-settings-panel"
       aria-hidden={!open}
-      className={
+      className={`h-full min-h-0 shrink-0 overflow-hidden border-l transition-[width,opacity] duration-200 ease-out ${
         open
-          ? "h-full min-h-0 w-[min(100%,28rem)] shrink-0 overflow-hidden border-l border-slate-800/80 bg-slate-900/35 shadow-[-12px_0_40px_rgba(0,0,0,0.35)] transition-[width,opacity] duration-200 ease-out"
-          : "h-full min-h-0 w-0 shrink-0 overflow-hidden border-l border-transparent opacity-0 transition-[width,opacity] duration-200 ease-out"
-      }
+          ? "border-slate-200 dark:border-slate-800/80 bg-slate-100 dark:bg-slate-900/35 shadow-[-8px_0_24px_rgba(15,23,42,0.08)] dark:shadow-[-16px_0_48px_rgba(0,0,0,0.4)] opacity-100"
+          : "border-transparent opacity-0"
+      } ${panelWidthClass}`}
     >
-      <div className="flex h-full w-[min(100%,28rem)] min-w-[22rem] flex-col" inert={!open}>
-        <div className="flex items-center gap-2 border-b border-slate-800/80 px-4 py-3">
-          <SlidersHorizontal className="size-4 text-slate-400" aria-hidden />
-          <h2 className="text-sm font-semibold text-white">Settings</h2>
+      <div className={`flex h-full flex-col ${panelWidthClass}`} inert={!open ? true : undefined}>
+        <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 dark:border-slate-800/80 px-3 py-2.5">
+          <SlidersHorizontal className="size-4 shrink-0 text-slate-600 dark:text-slate-400" aria-hidden />
+          <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 dark:text-white">Settings</h2>
+          <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="Panel size">
+            <button
+              type="button"
+              title="Compact panel"
+              aria-pressed={layoutMode === "compact"}
+              onClick={() => onLayoutModeChange("compact")}
+              className={`inline-flex size-7 items-center justify-center rounded-md border transition ${
+                layoutMode === "compact"
+                  ? "border-indigo-500/50 bg-indigo-100/80 dark:bg-indigo-950/50 text-indigo-200"
+                  : "border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:bg-slate-800/80 hover:text-slate-800 dark:text-slate-200"
+              }`}
+            >
+              <Minimize2 className="size-3.5" aria-hidden />
+              <span className="sr-only">Compact</span>
+            </button>
+            <button
+              type="button"
+              title="Full panel — fits tools on one screen"
+              aria-pressed={layoutMode === "full"}
+              onClick={() => onLayoutModeChange("full")}
+              className={`inline-flex size-7 items-center justify-center rounded-md border transition ${
+                layoutMode === "full"
+                  ? "border-indigo-500/50 bg-indigo-100/80 dark:bg-indigo-950/50 text-indigo-200"
+                  : "border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:bg-slate-800/80 hover:text-slate-800 dark:text-slate-200"
+              }`}
+            >
+              <Maximize2 className="size-3.5" aria-hidden />
+              <span className="sr-only">Full</span>
+            </button>
+            <button
+              type="button"
+              title="Hide settings"
+              onClick={() => onLayoutModeChange("hidden")}
+              className="inline-flex size-7 items-center justify-center rounded-md border border-transparent text-slate-600 dark:text-slate-400 transition hover:bg-slate-200 dark:bg-slate-800/80 hover:text-slate-800 dark:text-slate-200"
+            >
+              <X className="size-3.5" aria-hidden />
+              <span className="sr-only">Hide</span>
+            </button>
+          </div>
         </div>
 
         <div className="flex min-h-0 flex-1">
           <nav
-            className="flex w-[6.75rem] shrink-0 flex-col gap-0.5 border-r border-slate-800/80 p-2"
+            className={`flex shrink-0 flex-col gap-0.5 border-r border-slate-200 dark:border-slate-800/80 p-2 ${panelDense ? "w-[5.5rem]" : "w-[6.75rem]"}`}
             aria-label="Settings sections"
           >
             {(
@@ -555,8 +740,8 @@ export function SettingsPanel({
                 onClick={() => setSettingsTab(id)}
                 className={
                   settingsTab === id
-                    ? "flex flex-col items-center gap-1 rounded-lg bg-slate-800/90 px-2 py-2.5 text-[10px] font-medium text-white shadow-sm ring-1 ring-slate-600/50"
-                    : "flex flex-col items-center gap-1 rounded-lg px-2 py-2.5 text-[10px] font-medium text-slate-400 transition hover:bg-slate-800/40 hover:text-slate-200"
+                    ? "flex flex-col items-center gap-1 rounded-lg bg-slate-200 dark:bg-slate-800/90 px-2 py-2.5 text-[10px] font-medium text-slate-900 dark:text-white shadow-sm ring-1 ring-slate-600/50"
+                    : "flex flex-col items-center gap-1 rounded-lg px-2 py-2.5 text-[10px] font-medium text-slate-600 dark:text-slate-400 transition hover:bg-slate-200 dark:bg-slate-800/40 hover:text-slate-800 dark:text-slate-200"
                 }
               >
                 <Icon className="size-4 shrink-0" aria-hidden />
@@ -568,8 +753,10 @@ export function SettingsPanel({
           <div
             className={
               settingsTab === "companion"
-                ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 py-4"
-                : "min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto px-4 py-4"
+                ? `flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${panelDense ? "px-3 py-2" : "px-4 py-4"}`
+                : panelDense && settingsTab === "tools"
+                  ? `flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${panelDense ? "px-3 py-2" : "px-4 py-4"}`
+                  : `min-h-0 min-w-0 flex-1 overflow-y-auto ${panelDense ? "space-y-3 px-3 py-2" : "space-y-6 px-4 py-4"}`
             }
           >
           {error ? (
@@ -592,7 +779,7 @@ export function SettingsPanel({
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Provider
             </h3>
-            <label className="block text-xs font-medium text-slate-400" htmlFor="provider-select">
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="provider-select">
               Active backend
             </label>
             <div className="relative">
@@ -605,7 +792,7 @@ export function SettingsPanel({
                 value={settings?.selectedProvider ?? "placeholder"}
                 disabled={!settings}
                 onChange={(e) => void onProviderChange(e.target.value)}
-                className="w-full appearance-none rounded-lg border border-slate-800/90 bg-slate-950/60 py-2.5 pl-10 pr-9 text-sm text-slate-200 outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/25 disabled:opacity-50"
+                className="w-full appearance-none rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 py-2.5 pl-10 pr-9 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/25 disabled:opacity-50"
               >
                 {providers
                   .filter((p) => p.id !== "ollama" && p.id !== "ollama_cloud")
@@ -631,11 +818,11 @@ export function SettingsPanel({
             </div>
           </section>
 
-          <section className="space-y-3 rounded-lg border border-slate-800/80 bg-slate-950/40 p-3">
+          <section className="space-y-3 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               OpenAI
             </h3>
-            <label className="block text-xs font-medium text-slate-400" htmlFor="openai-base">
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="openai-base">
               Base URL
             </label>
             <input
@@ -648,13 +835,13 @@ export function SettingsPanel({
                 setSettings((s) => (s ? { ...s, openaiBaseUrl: v } : s));
                 schedulePatch({ openaiBaseUrl: v });
               }}
-              className="w-full rounded-lg border border-slate-800/90 bg-slate-950/60 px-3 py-2 text-sm text-slate-200 outline-none focus:border-indigo-500/50"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
             />
             {settings?.selectedProvider === "openai" ? (
               <p className="text-[11px] leading-relaxed text-slate-500">
-                With <span className="font-medium text-slate-300">OpenAI</span> selected, use{" "}
-                <span className="font-mono text-slate-400">Refresh Models</span> to pull ids from{" "}
-                <span className="font-mono text-slate-400">/v1/models</span> (saved key + Base URL). Common models
+                With <span className="font-medium text-slate-700 dark:text-slate-300">OpenAI</span> selected, use{" "}
+                <span className="font-mono text-slate-600 dark:text-slate-400">Refresh Models</span> to pull ids from{" "}
+                <span className="font-mono text-slate-600 dark:text-slate-400">/v1/models</span> (saved key + Base URL). Common models
                 stay listed without a refresh.
               </p>
             ) : null}
@@ -669,7 +856,7 @@ export function SettingsPanel({
               onRefresh={refreshOpenaiModels}
               refreshLabel="Refresh Models"
             />
-            <details className="mt-2 rounded-md border border-slate-800/60 bg-slate-950/30 px-2 py-2">
+            <details className="mt-2 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-2 py-2">
               <summary className="cursor-pointer text-[11px] text-slate-500">Type model name…</summary>
               <input
                 type="text"
@@ -681,7 +868,7 @@ export function SettingsPanel({
                   setSettings((s) => (s ? { ...s, openaiModel: v } : s));
                   schedulePatch({ openaiModel: v });
                 }}
-                className="mt-2 w-full rounded-lg border border-slate-800/90 bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-200 outline-none focus:border-indigo-500/50"
+                className="mt-2 w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
               />
             </details>
             <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -701,18 +888,18 @@ export function SettingsPanel({
               placeholder="sk-…"
               value={openaiKeyInput}
               onChange={(e) => setOpenaiKeyInput(e.target.value)}
-              className="w-full rounded-lg border border-slate-800/90 bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-200 outline-none focus:border-indigo-500/50"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
             />
             <button
               type="button"
               onClick={() => void saveOpenaiKey()}
-              className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
+              className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white hover:bg-indigo-500"
             >
               Save OpenAI API key
             </button>
           </section>
 
-          <section className="space-y-4 rounded-lg border border-slate-800/80 bg-slate-950/40 p-3">
+          <section className="space-y-4 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Ollama</h3>
 
             <div className="space-y-3 rounded-md border border-emerald-950/50 bg-emerald-950/10 p-3 ring-1 ring-emerald-900/25">
@@ -721,9 +908,9 @@ export function SettingsPanel({
               </p>
               <p className="text-[11px] leading-relaxed text-slate-500">
                 Uses your own Ollama install (default{" "}
-                <span className="font-mono text-slate-400">http://127.0.0.1:11434</span>).
+                <span className="font-mono text-slate-600 dark:text-slate-400">http://127.0.0.1:11434</span>).
               </p>
-              <label className="block text-xs font-medium text-slate-400" htmlFor="ollama-base">
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="ollama-base">
                 Base URL
               </label>
               <input
@@ -736,14 +923,14 @@ export function SettingsPanel({
                   setSettings((s) => (s ? { ...s, ollamaBaseUrl: v } : s));
                   schedulePatch({ ollamaBaseUrl: v });
                 }}
-                className="w-full rounded-lg border border-slate-800/90 bg-slate-950/60 px-3 py-2 text-sm text-slate-200 outline-none focus:border-indigo-500/50"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
               />
               {settings?.selectedProvider !== "ollama_cloud" ? (
                 <>
                   {settings?.selectedProvider === "ollama" ? (
                     <p className="text-[11px] leading-relaxed text-slate-500">
-                      <span className="font-mono text-slate-400">Refresh Models</span> loads tags from your local
-                      daemon (<span className="font-mono text-slate-400">/api/tags</span>).
+                      <span className="font-mono text-slate-600 dark:text-slate-400">Refresh Models</span> loads tags from your local
+                      daemon (<span className="font-mono text-slate-600 dark:text-slate-400">/api/tags</span>).
                     </p>
                   ) : null}
                   <ModelPickRow
@@ -757,7 +944,7 @@ export function SettingsPanel({
                     onRefresh={refreshLocalOllamaModels}
                     refreshLabel="Refresh Models"
                   />
-                  <details className="mt-2 rounded-md border border-slate-800/60 bg-slate-950/30 px-2 py-2">
+                  <details className="mt-2 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-2 py-2">
                     <summary className="cursor-pointer text-[11px] text-slate-500">Type model name…</summary>
                     <input
                       type="text"
@@ -769,13 +956,13 @@ export function SettingsPanel({
                         setSettings((s) => (s ? { ...s, ollamaModel: v } : s));
                         schedulePatch({ ollamaModel: v });
                       }}
-                      className="mt-2 w-full rounded-lg border border-slate-800/90 bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-200 outline-none focus:border-indigo-500/50"
+                      className="mt-2 w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
                     />
                   </details>
                 </>
               ) : (
                 <p className="text-[11px] leading-relaxed text-slate-500">
-                  With <span className="font-medium text-slate-300">Ollama · Cloud</span> selected, set the model
+                  With <span className="font-medium text-slate-700 dark:text-slate-300">Ollama · Cloud</span> selected, set the model
                   name in the cloud panel below.
                 </p>
               )}
@@ -785,7 +972,7 @@ export function SettingsPanel({
               <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-300/95">Ollama · Cloud</p>
               {settings?.selectedProvider === "ollama_cloud" ? (
                 <>
-                  <p className="text-xs leading-relaxed text-slate-100">
+                  <p className="text-xs leading-relaxed text-slate-900 dark:text-slate-100">
                     Ollama Cloud runs models on Ollama&apos;s servers (not locally). Requires an Ollama API key from{" "}
                     <a
                       href={OLLAMA_CLOUD_KEYS_URL}
@@ -798,9 +985,9 @@ export function SettingsPanel({
                     .
                   </p>
                   <p className="text-[11px] leading-relaxed text-slate-500">
-                    <span className="font-mono text-slate-400">Refresh Models</span> loads cloud tags from{" "}
-                    <span className="font-mono text-slate-400">https://ollama.com/api/tags</span>. Preset{" "}
-                    <span className="font-mono text-slate-400">{OLLAMA_CLOUD_MODEL_PLACEHOLDER}</span> entries stay
+                    <span className="font-mono text-slate-600 dark:text-slate-400">Refresh Models</span> loads cloud tags from{" "}
+                    <span className="font-mono text-slate-600 dark:text-slate-400">https://ollama.com/api/tags</span>. Preset{" "}
+                    <span className="font-mono text-slate-600 dark:text-slate-400">{OLLAMA_CLOUD_MODEL_PLACEHOLDER}</span> entries stay
                     available without a refresh.
                   </p>
                   <ModelPickRow
@@ -814,7 +1001,7 @@ export function SettingsPanel({
                     onRefresh={refreshOllamaCloudModels}
                     refreshLabel="Refresh Models"
                   />
-                  <details className="mt-2 rounded-md border border-slate-800/60 bg-slate-950/30 px-2 py-2">
+                  <details className="mt-2 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-2 py-2">
                     <summary className="cursor-pointer text-[11px] text-slate-500">Type model name…</summary>
                     <input
                       type="text"
@@ -826,7 +1013,7 @@ export function SettingsPanel({
                         setSettings((s) => (s ? { ...s, ollamaModel: v } : s));
                         schedulePatch({ ollamaModel: v });
                       }}
-                      className="mt-2 w-full rounded-lg border border-slate-800/90 bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-200 outline-none focus:border-sky-500/50"
+                      className="mt-2 w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-sky-500/50"
                     />
                   </details>
                 </>
@@ -834,11 +1021,11 @@ export function SettingsPanel({
                 <p className="text-[11px] leading-relaxed text-slate-500">
                   Choose <span className="font-medium text-sky-200/90">Ollama · Cloud — models on ollama.com</span>{" "}
                   in the provider menu above to configure the cloud model, refresh the catalog from{" "}
-                  <span className="font-mono text-slate-400">/api/tags</span>, and save your API key.
+                  <span className="font-mono text-slate-600 dark:text-slate-400">/api/tags</span>, and save your API key.
                 </p>
               )}
 
-              <div className="space-y-2 border-t border-slate-800/70 pt-3">
+              <div className="space-y-2 border-t border-slate-200 dark:border-slate-800/70 pt-3">
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <KeyRound className="size-3.5 shrink-0" aria-hidden />
                   <span>
@@ -856,12 +1043,12 @@ export function SettingsPanel({
                   placeholder="Paste Ollama API key"
                   value={ollamaKeyInput}
                   onChange={(e) => setOllamaKeyInput(e.target.value)}
-                  className="w-full rounded-lg border border-slate-800/90 bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-200 outline-none focus:border-sky-500/50"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-sky-500/50"
                 />
                 <button
                   type="button"
                   onClick={() => void saveOllamaCloudKey()}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800"
                 >
                   Save Ollama Cloud API key
                 </button>
@@ -869,13 +1056,13 @@ export function SettingsPanel({
             </div>
           </section>
 
-          <section className="space-y-3 rounded-lg border border-slate-800/80 bg-slate-950/40 p-3">
+          <section className="space-y-3 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Anthropic (Claude)
             </h3>
             {settings?.selectedProvider === "anthropic" ? (
               <p className="text-[11px] leading-relaxed text-slate-500">
-                <span className="font-mono text-slate-400">Refresh Models</span> lists models your API key can access.
+                <span className="font-mono text-slate-600 dark:text-slate-400">Refresh Models</span> lists models your API key can access.
                 Common Claude ids remain available without a refresh.
               </p>
             ) : null}
@@ -890,7 +1077,7 @@ export function SettingsPanel({
               onRefresh={refreshAnthropicModels}
               refreshLabel="Refresh Models"
             />
-            <details className="mt-2 rounded-md border border-slate-800/60 bg-slate-950/30 px-2 py-2">
+            <details className="mt-2 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-2 py-2">
               <summary className="cursor-pointer text-[11px] text-slate-500">Type model name…</summary>
               <input
                 type="text"
@@ -902,7 +1089,7 @@ export function SettingsPanel({
                   setSettings((s) => (s ? { ...s, anthropicModel: v } : s));
                   schedulePatch({ anthropicModel: v });
                 }}
-                className="mt-2 w-full rounded-lg border border-slate-800/90 bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-200 outline-none focus:border-indigo-500/50"
+                className="mt-2 w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
               />
             </details>
             <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -922,12 +1109,12 @@ export function SettingsPanel({
               placeholder="sk-ant-…"
               value={anthropicKeyInput}
               onChange={(e) => setAnthropicKeyInput(e.target.value)}
-              className="w-full rounded-lg border border-slate-800/90 bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-200 outline-none focus:border-indigo-500/50"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
             />
             <button
               type="button"
               onClick={() => void saveAnthropicKey()}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800"
             >
               Save Anthropic API key
             </button>
@@ -938,19 +1125,19 @@ export function SettingsPanel({
               Generation
             </h3>
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-400">
+              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
                 <span className="inline-flex items-center gap-1.5">
                   <span>Temperature</span>
                   <button
                     type="button"
-                    className="inline-flex size-5 items-center justify-center rounded-full border border-slate-600/80 bg-slate-900/80 text-[11px] font-semibold text-slate-400 hover:border-slate-500 hover:text-slate-200"
+                    className="inline-flex size-5 items-center justify-center rounded-full border border-slate-300 dark:border-slate-600/80 bg-slate-100 dark:bg-slate-900/80 text-[11px] font-semibold text-slate-600 dark:text-slate-400 hover:border-slate-500 hover:text-slate-800 dark:text-slate-200"
                     title={TEMPERATURE_INFO}
                     aria-label={TEMPERATURE_INFO}
                   >
                     i
                   </button>
                 </span>
-                <span className="font-mono text-slate-300">
+                <span className="font-mono text-slate-700 dark:text-slate-300">
                   {settings?.temperature?.toFixed(2) ?? "—"}
                 </span>
               </div>
@@ -981,14 +1168,14 @@ export function SettingsPanel({
                 className="h-2 w-full cursor-pointer accent-indigo-500 disabled:opacity-50"
               />
             </div>
-            <label className="block text-xs font-medium text-slate-400" htmlFor="max-tokens-select">
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="max-tokens-select">
               Max input tokens
             </label>
             <p className="text-[11px] leading-relaxed text-slate-500">
               Presets match common context sizes. This caps how many tokens the model may produce in its
               reply (generation budget).{" "}
-              <span className="text-slate-400">
-                <strong className="font-medium text-slate-300">Use model default</strong> lets Nova use this
+              <span className="text-slate-600 dark:text-slate-400">
+                <strong className="font-medium text-slate-700 dark:text-slate-300">Use model default</strong> lets Nova use this
                 model&apos;s context window from the provider, then apply a safe per-API limit. Explicit values
                 are clamped if the active model cannot honor them.
               </span>
@@ -1018,13 +1205,13 @@ export function SettingsPanel({
                   }
                 })();
               }}
-              className="w-full cursor-pointer rounded-lg border border-zinc-600 bg-zinc-900 py-2.5 pl-3 pr-8 text-sm text-zinc-100 outline-none [color-scheme:dark] focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+              className="w-full cursor-pointer rounded-lg border border-zinc-300 dark:border-zinc-600 bg-zinc-100 dark:bg-zinc-900 py-2.5 pl-3 pr-8 text-sm text-zinc-900 dark:text-zinc-100 outline-none [color-scheme:light] dark:[color-scheme:dark] focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             >
               {MAX_TOKEN_SELECT_OPTIONS.map((o) => (
                 <option
                   key={o.value}
                   value={o.value}
-                  className="bg-zinc-900 text-zinc-100 dark:bg-zinc-800 dark:text-zinc-100"
+                  className="bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 dark:bg-zinc-800 dark:text-zinc-100"
                 >
                   {o.label}
                 </option>
@@ -1034,7 +1221,7 @@ export function SettingsPanel({
               !MAX_TOKEN_SELECT_OPTIONS.some((o) => o.tokens === settings.maxTokens) ? (
                 <option
                   value={`legacy:${settings.maxTokens}`}
-                  className="bg-zinc-900 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-400"
+                  className="bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 dark:bg-zinc-800 dark:text-zinc-400"
                 >
                   Saved value: {settings.maxTokens.toLocaleString()} (pick a preset to replace)
                 </option>
@@ -1048,18 +1235,45 @@ export function SettingsPanel({
             <>
           <SettingsSection
             title="Assistant tools"
-            description="Chat-only options for OpenAI, Ollama, and Anthropic. Background Pulse never uses tools."
-            className="space-y-2"
+            info={TOOLS_SECTION_INFO}
+            compact
+            className="flex min-h-0 flex-1 flex-col"
           >
-            <div className="space-y-2">
+            <div className={`min-h-0 flex-1 ${panelDense ? "space-y-1 overflow-hidden" : "space-y-1.5 overflow-y-auto"}`}>
+            <div className="space-y-1.5 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-2.5 py-2 text-[10px] leading-relaxed text-slate-500">
+              <p>
+                <span className="font-medium text-slate-600 dark:text-slate-400">Built-in tools</span> — grouped below by what enables them.
+              </p>
+              <p>
+                <span className="text-slate-600">Web:</span>{" "}
+                {toolLabelList(["web_search", "fetch_url", "http_request", "fetch_browser"])}
+              </p>
+              <p>
+                <span className="text-slate-600">Files:</span>{" "}
+                {toolLabelList([
+                  "workspace_list_directory",
+                  "workspace_read_file",
+                  "workspace_write_file",
+                ])}
+              </p>
+              <p>
+                <span className="text-slate-600">Other:</span>{" "}
+                {toolLabelList([
+                  "database_query",
+                  "personality_get",
+                  "personality_update",
+                  "memory_search",
+                ])}
+              </p>
+            </div>
             <SettingsToggleCard
               id="agent-web-tools"
               title="Allow web tools for the assistant"
+              compact
+              info={WEB_TOOLS_INFO}
+              footnote={providerToolsFootnote(settings)}
               checked={settings?.agentWebToolsEnabled ?? false}
-              disabled={
-                !settings ||
-                !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider)
-              }
+              disabled={!providerSupportsTools(settings)}
               onChange={(agentWebToolsEnabled) => {
                 setSettings((s) => (s ? { ...s, agentWebToolsEnabled } : s));
                 flushDebounce();
@@ -1076,28 +1290,74 @@ export function SettingsPanel({
                   }
                 })();
               }}
-              description={
-                <>
-                  When enabled, the model may call built-in tools: public web search (DuckDuckGo) and fetching
-                  http(s) pages you or it names. Requests are sent from this device; local and private URLs are
-                  blocked. Ollama requires a tool-capable model. Off by default.
-                  {settings &&
-                  !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider) ? (
-                    <span className="mt-2 block text-amber-400/90">
-                      Switch provider to OpenAI, Ollama, or Anthropic to use this option.
-                    </span>
-                  ) : null}
-                </>
-              }
+            >
+              {settings?.agentWebToolsEnabled ? WEB_TOOLS_WHEN_ENABLED : null}
+            </SettingsToggleCard>
+            <SettingsToggleCard
+              id="agent-browser-fetch"
+              title={toolDisplayName("fetch_browser")}
+              compact
+              info={BROWSER_FETCH_INFO}
+              nestDepth={1}
+              footnote="Requires Allow web tools."
+              checked={settings?.agentBrowserFetchEnabled ?? false}
+              disabled={!providerSupportsTools(settings) || !settings?.agentWebToolsEnabled}
+              onChange={(agentBrowserFetchEnabled) => {
+                setSettings((s) => (s ? { ...s, agentBrowserFetchEnabled } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { agentBrowserFetchEnabled },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
             />
             <SettingsToggleCard
-              id="agent-personality-edit"
-              title="Allow personality self-edit"
-              checked={settings?.agentPersonalityEditEnabled ?? false}
+              id="agent-browser-ignore-robots"
+              title="Ignore robots.txt for browser fetch"
+              compact
+              info={BROWSER_ROBOTS_INFO}
+              nestDepth={2}
+              footnote="Requires Browser Page Fetch."
+              checked={settings?.agentBrowserIgnoreRobots ?? false}
               disabled={
-                !settings ||
-                !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider)
+                !providerSupportsTools(settings) ||
+                !settings?.agentWebToolsEnabled ||
+                !settings?.agentBrowserFetchEnabled
               }
+              onChange={(agentBrowserIgnoreRobots) => {
+                setSettings((s) => (s ? { ...s, agentBrowserIgnoreRobots } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { agentBrowserIgnoreRobots },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+            />
+
+            <SettingsToggleCard
+              id="agent-personality-edit"
+              title={`Allow ${toolDisplayName("personality_get")} & ${toolDisplayName("personality_update")}`}
+              compact
+              info={PERSONALITY_EDIT_INFO}
+              footnote={providerToolsFootnote(settings)}
+              checked={settings?.agentPersonalityEditEnabled ?? false}
+              disabled={!providerSupportsTools(settings)}
               onChange={(agentPersonalityEditEnabled) => {
                 setSettings((s) => (s ? { ...s, agentPersonalityEditEnabled } : s));
                 flushDebounce();
@@ -1114,263 +1374,103 @@ export function SettingsPanel({
                   }
                 })();
               }}
-              description={
-                <>
-                  When enabled, the companion may call <span className="font-mono text-slate-300">personality_get</span>{" "}
-                  and <span className="font-mono text-slate-300">personality_update</span> to change the active profile
-                  in <span className="font-mono text-slate-300">personality.json</span>. Saves to disk and updates this
-                  chat&apos;s persona immediately. Off by default.
-                  {settings &&
-                  !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider) ? (
-                    <span className="mt-2 block text-amber-400/90">
-                      Switch provider to OpenAI, Ollama, or Anthropic to use this option.
-                    </span>
-                  ) : null}
-                </>
-              }
             />
-            <div className="w-full flex items-start gap-3 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
-              <input
-                id="agent-browser-fetch"
-                type="checkbox"
-                className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-slate-600 accent-indigo-500 disabled:cursor-not-allowed"
-                checked={settings?.agentBrowserFetchEnabled ?? false}
-                disabled={
-                  !settings ||
-                  !settings.agentWebToolsEnabled ||
-                  !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider)
-                }
-                onChange={(e) => {
-                  const agentBrowserFetchEnabled = e.target.checked;
-                  setSettings((s) => (s ? { ...s, agentBrowserFetchEnabled } : s));
-                  flushDebounce();
-                  void (async () => {
-                    try {
-                      setError(null);
-                      const next = await invoke<SettingsView>("settings_update", {
-                        patch: { agentBrowserFetchEnabled },
-                      });
-                      setSettings(next);
-                    } catch (err) {
-                      setError(String(err));
-                      await refreshSettings();
-                    }
-                  })();
-                }}
-              />
-              <div className="w-full space-y-1.5 pl-7">
-                <label htmlFor="agent-browser-fetch" className="cursor-pointer text-xs font-medium text-slate-300">
-                  Headless browser fetch (fetch_browser)
-                </label>
-                <p className="text-xs leading-relaxed text-slate-400">
-                  Uses system Chrome, Chromium, or Edge to load pages with JavaScript, a normal browser
-                  user-agent, and a persistent cookie profile. Better for news sites and bot-protected pages.
-                  Requires a browser install or NOVA_CHROME_PATH. In Docker, install{" "}
-                  <span className="font-mono text-slate-400">ca-certificates</span> and set{" "}
-                  <span className="font-mono text-slate-400">NOVA_CHROME_NO_SANDBOX=1</span> if needed.
-                  Off by default.
+
+            <SettingsToggleCard
+              id="agent-workspace-tools"
+              title={`Allow ${toolLabelList([
+                "workspace_list_directory",
+                "workspace_read_file",
+                "workspace_write_file",
+              ])}`}
+              compact
+              info={WORKSPACE_TOOLS_INFO}
+              footnote={providerToolsFootnote(settings)}
+              checked={settings?.agentWorkspaceEnabled ?? false}
+              disabled={!providerSupportsTools(settings)}
+              onChange={(agentWorkspaceEnabled) => {
+                setSettings((s) => (s ? { ...s, agentWorkspaceEnabled } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { agentWorkspaceEnabled },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+            >
+              {dataPaths?.workspaceDirectory ? (
+                <p className="break-all font-mono text-[10px] text-slate-500" title={dataPaths.workspaceDirectory}>
+                  {dataPaths.workspaceDirectory}
                 </p>
-              </div>
-            </div>
-            <div className="flex w-full items-start gap-3 border-l-2 border-l-indigo-500/35 pl-2 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
-              <input
-                id="agent-browser-ignore-robots"
-                type="checkbox"
-                className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-slate-600 accent-indigo-500 disabled:cursor-not-allowed"
-                checked={settings?.agentBrowserIgnoreRobots ?? false}
-                disabled={
-                  !settings ||
-                  !settings.agentWebToolsEnabled ||
-                  !settings.agentBrowserFetchEnabled ||
-                  !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider)
-                }
-                onChange={(e) => {
-                  const agentBrowserIgnoreRobots = e.target.checked;
-                  setSettings((s) => (s ? { ...s, agentBrowserIgnoreRobots } : s));
-                  flushDebounce();
-                  void (async () => {
-                    try {
-                      setError(null);
-                      const next = await invoke<SettingsView>("settings_update", {
-                        patch: { agentBrowserIgnoreRobots },
-                      });
-                      setSettings(next);
-                    } catch (err) {
-                      setError(String(err));
-                      await refreshSettings();
-                    }
-                  })();
-                }}
-              />
-              <div className="w-full space-y-1.5 pl-7">
-                <label
-                  htmlFor="agent-browser-ignore-robots"
-                  className="cursor-pointer text-xs font-medium text-slate-300"
-                >
-                  Ignore robots.txt for browser fetch
-                </label>
-                <p className="text-xs leading-relaxed text-slate-400">
-                  When enabled, fetch_browser does not block URLs based on robots.txt. For personal
-                  automation on your machine; many news sites disallow bots in robots.txt. Off by default.
+              ) : null}
+            </SettingsToggleCard>
+            <SettingsToggleCard
+              id="database-app-data-enabled"
+              title={`${toolDisplayName("database_query")} on app data folder`}
+              compact
+              info={APP_DATA_DB_INFO}
+              footnote={providerToolsFootnote(settings)}
+              checked={settings?.databaseAppDataEnabled ?? false}
+              disabled={!providerSupportsTools(settings)}
+              onChange={(databaseAppDataEnabled) => {
+                setSettings((s) => (s ? { ...s, databaseAppDataEnabled } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { databaseAppDataEnabled },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+            >
+              {dataPaths?.dataDirectory ? (
+                <p className="break-all font-mono text-[10px] text-slate-500" title={dataPaths.dataDirectory}>
+                  {dataPaths.dataDirectory}
                 </p>
-              </div>
-            </div>
-            <div className="w-full flex items-start gap-3 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
-              <input
-                id="agent-workspace-tools"
-                type="checkbox"
-                className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-slate-600 accent-indigo-500 disabled:cursor-not-allowed"
-                checked={settings?.agentWorkspaceEnabled ?? false}
-                disabled={
-                  !settings ||
-                  !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider)
-                }
-                onChange={(e) => {
-                  const agentWorkspaceEnabled = e.target.checked;
-                  setSettings((s) => (s ? { ...s, agentWorkspaceEnabled } : s));
-                  flushDebounce();
-                  void (async () => {
-                    try {
-                      setError(null);
-                      const next = await invoke<SettingsView>("settings_update", {
-                        patch: { agentWorkspaceEnabled },
-                      });
-                      setSettings(next);
-                    } catch (err) {
-                      setError(String(err));
-                      await refreshSettings();
-                    }
-                  })();
-                }}
-              />
-              <div className="w-full space-y-1.5 pl-7">
-                <label
-                  htmlFor="agent-workspace-tools"
-                  className="cursor-pointer text-xs font-medium text-slate-300"
-                >
-                  Allow workspace file tools for the assistant
-                </label>
-                <p className="text-xs leading-relaxed text-slate-400">
-                  When enabled, the model may list, read, and write UTF-8 text files in the Nova workspace, and
-                  run <span className="font-mono text-slate-400">database_query</span> with{" "}
-                  <span className="font-mono text-slate-400">location=&quot;workspace&quot;</span> on{" "}
-                  <span className="font-mono text-slate-400">.db</span> /{" "}
-                  <span className="font-mono text-slate-400">.sqlite</span> files there. Paths are relative;
-                  parent segments like <span className="font-mono text-slate-400">..</span> are rejected. Off by
-                  default. For the live app database folder, enable{" "}
-                  <span className="text-slate-400">App data directory databases</span> below instead.
-                </p>
-                {dataPaths?.workspaceDirectory ? (
-                  <p className="break-all font-mono text-[10px] text-slate-500" title={dataPaths.workspaceDirectory}>
-                    Workspace: {dataPaths.workspaceDirectory}
-                  </p>
-                ) : null}
-                {settings &&
-                !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider) ? (
-                  <p className="text-[11px] text-amber-400/90">
-                    Switch provider to OpenAI, Ollama, or Anthropic to use this option.
-                  </p>
-                ) : null}
-              </div>
-            </div>
-            <div className="w-full flex items-start gap-3 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
-              <input
-                id="database-app-data-enabled"
-                type="checkbox"
-                className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-slate-600 accent-indigo-500 disabled:cursor-not-allowed"
-                checked={settings?.databaseAppDataEnabled ?? false}
-                disabled={
-                  !settings ||
-                  !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider)
-                }
-                onChange={(e) => {
-                  const databaseAppDataEnabled = e.target.checked;
-                  setSettings((s) => (s ? { ...s, databaseAppDataEnabled } : s));
-                  flushDebounce();
-                  void (async () => {
-                    try {
-                      setError(null);
-                      const next = await invoke<SettingsView>("settings_update", {
-                        patch: { databaseAppDataEnabled },
-                      });
-                      setSettings(next);
-                    } catch (err) {
-                      setError(String(err));
-                      await refreshSettings();
-                    }
-                  })();
-                }}
-              />
-              <div className="w-full space-y-1.5 pl-7">
-                <label
-                  htmlFor="database-app-data-enabled"
-                  className="cursor-pointer text-xs font-medium text-slate-300"
-                >
-                  App data directory databases (<span className="font-mono text-slate-400">database_query</span>{" "}
-                  <span className="font-mono text-slate-400">location=app_data</span>)
-                </label>
-                <p className="text-xs leading-relaxed text-slate-400">
-                  When enabled, the model may query SQLite files in Nova&apos;s data directory — the same resolved
-                  path as the live memory database (for example{" "}
-                  <span className="font-mono text-slate-400">~/.local/share/nova</span> on Linux, or the portable{" "}
-                  <span className="font-mono text-slate-400">data/</span> folder next to the executable). Use a
-                  filename only (e.g. <span className="font-mono text-slate-400">nova_memory.sqlite</span>), no
-                  subdirectories. Off by default.
-                </p>
-                {dataPaths?.dataDirectory ? (
-                  <p className="break-all font-mono text-[10px] text-slate-500" title={dataPaths.dataDirectory}>
-                    Data directory: {dataPaths.dataDirectory}
-                  </p>
-                ) : null}
-                {settings &&
-                !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider) ? (
-                  <p className="text-[11px] text-amber-400/90">
-                    Switch provider to OpenAI, Ollama, or Anthropic to use this option.
-                  </p>
-                ) : null}
-              </div>
-            </div>
-            <div className="w-full flex items-start gap-3 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
-              <input
-                id="database-allow-write"
-                type="checkbox"
-                className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-slate-600 accent-indigo-500 disabled:cursor-not-allowed"
-                checked={settings?.databaseAllowWrite ?? false}
-                disabled={
-                  !settings ||
-                  (!settings.agentWorkspaceEnabled && !settings.databaseAppDataEnabled) ||
-                  !["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider)
-                }
-                onChange={(e) => {
-                  const databaseAllowWrite = e.target.checked;
-                  setSettings((s) => (s ? { ...s, databaseAllowWrite } : s));
-                  flushDebounce();
-                  void (async () => {
-                    try {
-                      setError(null);
-                      const next = await invoke<SettingsView>("settings_update", {
-                        patch: { databaseAllowWrite },
-                      });
-                      setSettings(next);
-                    } catch (err) {
-                      setError(String(err));
-                      await refreshSettings();
-                    }
-                  })();
-                }}
-              />
-              <div className="w-full space-y-1.5 pl-7">
-                <label htmlFor="database-allow-write" className="cursor-pointer text-xs font-medium text-slate-300">
-                  Allow database writes (<span className="font-mono text-slate-400">database_query</span>)
-                </label>
-                <p className="text-xs leading-relaxed text-slate-400">
-                  When off (default), <span className="font-mono text-slate-400">database_query</span> is
-                  read-only (SELECT and introspection). When on, INSERT/UPDATE/DELETE/REPLACE are allowed on
-                  workspace or app-data databases (per toggles above); DROP/ALTER/CREATE/PRAGMA/VACUUM remain
-                  blocked. Requires workspace tools and/or app data databases to be enabled.
-                </p>
-              </div>
-            </div>
+              ) : null}
+            </SettingsToggleCard>
+            <SettingsToggleCard
+              id="database-allow-write"
+              title={`Allow write access (${toolDisplayName("database_query")})`}
+              compact
+              info={DB_WRITE_INFO}
+              nestDepth={1}
+              footnote="Requires Workspace file tools and/or Database Query on app data."
+              checked={settings?.databaseAllowWrite ?? false}
+              disabled={
+                !providerSupportsTools(settings) ||
+                (!settings?.agentWorkspaceEnabled && !settings?.databaseAppDataEnabled)
+              }
+              onChange={(databaseAllowWrite) => {
+                setSettings((s) => (s ? { ...s, databaseAllowWrite } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { databaseAllowWrite },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+            />
             </div>
           </SettingsSection>
             </>
@@ -1378,18 +1478,20 @@ export function SettingsPanel({
 
           {settingsTab === "general" ? (
             <>
-          <section className="space-y-2">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Appearance
-            </h3>
-            <div className="flex items-center gap-3 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2.5">
-              <Moon className="size-4 text-indigo-300" aria-hidden />
-              <div>
-                <p className="text-sm font-medium text-white">Dark mode</p>
-                <p className="text-xs text-slate-500">Default for Nova</p>
-              </div>
-            </div>
-          </section>
+          <SettingsSection title="Appearance">
+            <SettingsToggleCard
+              id="dark-mode"
+              title={
+                <span className="inline-flex items-center gap-2">
+                  <Moon className="size-4 text-indigo-400 dark:text-indigo-300" aria-hidden />
+                  Dark mode
+                </span>
+              }
+              description="Use dark colors across Nova. Saved on this device."
+              checked={isDark}
+              onChange={setDarkMode}
+            />
+          </SettingsSection>
 
           <section className="space-y-3 rounded-lg border border-violet-900/35 bg-violet-950/12 p-3 ring-1 ring-violet-800/25">
             <div className="flex items-center gap-2">
@@ -1397,7 +1499,7 @@ export function SettingsPanel({
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-violet-200/90">Pulse</h3>
             </div>
             <p className="text-[11px] leading-relaxed text-slate-500">
-              On a timer, Nova posts your instructions as a <strong className="font-medium text-slate-300">normal user
+              On a timer, Nova posts your instructions as a <strong className="font-medium text-slate-700 dark:text-slate-300">normal user
               message</strong> in the chat you have open — same session, history, tools, and reply stream as if you
               typed it. Keep that thread selected in the sidebar while Pulse is on.
             </p>
@@ -1411,11 +1513,11 @@ export function SettingsPanel({
             ) : (
               <p className="text-[10px] text-amber-400/90">No thread bound — select a conversation in the sidebar.</p>
             )}
-            <div className="flex items-start gap-3 rounded-lg border border-slate-800/70 bg-slate-950/35 px-3 py-2.5">
+            <div className="flex items-start gap-3 rounded-lg border border-slate-200 dark:border-slate-800/70 bg-slate-50 dark:bg-slate-950/35 px-3 py-2.5">
               <input
                 id="pulse-enabled"
                 type="checkbox"
-                className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-slate-600 accent-violet-500"
+                className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-slate-300 dark:border-slate-600 accent-violet-500"
                 checked={settings?.pulseEnabled ?? false}
                 disabled={!settings}
                 onChange={(e) => {
@@ -1435,7 +1537,7 @@ export function SettingsPanel({
                 }}
               />
               <div className="min-w-0 space-y-1">
-                <label htmlFor="pulse-enabled" className="cursor-pointer text-xs font-medium text-slate-300">
+                <label htmlFor="pulse-enabled" className="cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-300">
                   Enable Pulse
                 </label>
                 <p className="text-[11px] text-slate-500">
@@ -1445,7 +1547,7 @@ export function SettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-slate-400" htmlFor="pulse-interval">
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="pulse-interval">
                 Interval (minutes)
               </label>
               <input
@@ -1461,12 +1563,12 @@ export function SettingsPanel({
                   setSettings((s) => (s ? { ...s, pulseIntervalMinutes } : s));
                   schedulePatch({ pulseIntervalMinutes });
                 }}
-                className="w-full rounded-lg border border-slate-800/90 bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-200 outline-none focus:border-violet-500/50 disabled:opacity-50"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-violet-500/50 disabled:opacity-50"
               />
               <p className="text-[10px] text-slate-600">1–1440. The background loop picks up changes on the next wait.</p>
             </div>
             <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-slate-400" htmlFor="pulse-instructions">
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="pulse-instructions">
                 Instructions for each tick
               </label>
               <textarea
@@ -1479,14 +1581,14 @@ export function SettingsPanel({
                   setSettings((s) => (s ? { ...s, pulseInstructions } : s));
                   schedulePatch({ pulseInstructions });
                 }}
-                className="w-full resize-y rounded-lg border border-slate-800/90 bg-slate-950/60 px-3 py-2 text-sm text-slate-200 outline-none focus:border-violet-500/50 disabled:opacity-50"
+                className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-violet-500/50 disabled:opacity-50"
                 placeholder="What should the model focus on when Pulse fires?"
               />
             </div>
-            <div className="space-y-1.5 border-t border-slate-800/70 pt-3">
-              <p className="text-[11px] font-medium text-slate-400">Last result (this session)</p>
+            <div className="space-y-1.5 border-t border-slate-200 dark:border-slate-800/70 pt-3">
+              <p className="text-[11px] font-medium text-slate-600 dark:text-slate-400">Last result (this session)</p>
               {lastPulse ? (
-                <div className="rounded-md border border-slate-800/80 bg-slate-950/50 p-2">
+                <div className="rounded-md border border-slate-200 dark:border-slate-800/80 bg-slate-100/90 dark:bg-slate-950/50 p-2">
                   {lastPulse.conversationId ? (
                     <p className="mb-1 font-mono text-[10px] text-slate-500" title={lastPulse.conversationId}>
                       Thread:{" "}
@@ -1497,7 +1599,7 @@ export function SettingsPanel({
                   ) : null}
                   <p className="font-mono text-[10px] text-slate-500">{lastPulse.at}</p>
                   {lastPulse.summary ? (
-                    <p className="mt-2 whitespace-pre-wrap text-[11px] text-slate-200">{lastPulse.summary}</p>
+                    <p className="mt-2 whitespace-pre-wrap text-[11px] text-slate-800 dark:text-slate-200">{lastPulse.summary}</p>
                   ) : null}
                   {lastPulse.error ? (
                     <p className="mt-2 text-[11px] text-amber-200/90">{lastPulse.error}</p>
@@ -1511,6 +1613,107 @@ export function SettingsPanel({
               )}
             </div>
           </section>
+
+          <SettingsSection
+            title="Memory"
+            className="rounded-lg border border-indigo-900/35 bg-indigo-950/12 p-3 ring-1 ring-indigo-800/25"
+            info={
+              <>
+                Long-term Memory Anchor recall: LLM extraction stores facts after each message; semantic search
+                ranks by embedding similarity. Use Re-index after changing provider or embedding model.
+              </>
+            }
+          >
+            <SettingsToggleCard
+              id="memory-llm-extraction"
+              title="LLM memory extraction"
+              info={MEMORY_LLM_INFO}
+              checked={settings?.memoryLlmExtractionEnabled ?? true}
+              disabled={!settings}
+              onChange={(memoryLlmExtractionEnabled) => {
+                setSettings((s) => (s ? { ...s, memoryLlmExtractionEnabled } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { memoryLlmExtractionEnabled },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+            />
+            <SettingsToggleCard
+              id="memory-semantic"
+              title="Semantic recall (embeddings)"
+              info={MEMORY_SEMANTIC_INFO}
+              checked={settings?.memorySemanticEnabled ?? true}
+              disabled={!settings}
+              onChange={(memorySemanticEnabled) => {
+                setSettings((s) => (s ? { ...s, memorySemanticEnabled } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { memorySemanticEnabled },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+            />
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="embedding-model">
+                Embedding model (optional)
+              </label>
+              <input
+                id="embedding-model"
+                type="text"
+                disabled={!settings}
+                placeholder="Default for provider (e.g. text-embedding-3-small)"
+                value={settings?.embeddingModel ?? ""}
+                onChange={(e) => {
+                  const embeddingModel = e.target.value;
+                  setSettings((s) => (s ? { ...s, embeddingModel } : s));
+                  schedulePatch({ embeddingModel });
+                }}
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50 disabled:opacity-50"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={!settings || memoryReindexing || settings.selectedProvider === "placeholder"}
+              onClick={() => {
+                setMemoryReindexResult(null);
+                setMemoryReindexing(true);
+                void (async () => {
+                  try {
+                    setError(null);
+                    const n = await invoke<number>("memory_reindex_embeddings");
+                    setMemoryReindexResult(`Re-indexed ${n} anchor(s) with embeddings.`);
+                  } catch (err) {
+                    setMemoryReindexResult(String(err));
+                  } finally {
+                    setMemoryReindexing(false);
+                  }
+                })();
+              }}
+              className="w-full rounded-lg border border-indigo-800/60 bg-indigo-950/30 px-3 py-2 text-sm font-medium text-indigo-100 hover:bg-indigo-900/40 disabled:opacity-50"
+            >
+              {memoryReindexing ? "Re-indexing…" : "Re-index memory embeddings"}
+            </button>
+            {memoryReindexResult ? (
+              <p className="text-[11px] text-slate-500">{memoryReindexResult}</p>
+            ) : null}
+          </SettingsSection>
 
           <section className="space-y-3 rounded-lg border border-red-900/40 bg-red-950/12 p-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-red-300/90">
@@ -1542,19 +1745,19 @@ export function SettingsPanel({
             </button>
           </section>
 
-          <section className="space-y-2 rounded-lg border border-slate-800/80 bg-slate-950/40 p-3">
+          <section className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Local data paths
             </h3>
             <p className="text-xs leading-relaxed text-slate-500">
-              Chats, settings, and <code className="text-slate-400">personality.json</code> live here — not in your git
+              Chats, settings, and <code className="text-slate-600 dark:text-slate-400">personality.json</code> live here — not in your git
               checkout. On Linux the default is under{" "}
-              <code className="text-slate-400">~/.local/share/</code> (XDG data home). Set{" "}
-              <code className="text-slate-400">NOVA_DATA_DIR</code> to pin a visible folder (e.g. inside your project or a
+              <code className="text-slate-600 dark:text-slate-400">~/.local/share/</code> (XDG data home). Set{" "}
+              <code className="text-slate-600 dark:text-slate-400">NOVA_DATA_DIR</code> to pin a visible folder (e.g. inside your project or a
               synced drive) so every machine uses the same files.
             </p>
             {dataPaths ? (
-              <ul className="space-y-1.5 font-mono text-[10px] leading-relaxed text-slate-400 break-all">
+              <ul className="space-y-1.5 font-mono text-[10px] leading-relaxed text-slate-600 dark:text-slate-400 break-all">
                 <li>
                   <span className="text-slate-600">Data directory · </span>
                   {dataPaths.dataDirectory}
@@ -1588,14 +1791,14 @@ export function SettingsPanel({
                   }
                 })();
               }}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-700/90 bg-slate-900/70 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-slate-600 hover:bg-slate-800/80 disabled:pointer-events-none disabled:opacity-40"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700/90 bg-slate-100 dark:bg-slate-900/70 px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 transition hover:border-slate-300 dark:border-slate-600 hover:bg-slate-200 dark:bg-slate-800/80 disabled:pointer-events-none disabled:opacity-40"
             >
-              <FolderOpen className="size-3.5 text-slate-400" aria-hidden />
+              <FolderOpen className="size-3.5 text-slate-600 dark:text-slate-400" aria-hidden />
               Open data folder in file manager
             </button>
           </section>
 
-          <section className="space-y-2 rounded-lg border border-slate-800/80 bg-slate-950/40 p-3">
+          <section className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               About
             </h3>
@@ -1611,7 +1814,7 @@ export function SettingsPanel({
               Read backend version
             </button>
             {backend ? (
-              <p className="font-mono text-[11px] text-slate-400">{backend}</p>
+              <p className="font-mono text-[11px] text-slate-600 dark:text-slate-400">{backend}</p>
             ) : null}
           </section>
             </>
@@ -1627,10 +1830,10 @@ export function SettingsPanel({
           aria-modal="true"
           aria-labelledby="destructive-modal-warning"
         >
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-red-900/60 bg-slate-950 p-4 shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-red-900/60 bg-slate-50 dark:bg-slate-950 p-4 shadow-2xl">
             <p
               id="destructive-modal-warning"
-              className="whitespace-pre-line text-xs leading-relaxed text-slate-200"
+              className="whitespace-pre-line text-xs leading-relaxed text-slate-800 dark:text-slate-200"
             >
               {destructiveModal === "memory" ? MEMORY_WIPE_COPY : FACTORY_RESET_COPY}
             </p>
@@ -1642,7 +1845,7 @@ export function SettingsPanel({
               onChange={(e) => setWipeConfirmInput(e.target.value)}
               placeholder="Type CONFIRM"
               aria-label="Confirmation: type CONFIRM"
-              className="mt-4 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-sm text-slate-100 outline-none focus:border-red-500/60"
+              className="mt-4 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 font-mono text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-red-500/60"
             />
             <div className="mt-4 flex gap-2">
               <button
@@ -1651,7 +1854,7 @@ export function SettingsPanel({
                   setDestructiveModal(null);
                   setWipeConfirmInput("");
                 }}
-                className="flex-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800"
+                className="flex-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-sm font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800"
               >
                 Cancel
               </button>
@@ -1679,7 +1882,7 @@ export function SettingsPanel({
                     }
                   })();
                 }}
-                className="flex-1 rounded-lg border border-red-700 bg-red-900/70 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex-1 rounded-lg border border-red-700 bg-red-900/70 px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {wiping
                   ? destructiveModal === "memory"

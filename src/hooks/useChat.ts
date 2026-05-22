@@ -54,6 +54,7 @@ export function useChat() {
   const [anchors, setAnchors] = useState<StoredAnchor[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [threadLoading, setThreadLoading] = useState(false);
+  const [extractingAnchors, setExtractingAnchors] = useState(false);
   const [sending, setSending] = useState(false);
   const [streamAssistant, setStreamAssistant] = useState<StreamAssistantState>(null);
   const [error, setError] = useState<string | null>(null);
@@ -475,8 +476,9 @@ export function useChat() {
   );
 
   const extractAnchorsFromChat = useCallback(async () => {
-    if (!activeConversationId) return;
+    if (!activeConversationId || extractingAnchors) return;
     setError(null);
+    setExtractingAnchors(true);
     try {
       await memoryExtractAnchorsFromConversation(activeConversationId, 12);
       await loadActiveThread(activeConversationId);
@@ -485,8 +487,15 @@ export function useChat() {
       const msg =
         e instanceof Error ? e.message : "Could not extract anchors (run in Tauri?)";
       setError(msg);
+    } finally {
+      setExtractingAnchors(false);
     }
-  }, [activeConversationId, loadActiveThread, refreshConversations]);
+  }, [
+    activeConversationId,
+    extractingAnchors,
+    loadActiveThread,
+    refreshConversations,
+  ]);
 
   const sendMessage = useCallback(
     async (
@@ -515,7 +524,7 @@ export function useChat() {
         },
       ]);
       setSending(true);
-      setStreamAssistant(null);
+      setStreamAssistant({ thinking: true, text: "" });
       setError(null);
 
       try {
@@ -589,6 +598,7 @@ export function useChat() {
     anchors,
     listLoading,
     threadLoading,
+    extractingAnchors,
     sending,
     streamAssistant,
     error,

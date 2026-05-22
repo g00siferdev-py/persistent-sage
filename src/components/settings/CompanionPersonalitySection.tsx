@@ -364,7 +364,7 @@ export function CompanionPersonalitySection({
   const saveFooter =
     file ? (
       <div
-        className="-mx-4 shrink-0 border-t border-slate-800/90 bg-slate-950/92 px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md"
+        className="-mx-4 shrink-0 border-t border-slate-200 dark:border-slate-800/90 bg-slate-50 dark:bg-slate-950/92 px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md"
         role="region"
         aria-label="Save personality profile"
       >
@@ -373,7 +373,7 @@ export function CompanionPersonalitySection({
             type="button"
             disabled={saving}
             onClick={() => void saveChanges()}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/30 transition hover:bg-indigo-500 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-slate-900 dark:text-white shadow-lg shadow-indigo-900/30 transition hover:bg-indigo-500 disabled:opacity-50"
           >
             {saving && saveMode === "changes" ? (
               "Saving…"
@@ -388,7 +388,7 @@ export function CompanionPersonalitySection({
             type="button"
             disabled={saving}
             onClick={() => void saveAsNewProfile()}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-600/90 px-3 py-2.5 text-sm font-semibold text-white shadow-md shadow-emerald-950/40 transition hover:bg-emerald-500 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-600/90 px-3 py-2.5 text-sm font-semibold text-slate-900 dark:text-white shadow-md shadow-emerald-950/40 transition hover:bg-emerald-500 disabled:opacity-50"
           >
             {saving && saveMode === "new" ? (
               "Saving…"
@@ -424,7 +424,7 @@ export function CompanionPersonalitySection({
           <div className="overflow-hidden rounded-xl border border-indigo-400/35 bg-gradient-to-br from-indigo-600/25 via-indigo-950/50 to-slate-950/80 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
             <div className="flex flex-wrap items-center gap-2">
               <UserCircle2 className="size-5 shrink-0 text-indigo-300" aria-hidden />
-              <p className="min-w-0 text-base font-semibold tracking-tight text-white">
+              <p className="min-w-0 text-base font-semibold tracking-tight text-slate-900 dark:text-white">
                 <span className="font-medium text-indigo-200/90">Current profile: </span>
                 <span className="truncate">{current.profileName || "Unnamed profile"}</span>
               </p>
@@ -432,9 +432,9 @@ export function CompanionPersonalitySection({
                 Editing
               </span>
             </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+            <p className="mt-2 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
               Companion in chat:{" "}
-              <span className="font-medium text-slate-200">
+              <span className="font-medium text-slate-800 dark:text-slate-200">
                 {(current.companionName || "Nova").trim() || "Nova"}
               </span>
             </p>
@@ -443,8 +443,8 @@ export function CompanionPersonalitySection({
           <div className="flex items-start gap-2">
             <Heart className="mt-0.5 size-5 shrink-0 text-indigo-400" aria-hidden />
             <div>
-              <h3 className="text-sm font-semibold text-white">Customize Nova</h3>
-              <p className="text-[11px] leading-relaxed text-slate-400">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Customize Nova</h3>
+              <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
                 Companion personality · saved as <span className="font-mono">personality.json</span> in your data
                 folder. The generated prompt is sent with every message as the first system layer.
               </p>
@@ -455,10 +455,10 @@ export function CompanionPersonalitySection({
             <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-200/90">
               Import from file
             </p>
-            <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-              <span className="font-medium text-slate-300">Nova JSON</span> — full{" "}
+            <p className="mt-1 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+              <span className="font-medium text-slate-700 dark:text-slate-300">Nova JSON</span> — full{" "}
               <span className="font-mono">personality.json</span>, a <span className="font-mono">profiles</span> array,
-              or one profile object. <span className="font-medium text-slate-300">OpenClaw</span> — select{" "}
+              or one profile object. <span className="font-medium text-slate-700 dark:text-slate-300">OpenClaw</span> — select{" "}
               <span className="font-mono">SOUL.md</span>, <span className="font-mono">IDENTITY.md</span>,{" "}
               <span className="font-mono">USER.md</span>, <span className="font-mono">JOURNAL.md</span>,{" "}
               <span className="font-mono">MEMORY.md</span>, <span className="font-mono">TOOLS.md</span> (any subset).
@@ -484,7 +484,7 @@ export function CompanionPersonalitySection({
               onChange={(ev) => void onOpenclawSelected(ev)}
             />
             {importBusy ? (
-              <p className="mt-2 text-[11px] text-slate-400">Reading markdown files…</p>
+              <p className="mt-2 text-[11px] text-slate-600 dark:text-slate-400">Reading markdown files…</p>
             ) : null}
             {importMsg ? (
               <p className="mt-2 rounded border border-amber-900/50 bg-amber-950/30 px-2 py-1.5 text-[11px] text-amber-200">
@@ -495,7 +495,7 @@ export function CompanionPersonalitySection({
               <button
                 type="button"
                 onClick={onPickJson}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-slate-900/80 px-3 py-2 text-xs font-medium text-amber-100 hover:bg-slate-800"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-slate-100 dark:bg-slate-900/80 px-3 py-2 text-xs font-medium text-amber-100 hover:bg-slate-200 dark:bg-slate-800"
               >
                 <FileJson className="size-3.5 shrink-0" aria-hidden />
                 Import Nova JSON…
@@ -503,7 +503,7 @@ export function CompanionPersonalitySection({
               <button
                 type="button"
                 onClick={() => void onPickOpenclaw()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-slate-900/80 px-3 py-2 text-xs font-medium text-amber-100 hover:bg-slate-800"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-slate-100 dark:bg-slate-900/80 px-3 py-2 text-xs font-medium text-amber-100 hover:bg-slate-200 dark:bg-slate-800"
               >
                 <FileText className="size-3.5 shrink-0" aria-hidden />
                 Import OpenClaw markdown…
@@ -520,9 +520,9 @@ export function CompanionPersonalitySection({
                 {openclawPreview.fatalError ? (
                   <p className="mt-2 text-[11px] text-red-300">{openclawPreview.fatalError}</p>
                 ) : null}
-                <p className="mt-1 text-[11px] text-slate-400">
+                <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">
                   Files:{" "}
-                  <span className="font-mono text-slate-300">
+                  <span className="font-mono text-slate-700 dark:text-slate-300">
                     {openclawPreview.filesFound.length > 0
                       ? openclawPreview.filesFound.map((f) => `${f.toUpperCase()}.md`).join(", ")
                       : "(none recognized)"}
@@ -547,35 +547,35 @@ export function CompanionPersonalitySection({
                 <dl className="mt-3 grid gap-2 text-[11px]">
                   <div className="grid grid-cols-[7rem_1fr] gap-2">
                     <dt className="text-slate-500">Companion</dt>
-                    <dd className="text-slate-200">{openclawPreview.profile.companionName}</dd>
+                    <dd className="text-slate-800 dark:text-slate-200">{openclawPreview.profile.companionName}</dd>
                   </div>
                   <div className="grid grid-cols-[7rem_1fr] gap-2">
                     <dt className="text-slate-500">Core personality</dt>
-                    <dd className="text-slate-400">
+                    <dd className="text-slate-600 dark:text-slate-400">
                       {previewFieldSummary(openclawPreview.profile.corePersonality)}
                     </dd>
                   </div>
                   <div className="grid grid-cols-[7rem_1fr] gap-2">
                     <dt className="text-slate-500">Tone</dt>
-                    <dd className="text-slate-400">
+                    <dd className="text-slate-600 dark:text-slate-400">
                       {previewFieldSummary(openclawPreview.profile.toneOfVoice)}
                     </dd>
                   </div>
                   <div className="grid grid-cols-[7rem_1fr] gap-2">
                     <dt className="text-slate-500">Background</dt>
-                    <dd className="text-slate-400">
+                    <dd className="text-slate-600 dark:text-slate-400">
                       {previewFieldSummary(openclawPreview.profile.backgroundStory)}
                     </dd>
                   </div>
                   <div className="grid grid-cols-[7rem_1fr] gap-2">
                     <dt className="text-slate-500">User relationship</dt>
-                    <dd className="text-slate-400">
+                    <dd className="text-slate-600 dark:text-slate-400">
                       {previewFieldSummary(openclawPreview.profile.relationshipStyle)}
                     </dd>
                   </div>
                   <div className="grid grid-cols-[7rem_1fr] gap-2">
                     <dt className="text-slate-500">Special instructions</dt>
-                    <dd className="text-slate-400">
+                    <dd className="text-slate-600 dark:text-slate-400">
                       {previewFieldSummary(openclawPreview.profile.specialInstructions, 160)}
                     </dd>
                   </div>
@@ -585,14 +585,14 @@ export function CompanionPersonalitySection({
                     type="button"
                     onClick={confirmOpenclawImport}
                     disabled={Boolean(openclawPreview.fatalError)}
-                    className="rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-400 disabled:opacity-40"
+                    className="rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-medium text-slate-900 dark:text-white hover:bg-indigo-400 disabled:opacity-40"
                   >
                     Add profile to list
                   </button>
                   <button
                     type="button"
                     onClick={cancelOpenclawImport}
-                    className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+                    className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:bg-slate-800"
                   >
                     Cancel
                   </button>
@@ -601,7 +601,7 @@ export function CompanionPersonalitySection({
             ) : null}
           </div>
 
-          <div className="rounded-lg border border-slate-800/90 bg-slate-950/50 p-3">
+          <div className="rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/50 p-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <label
@@ -627,7 +627,7 @@ export function CompanionPersonalitySection({
                 id="companion-profile-select"
                 value={file.activeProfileId}
                 onChange={(e) => setActiveId(e.target.value)}
-                className="w-full appearance-none rounded-lg border border-slate-700/90 bg-slate-900/80 py-2.5 pl-3 pr-10 text-sm font-medium text-slate-100 outline-none ring-indigo-500/0 transition focus:border-indigo-500/55 focus:ring-2 focus:ring-indigo-500/25"
+                className="w-full appearance-none rounded-lg border border-slate-300 dark:border-slate-700/90 bg-slate-100 dark:bg-slate-900/80 py-2.5 pl-3 pr-10 text-sm font-medium text-slate-900 dark:text-slate-100 outline-none ring-indigo-500/0 transition focus:border-indigo-500/55 focus:ring-2 focus:ring-indigo-500/25"
               >
                 {file.profiles.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -641,7 +641,7 @@ export function CompanionPersonalitySection({
               <button
                 type="button"
                 onClick={addProfile}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800"
               >
                 <Plus className="size-3.5" aria-hidden />
                 New blank profile
@@ -662,7 +662,7 @@ export function CompanionPersonalitySection({
             <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-300/95">
               Load / activate for chat
             </p>
-            <p className="mt-1 text-[11px] leading-snug text-slate-400">
+            <p className="mt-1 text-[11px] leading-snug text-slate-600 dark:text-slate-400">
               The companion marked <span className="font-medium text-emerald-200/90">Live in chat</span> is who
               you&apos;re talking to and whose memory is used for new conversations. Same as the picker in the main
               chat header.
@@ -674,10 +674,10 @@ export function CompanionPersonalitySection({
                 return (
                   <li
                     key={p.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800/90 bg-slate-950/60 px-2.5 py-2"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-2.5 py-2"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-white">{cname}</p>
+                      <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{cname}</p>
                       <p className="truncate text-[10px] text-slate-500">{p.profileName || p.id}</p>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1.5">
@@ -693,7 +693,7 @@ export function CompanionPersonalitySection({
                           setFile({ ...file, activeProfileId: p.id });
                           syncMemoryProfile(p.id);
                         }}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-emerald-950/40 transition hover:bg-emerald-500 disabled:cursor-default disabled:bg-slate-800 disabled:text-slate-500 disabled:shadow-none"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white shadow-md shadow-emerald-950/40 transition hover:bg-emerald-500 disabled:cursor-default disabled:bg-slate-200 dark:bg-slate-800 disabled:text-slate-500 disabled:shadow-none"
                       >
                         <Zap className="size-3.5 shrink-0" aria-hidden />
                         {isLiveChat ? "Active for chat" : "Load / Activate for chat"}
@@ -712,7 +712,7 @@ export function CompanionPersonalitySection({
             <input
               value={current.profileName}
               onChange={(e) => updateActive({ profileName: e.target.value })}
-              className="w-full rounded-lg border border-slate-800/90 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500/50"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
             />
           </div>
 
@@ -724,7 +724,7 @@ export function CompanionPersonalitySection({
               value={current.companionName}
               onChange={(e) => updateActive({ companionName: e.target.value })}
               placeholder="Nova"
-              className="w-full rounded-lg border border-slate-800/90 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500/50"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
             />
           </div>
 
@@ -737,7 +737,7 @@ export function CompanionPersonalitySection({
               value={current.corePersonality}
               onChange={(e) => updateActive({ corePersonality: e.target.value })}
               placeholder="e.g. warm, witty, patient, curious…"
-              className="w-full resize-y rounded-lg border border-slate-800/90 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+              className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
             />
           </div>
 
@@ -749,7 +749,7 @@ export function CompanionPersonalitySection({
               value={current.toneOfVoice}
               onChange={(e) => updateActive({ toneOfVoice: e.target.value })}
               placeholder="e.g. concise, gentle, playful…"
-              className="w-full rounded-lg border border-slate-800/90 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500/50"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
             />
           </div>
 
@@ -762,7 +762,7 @@ export function CompanionPersonalitySection({
               value={current.backgroundStory}
               onChange={(e) => updateActive({ backgroundStory: e.target.value })}
               placeholder="Who you are in the user’s world…"
-              className="w-full resize-y rounded-lg border border-slate-800/90 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+              className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
             />
           </div>
 
@@ -775,7 +775,7 @@ export function CompanionPersonalitySection({
               value={current.coreValues}
               onChange={(e) => updateActive({ coreValues: e.target.value })}
               placeholder="What you always stand for…"
-              className="w-full resize-y rounded-lg border border-slate-800/90 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+              className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
             />
           </div>
 
@@ -787,7 +787,7 @@ export function CompanionPersonalitySection({
               value={current.relationshipStyle}
               onChange={(e) => updateActive({ relationshipStyle: e.target.value })}
               placeholder="e.g. friend, mentor, creative partner…"
-              className="w-full rounded-lg border border-slate-800/90 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500/50"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
             />
           </div>
 
@@ -800,7 +800,7 @@ export function CompanionPersonalitySection({
               value={current.specialInstructions}
               onChange={(e) => updateActive({ specialInstructions: e.target.value })}
               placeholder="Habits, boundaries, in-jokes…"
-              className="w-full resize-y rounded-lg border border-slate-800/90 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+              className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
             />
           </div>
 
@@ -817,7 +817,7 @@ export function CompanionPersonalitySection({
                 })
               }
               placeholder="For a future AI-generated avatar…"
-              className="w-full resize-y rounded-lg border border-slate-800/90 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+              className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
             />
           </div>
 
@@ -826,7 +826,7 @@ export function CompanionPersonalitySection({
               <Sparkles className="size-3.5 text-indigo-400" aria-hidden />
               Live system prompt preview
             </div>
-            <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-800/80 bg-slate-950/80 p-3 font-mono text-[11px] leading-relaxed text-slate-300">
+            <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/80 p-3 font-mono text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
               {preview}
             </pre>
           </div>

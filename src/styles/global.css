@@ -10,7 +10,11 @@
   }
 
   body {
-    @apply overflow-hidden bg-slate-950 text-slate-100;
+    @apply overflow-hidden bg-slate-100 text-slate-900;
+  }
+
+  html.dark body {
+    @apply bg-slate-950 text-slate-100;
   }
 
   #root {
