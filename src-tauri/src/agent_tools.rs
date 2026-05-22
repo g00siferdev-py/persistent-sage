@@ -33,6 +33,24 @@ const SEARCH_QUERY_MAX: usize = 400;
 const DDG_HTML_SERP_MAX_BYTES: usize = 512_000;
 const DDG_BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
+/// Plain-language label for tool lists shown to the model (API `name` stays snake_case).
+fn tool_user_facing_label(name: &str) -> String {
+    match name {
+        "web_search" => "Web Search".into(),
+        "fetch_url" => "Fetch URL".into(),
+        "http_request" => "HTTP Request".into(),
+        "fetch_browser" => "Browser Page Fetch".into(),
+        "workspace_read_file" => "Read Workspace File".into(),
+        "workspace_write_file" => "Write Workspace File".into(),
+        "workspace_list_directory" => "List Workspace Folder".into(),
+        "database_query" => "Database Query".into(),
+        "personality_get" => "View Personality".into(),
+        "personality_update" => "Update Personality".into(),
+        "memory_search" => "Memory Search".into(),
+        other => other.to_string(),
+    }
+}
+
 /// Appended to the system message when agent tools are enabled so models see available tools
 /// (including Ollama models that only emit XML `<invoke>` blocks in text).
 pub fn tools_system_appendix(tools: &[ToolDefinition]) -> String {
@@ -54,7 +72,8 @@ pub fn tools_system_appendix(tools: &[ToolDefinition]) -> String {
     out.push_str("**Registered tools:**\n");
     for t in tools {
         let desc = t.description.as_deref().unwrap_or("(no description)");
-        out.push_str(&format!("- `{}`: {}\n", t.name, desc));
+        let label = tool_user_facing_label(&t.name);
+        out.push_str(&format!("- **{label}** (invoke as `{id}`): {desc}\n", id = t.name));
     }
     out.push_str(
         "\nAfter tools run, you receive results in follow-up messages. Summarize for the user in natural language.\n",
@@ -1145,6 +1164,7 @@ pub async fn run_builtin_tool(
     database_allow_write: bool,
     browser_ignore_robots: bool,
     personality: Option<&crate::personality::PersonalityManager>,
+    memory_tools: Option<(&crate::settings::SettingsManager, &dyn crate::memory::ConversationMemory)>,
     name: &str,
     arguments_json: &str,
 ) -> Result<String, ProviderError> {
@@ -1200,6 +1220,15 @@ pub async fn run_builtin_tool(
             let root = workspace_root.ok_or_else(|| tool_err("workspace tools are not enabled"))?;
             let p = v["path"].as_str().unwrap_or("").trim();
             workspace_list_directory(root, p)
+        }
+        "memory_search" => {
+            let (settings, memory) = memory_tools.ok_or_else(|| {
+                tool_err("memory_search is not available (no memory context)")
+            })?;
+            let body = crate::memory_tools::run_memory_search(http, settings, memory, &v)
+                .await
+                .map_err(|e| tool_err(e.to_string()))?;
+            Ok(body)
         }
         "database_query" => {
             let args = v.clone();

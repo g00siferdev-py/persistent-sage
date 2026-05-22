@@ -37,6 +37,7 @@ commands.allow = [
   "memory_extract_anchors_from_conversation",
   "memory_recall_anchors",
   "memory_recall",
+  "memory_reindex_embeddings",
   "memory_list_anchors",
   "memory_list_projects",
 ]

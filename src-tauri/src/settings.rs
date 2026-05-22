@@ -95,8 +95,23 @@ pub struct SettingsFile {
     pub pulse_instructions: String,
     /// Conversation id Pulse appends to (same thread as the open chat). Omitted/null = none.
     pub pulse_conversation_id: Option<String>,
+    #[serde(default = "default_memory_llm_extraction")]
+    pub memory_llm_extraction_enabled: bool,
+    #[serde(default = "default_memory_semantic")]
+    pub memory_semantic_enabled: bool,
+    /// Optional override (e.g. `text-embedding-3-small`, `nomic-embed-text`). Empty = provider default.
+    #[serde(default)]
+    pub embedding_model: String,
     #[serde(default)]
     pub encrypted_api_keys: HashMap<String, EncryptedApiKeyBlob>,
+}
+
+fn default_memory_llm_extraction() -> bool {
+    true
+}
+
+fn default_memory_semantic() -> bool {
+    true
 }
 
 fn default_agent_web_tools() -> bool {
@@ -170,6 +185,9 @@ impl Default for SettingsFile {
             pulse_interval_minutes: 15,
             pulse_instructions: default_pulse_instructions(),
             pulse_conversation_id: None,
+            memory_llm_extraction_enabled: true,
+            memory_semantic_enabled: true,
+            embedding_model: String::new(),
             encrypted_api_keys: HashMap::new(),
         }
     }
@@ -198,6 +216,9 @@ pub struct SettingsView {
     pub pulse_interval_minutes: u32,
     pub pulse_instructions: String,
     pub pulse_conversation_id: Option<String>,
+    pub memory_llm_extraction_enabled: bool,
+    pub memory_semantic_enabled: bool,
+    pub embedding_model: String,
     pub has_openai_api_key: bool,
     pub has_anthropic_api_key: bool,
     pub has_ollama_api_key: bool,
@@ -227,6 +248,9 @@ pub struct SettingsUpdatePayload {
     pub pulse_interval_minutes: Option<u32>,
     pub pulse_instructions: Option<String>,
     pub pulse_conversation_id: Option<JsonValue>,
+    pub memory_llm_extraction_enabled: Option<bool>,
+    pub memory_semantic_enabled: Option<bool>,
+    pub embedding_model: Option<String>,
 }
 
 // --- Crypto ------------------------------------------------------------------
@@ -517,6 +541,9 @@ impl SettingsManager {
             pulse_interval_minutes: inner.pulse_interval_minutes,
             pulse_instructions: inner.pulse_instructions.clone(),
             pulse_conversation_id: inner.pulse_conversation_id.clone(),
+            memory_llm_extraction_enabled: inner.memory_llm_extraction_enabled,
+            memory_semantic_enabled: inner.memory_semantic_enabled,
+            embedding_model: inner.embedding_model.clone(),
             has_openai_api_key: can_decrypt_api_blob(&self.aes_key, inner.encrypted_api_keys.get("openai")),
             has_anthropic_api_key: can_decrypt_api_blob(
                 &self.aes_key,
@@ -626,6 +653,27 @@ impl SettingsManager {
             .read()
             .map(|g| g.anthropic_model.clone())
             .unwrap_or_else(|_| "claude-3-5-sonnet-20241022".into())
+    }
+
+    pub fn memory_llm_extraction_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.memory_llm_extraction_enabled)
+            .unwrap_or(true)
+    }
+
+    pub fn memory_semantic_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.memory_semantic_enabled)
+            .unwrap_or(true)
+    }
+
+    pub fn embedding_model(&self) -> String {
+        self.inner
+            .read()
+            .map(|g| g.embedding_model.clone())
+            .unwrap_or_default()
     }
 
     pub fn decrypt_api_key(&self, slot: &str) -> Result<Option<String>, SettingsError> {
@@ -763,6 +811,15 @@ impl SettingsManager {
                     ));
                 }
             };
+        }
+        if let Some(b) = patch.memory_llm_extraction_enabled {
+            inner.memory_llm_extraction_enabled = b;
+        }
+        if let Some(b) = patch.memory_semantic_enabled {
+            inner.memory_semantic_enabled = b;
+        }
+        if let Some(s) = patch.embedding_model {
+            inner.embedding_model = s.trim().to_string();
         }
         inner.version = SETTINGS_VERSION;
         drop(inner);

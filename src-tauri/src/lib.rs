@@ -13,7 +13,10 @@ mod browser_fetch;
 mod attachments;
 mod chat;
 mod database_query;
+mod embedding;
 mod memory;
+mod memory_extract;
+mod memory_tools;
 mod pulse;
 mod personality;
 mod personality_tools;
@@ -461,7 +464,7 @@ fn memory_recall_anchors(
         .map_err(|e| e.to_string())
 }
 
-/// Hybrid FTS + keyword anchor recall and optional scoped message hits.
+/// Hybrid FTS + keyword anchor recall (fast; semantic ranking is via `memory_search` tool in chat).
 #[tauri::command]
 fn memory_recall(
     state: State<NovaState>,
@@ -478,8 +481,15 @@ fn memory_recall(
             scope,
             anchor_limit.unwrap_or(12).max(1).min(64),
             message_limit.unwrap_or(6).max(0).min(24),
+            None,
         )
         .map_err(|e| e.to_string())
+}
+
+/// Clear anchor embeddings and re-embed all anchors for the active companion profile.
+#[tauri::command]
+async fn memory_reindex_embeddings(state: State<'_, NovaState>) -> Result<u32, String> {
+    memory_extract::reindex_all_embeddings(&state.http, &state.settings, state.memory.as_ref()).await
 }
 
 /// Anchors for this thread plus global (`conversation_id` NULL).
@@ -636,6 +646,7 @@ pub fn run() {
             memory_extract_anchors_from_conversation,
             memory_recall_anchors,
             memory_recall,
+            memory_reindex_embeddings,
             memory_list_anchors,
             memory_list_projects,
         ])

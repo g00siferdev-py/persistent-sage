@@ -244,6 +244,16 @@ pub fn chat_turn_from_stored(
     data_dir: &Path,
     m: &StoredMessage,
 ) -> Result<ChatTurn, String> {
+    chat_turn_from_stored_with_image_policy(provider_id, data_dir, m, true)
+}
+
+/// History rows: only attach image bytes when `include_image` is true (latest user image turn).
+pub fn chat_turn_from_stored_with_image_policy(
+    provider_id: &str,
+    data_dir: &Path,
+    m: &StoredMessage,
+    include_image: bool,
+) -> Result<ChatTurn, String> {
     let role = match m.role {
         crate::memory::MessageRole::User => "user",
         crate::memory::MessageRole::Assistant => "assistant",
@@ -251,6 +261,18 @@ pub fn chat_turn_from_stored(
 
     if role == "assistant" || m.image_attachment.is_none() {
         return Ok(ChatTurn::text(role, &m.content));
+    }
+
+    if !include_image {
+        let note = if m.content.trim().is_empty() {
+            "(Earlier image attachment — not re-sent in context.)".to_string()
+        } else {
+            format!(
+                "{}\n(Earlier image attachment — not re-sent in context.)",
+                m.content.trim()
+            )
+        };
+        return Ok(ChatTurn::text(role, &note));
     }
 
     let rel = m.image_attachment.as_deref().unwrap();

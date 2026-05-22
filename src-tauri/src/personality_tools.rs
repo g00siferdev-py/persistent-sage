@@ -99,7 +99,8 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
 
 pub fn personality_system_hint() -> &'static str {
     "\n\n## Personality self-edit (enabled)\n\n\
-     You may use **personality_get** to read your saved persona and **personality_update** to change the \
+     You may use **View Personality** (invoke as `personality_get`) to read your saved persona and **Update Personality** \
+     (invoke as `personality_update`) to change the \
      active profile when the user asks you to adjust how you behave. Do not rewrite your personality \
      without a clear user request. Saved changes update this chat's system instructions immediately.\n"
 }

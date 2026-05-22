@@ -2,16 +2,16 @@
 //!
 //! ## Memory Anchor model (raw + curated)
 //!
-//! - **Raw layer** — [`AnchorType::Raw`]: auto-ingested snippets derived from chat
-//!   (deterministic heuristics today; LLM extraction can replace later).
+//! - **Raw layer** — [`AnchorType::Raw`]: snippets from chat via per-message ingest and
+//!   optional **Extract raw anchors** (bulk backfill for the active thread).
 //! - **Curated layer** — [`AnchorType::Curated`], [`AnchorType::Fact`],
 //!   [`AnchorType::Insight`]: user- or model-confirmed anchors worth recalling
 //!   across sessions. Higher [`importance`] surfaces first in briefings.
 //!
 //! Chat transcripts live in `messages`; long-term recall uses `anchors`,
 //! `projects`, and `preferences`. **Hybrid recall** combines FTS5 full-text
-//! ranking with keyword `LIKE` and optional message hits; [`embedding`] is still
-//! reserved for future true semantic ranking when query vectors exist.
+//! ranking with keyword `LIKE`, optional message hits, and cosine similarity when
+//! [`embedding`] blobs are populated (see `embedding` + `memory_extract` modules).
 //!
 //! **Storage:** SQLite `TEXT` columns (e.g. `anchors.content`) are not limited to
 //! 255 characters. Any fixed cap you see in **raw anchor extraction** is from
@@ -248,6 +248,13 @@ pub trait ConversationMemory: Send + Sync {
         max_anchors: usize,
     ) -> Result<Vec<String>, MemoryError>;
 
+    /// After each user message: raw anchors on this thread + duplicate global anchors for cross-session recall.
+    fn ingest_user_message_anchors(
+        &self,
+        conversation_id: &str,
+        content: &str,
+    ) -> Result<Vec<String>, MemoryError>;
+
     /// Keyword recall; optional scope to one thread (plus always matches global anchors).
     fn recall_anchors(
         &self,
@@ -256,14 +263,37 @@ pub trait ConversationMemory: Send + Sync {
         limit: usize,
     ) -> Result<Vec<StoredAnchor>, MemoryError>;
 
-    /// Hybrid FTS5 + keyword recall over anchors, plus recent matching messages in scope.
+    /// Hybrid FTS5 + keyword + optional semantic (cosine) recall over anchors.
     fn memory_recall(
         &self,
         query: &str,
         scope_conversation_id: Option<&str>,
         anchor_limit: usize,
         message_limit: usize,
+        query_embedding: Option<&[f32]>,
     ) -> Result<MemoryRecallBundle, MemoryError>;
+
+    /// Insert or skip duplicate memory (exact content match on scope).
+    fn upsert_memory_anchor(
+        &self,
+        conversation_id: Option<&str>,
+        anchor_type: AnchorType,
+        content: &str,
+        importance: i32,
+    ) -> Result<String, MemoryError>;
+
+    fn set_anchor_embedding(
+        &self,
+        anchor_id: &str,
+        embedding_blob: &[u8],
+        model_label: &str,
+    ) -> Result<(), MemoryError>;
+
+    fn list_anchors_without_embedding(&self, limit: usize) -> Result<Vec<StoredAnchor>, MemoryError>;
+
+    fn clear_all_embeddings(&self) -> Result<(), MemoryError>;
+
+    fn count_anchors_with_embedding(&self) -> Result<u32, MemoryError>;
 
     /// Anchors for briefing / sidebar: this thread + global, by importance.
     fn list_anchors_for_thread(
@@ -306,6 +336,8 @@ const BRIEFING_MAX_PREFS: usize = 12;
 const ANCHOR_EXTRACT_MIN_CHARS: usize = 12;
 /// Maximum characters per raw anchor from extraction (SQLite itself has no such cap).
 const ANCHOR_EXTRACT_MAX_CHARS: usize = 16_384;
+/// Cap auto-ingest per user turn so chat stays responsive.
+const AUTO_INGEST_MAX_PER_MESSAGE: usize = 4;
 
 /// Split `s` into substrings of at most `max_chars` Unicode scalars (final chunk may be shorter).
 fn chunk_text_by_max_chars(s: &str, max_chars: usize) -> Vec<String> {
@@ -749,6 +781,8 @@ pub fn sqlite_profile_from_env() -> SqliteProfile {
 
 pub fn apply_profile_pragmas(conn: &Connection, profile: SqliteProfile) -> Result<(), rusqlite::Error> {
     conn.pragma_update(None, "foreign_keys", "ON")?;
+    // Avoid indefinite hangs when chat + background memory jobs contend on the same file.
+    conn.pragma_update(None, "busy_timeout", 10_000)?;
     match profile {
         SqliteProfile::Desktop => {
             conn.pragma_update(None, "journal_mode", "WAL")?;
@@ -1026,8 +1060,154 @@ impl MemoryAnchor {
             "household" | "home" | "family" => &[
                 "pet", "pets", "cat", "cats", "dog", "dogs", "kid", "kids", "live", "living",
             ],
+            "vision" | "sight" | "seeing" | "eyesight" | "eye" | "eyes" | "visual" => &[
+                "colorblind", "colourblind", "color", "colour", "blind", "blindness", "see",
+                "sight", "protanopia", "deuteranopia", "tritanopia", "daltonism",
+            ],
+            "colorblind" | "colourblind" | "colorblindness" | "colourblindness" => &[
+                "vision", "sight", "color", "colour", "blind", "eyes", "visual", "protanopia",
+                "deuteranopia", "tritanopia",
+            ],
+            "color" | "colour" | "colors" | "colours" => &[
+                "colorblind", "colourblind", "vision", "blind", "sight", "hue", "red", "green",
+            ],
+            "blind" | "blindness" => &[
+                "colorblind", "colourblind", "vision", "sight", "visual", "see",
+            ],
             _ => &[],
         }
+    }
+
+    fn semantic_anchor_scores(
+        conn: &Connection,
+        query_emb: &[f32],
+        scope_conversation_id: Option<&str>,
+        personality_id: &str,
+        cap: usize,
+    ) -> Result<Vec<(String, f32)>, MemoryError> {
+        use crate::embedding::{cosine_similarity, deserialize_embedding};
+
+        let scope = scope_conversation_id.filter(|s| !s.is_empty());
+        let lim: i64 = cap.try_into().unwrap_or(256);
+        let mut out: Vec<(String, f32)> = Vec::new();
+
+        if let Some(cid) = scope {
+            let mut stmt = conn.prepare(
+                "SELECT id, embedding FROM anchors
+                 WHERE personality_id = ?1 AND embedding IS NOT NULL AND length(embedding) > 4
+                   AND (conversation_id IS NULL OR conversation_id = ?2)
+                 LIMIT ?3",
+            )?;
+            let rows = stmt.query_map(params![personality_id, cid, lim], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, Option<Vec<u8>>>(1)?))
+            })?;
+            for row in rows {
+                let (id, blob_opt) = row?;
+                let Some(blob) = blob_opt else { continue };
+                let Some(vec) = deserialize_embedding(&blob) else {
+                    continue;
+                };
+                let sim = cosine_similarity(query_emb, &vec);
+                if sim > 0.0 {
+                    out.push((id, sim));
+                }
+            }
+        } else {
+            let mut stmt = conn.prepare(
+                "SELECT id, embedding FROM anchors
+                 WHERE personality_id = ?1 AND embedding IS NOT NULL AND length(embedding) > 4
+                 LIMIT ?2",
+            )?;
+            let rows = stmt.query_map(params![personality_id, lim], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, Option<Vec<u8>>>(1)?))
+            })?;
+            for row in rows {
+                let (id, blob_opt) = row?;
+                let Some(blob) = blob_opt else { continue };
+                let Some(vec) = deserialize_embedding(&blob) else {
+                    continue;
+                };
+                let sim = cosine_similarity(query_emb, &vec);
+                if sim > 0.0 {
+                    out.push((id, sim));
+                }
+            }
+        }
+
+        out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+        out.truncate(cap);
+        Ok(out)
+    }
+
+    fn anchor_id_for_content(
+        conn: &Connection,
+        conversation_id: Option<&str>,
+        content: &str,
+        personality_id: &str,
+    ) -> Result<Option<String>, MemoryError> {
+        let id: Result<String, rusqlite::Error> = match conversation_id {
+            Some(cid) => conn.query_row(
+                "SELECT id FROM anchors WHERE conversation_id = ?1 AND content = ?2 AND personality_id = ?3 LIMIT 1",
+                params![cid, content, personality_id],
+                |r| r.get(0),
+            ),
+            None => conn.query_row(
+                "SELECT id FROM anchors WHERE conversation_id IS NULL AND content = ?2 AND personality_id = ?1 LIMIT 1",
+                params![personality_id, content],
+                |r| r.get(0),
+            ),
+        };
+        match id {
+            Ok(s) => Ok(Some(s)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Insert one anchor row using an already-held connection (avoids re-locking `conn` mutex).
+    fn insert_anchor_row(
+        conn: &Connection,
+        conversation_id: Option<&str>,
+        anchor_type: AnchorType,
+        content: &str,
+        importance: i32,
+        personality_id: &str,
+    ) -> Result<String, MemoryError> {
+        let id = Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO anchors (id, conversation_id, anchor_type, content, importance, personality_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                id,
+                conversation_id,
+                anchor_type.as_db_str(),
+                content,
+                importance,
+                personality_id
+            ],
+        )?;
+        Ok(id)
+    }
+
+    fn anchor_content_exists(
+        conn: &Connection,
+        conversation_id: Option<&str>,
+        content: &str,
+        personality_id: &str,
+    ) -> Result<bool, MemoryError> {
+        let n: i64 = match conversation_id {
+            Some(cid) => conn.query_row(
+                "SELECT COUNT(*) FROM anchors WHERE conversation_id = ?1 AND content = ?2 AND personality_id = ?3",
+                params![cid, content, personality_id],
+                |r| r.get(0),
+            )?,
+            None => conn.query_row(
+                "SELECT COUNT(*) FROM anchors WHERE conversation_id IS NULL AND content = ?2 AND personality_id = ?1",
+                params![personality_id, content],
+                |r| r.get(0),
+            )?,
+        };
+        Ok(n > 0)
     }
 
     fn prepare_recall_query(raw: &str) -> RecallQueryExpansion {
@@ -1278,14 +1458,17 @@ impl MemoryAnchor {
             }
         };
 
-        if terms.is_empty() {
-            let needle: String = query.trim().chars().take(120).collect();
-            if needle.len() < 2 {
-                return Ok(vec![]);
-            }
-            let pat = format!("%{}%", escape_like(&needle));
+        let full_needle: String = query.trim().chars().take(120).collect();
+        if full_needle.chars().count() >= 3 {
+            let pat = format!("%{}%", escape_like(&full_needle));
             let batch = Self::query_messages_global_one(conn, &pat, take_i, personality_id)?;
             push_batch(batch, &mut seen, &mut out);
+        }
+
+        if terms.is_empty() {
+            if out.is_empty() && full_needle.chars().count() < 3 {
+                return Ok(vec![]);
+            }
         } else {
             let per_query = (take_i).min(12);
             for term in terms.iter().take(14) {
@@ -1336,14 +1519,14 @@ impl MemoryAnchor {
         Ok(batch)
     }
 
-    /// Hybrid: FTS5 + LIKE on anchors; optional message LIKE in thread. Semantic path reserved
-    /// when query embeddings exist (log-only today when anchors carry vectors).
+    /// Hybrid: FTS5 + keyword + optional cosine similarity on anchor embeddings.
     fn hybrid_recall(
         &self,
         query: &str,
         scope_conversation_id: Option<&str>,
         anchor_limit: usize,
         message_limit: usize,
+        query_embedding: Option<&[f32]>,
     ) -> Result<MemoryRecallBundle, MemoryError> {
         let q = query.trim();
         if q.is_empty() {
@@ -1407,12 +1590,22 @@ impl MemoryAnchor {
         }
 
         let pat = format!("%{}%", escape_like(q));
+        let pat_lower = format!("%{}%", escape_like(&q.to_lowercase()));
         for a in Self::keyword_like_anchors(&conn, &pat, scope, alim, &personality_id)? {
             let bump = 1.5 + (a.importance as f64).ln_1p() * 0.35;
             scores
                 .entry(a.id.clone())
                 .and_modify(|s| *s += bump)
                 .or_insert(bump);
+        }
+        if pat_lower != pat {
+            for a in Self::keyword_like_anchors(&conn, &pat_lower, scope, alim, &personality_id)? {
+                let bump = 1.2 + (a.importance as f64).ln_1p() * 0.3;
+                scores
+                    .entry(a.id.clone())
+                    .and_modify(|s| *s += bump)
+                    .or_insert(bump);
+            }
         }
 
         let primary_set: HashSet<String> = exp.primary.iter().cloned().collect();
@@ -1441,6 +1634,32 @@ impl MemoryAnchor {
             }
         }
 
+        if let Some(q_emb) = query_embedding {
+            let semantic_hits =
+                Self::semantic_anchor_scores(
+                    &conn,
+                    q_emb,
+                    scope,
+                    &personality_id,
+                    (alim as usize).saturating_mul(4),
+                )?;
+            eprintln!(
+                "nova: hybrid_recall semantic hits: {} (query dim {})",
+                semantic_hits.len(),
+                q_emb.len()
+            );
+            for (id, sim) in semantic_hits {
+                if sim < 0.28 {
+                    continue;
+                }
+                let bump = (sim as f64) * 10.0 + 1.5;
+                scores
+                    .entry(id)
+                    .and_modify(|s| *s += bump)
+                    .or_insert(bump);
+            }
+        }
+
         let mut anchor_ids: Vec<String> = scores.keys().cloned().collect();
         anchor_ids.sort_by(|a, b| {
             let sa = scores.get(a).copied().unwrap_or(0.0);
@@ -1450,19 +1669,10 @@ impl MemoryAnchor {
         anchor_ids.truncate(anchor_limit.max(1).min(64));
 
         let mut anchors: Vec<StoredAnchor> = Vec::new();
-        let mut semantic_ready = 0usize;
         for id in anchor_ids {
             if let Some(a) = Self::anchor_by_id(&conn, &id, &personality_id)? {
-                if a.has_embedding {
-                    semantic_ready += 1;
-                }
                 anchors.push(a);
             }
-        }
-        if semantic_ready > 0 {
-            eprintln!(
-                "nova: memory recall — {semantic_ready} hit(s) carry embeddings (semantic rank deferred; using FTS/keyword)"
-            );
         }
 
         anchors.sort_by(|a, b| {
@@ -1709,21 +1919,15 @@ impl ConversationMemory for MemoryAnchor {
             self.assert_conversation_exists(cid)?;
         }
         let pid = self.active_personality()?;
-        let id = Uuid::new_v4().to_string();
         let conn = self.conn()?;
-        conn.execute(
-            "INSERT INTO anchors (id, conversation_id, anchor_type, content, importance, personality_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![
-                id,
-                conversation_id,
-                anchor_type.as_db_str(),
-                content,
-                importance,
-                pid
-            ],
-        )?;
-        Ok(id)
+        Self::insert_anchor_row(
+            &conn,
+            conversation_id,
+            anchor_type,
+            content,
+            importance,
+            &pid,
+        )
     }
 
     fn create_anchor_from_conversation(
@@ -1744,24 +1948,70 @@ impl ConversationMemory for MemoryAnchor {
 
         let mut ids = Vec::new();
         let pid = self.active_personality()?;
+        let conn = self.conn()?;
         for text in candidates.into_iter().take(max_anchors) {
-            let dup: i64 = {
-                let conn = self.conn()?;
-                conn.query_row(
-                    "SELECT COUNT(*) FROM anchors WHERE conversation_id = ?1 AND content = ?2 AND personality_id = ?3",
-                    params![conversation_id, &text, pid],
-                    |r| r.get(0),
-                )?
-            };
-            if dup > 0 {
-                continue;
+            if !Self::anchor_content_exists(&conn, Some(conversation_id), &text, &pid)? {
+                ids.push(Self::insert_anchor_row(
+                    &conn,
+                    Some(conversation_id),
+                    AnchorType::Raw,
+                    &text,
+                    1,
+                    &pid,
+                )?);
             }
-            ids.push(self.create_anchor(
-                Some(conversation_id),
-                AnchorType::Raw,
-                &text,
-                1,
-            )?);
+            if !Self::anchor_content_exists(&conn, None, &text, &pid)? {
+                let _ = Self::insert_anchor_row(&conn, None, AnchorType::Raw, &text, 2, &pid)?;
+            }
+        }
+        Ok(ids)
+    }
+
+    fn ingest_user_message_anchors(
+        &self,
+        conversation_id: &str,
+        content: &str,
+    ) -> Result<Vec<String>, MemoryError> {
+        self.assert_conversation_exists(conversation_id)?;
+        let trimmed = content.trim();
+        if trimmed.chars().count() < ANCHOR_EXTRACT_MIN_CHARS {
+            return Ok(vec![]);
+        }
+
+        let candidates: Vec<String> = anchor_candidates_from_user_message(trimmed)
+            .into_iter()
+            .take(AUTO_INGEST_MAX_PER_MESSAGE)
+            .collect();
+        if candidates.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let pid = self.active_personality()?;
+        let conn = self.conn()?;
+        let mut ids = Vec::new();
+
+        for text in candidates {
+            if !Self::anchor_content_exists(&conn, Some(conversation_id), &text, &pid)? {
+                let id = Self::insert_anchor_row(
+                    &conn,
+                    Some(conversation_id),
+                    AnchorType::Raw,
+                    &text,
+                    1,
+                    &pid,
+                )?;
+                ids.push(id);
+            }
+            if !Self::anchor_content_exists(&conn, None, &text, &pid)? {
+                let _ = Self::insert_anchor_row(&conn, None, AnchorType::Raw, &text, 2, &pid)?;
+            }
+        }
+
+        if !ids.is_empty() {
+            eprintln!(
+                "nova: auto-ingested {} thread anchor(s) from user message (global copies when new)",
+                ids.len()
+            );
         }
         Ok(ids)
     }
@@ -1773,7 +2023,7 @@ impl ConversationMemory for MemoryAnchor {
         limit: usize,
     ) -> Result<Vec<StoredAnchor>, MemoryError> {
         Ok(self
-            .hybrid_recall(query, scope_conversation_id, limit, 0)?
+            .hybrid_recall(query, scope_conversation_id, limit, 0, None)?
             .anchors)
     }
 
@@ -1783,13 +2033,108 @@ impl ConversationMemory for MemoryAnchor {
         scope_conversation_id: Option<&str>,
         anchor_limit: usize,
         message_limit: usize,
+        query_embedding: Option<&[f32]>,
     ) -> Result<MemoryRecallBundle, MemoryError> {
         self.hybrid_recall(
             query,
             scope_conversation_id,
             anchor_limit.max(1).min(64),
             message_limit.max(0).min(24),
+            query_embedding,
         )
+    }
+
+    fn upsert_memory_anchor(
+        &self,
+        conversation_id: Option<&str>,
+        anchor_type: AnchorType,
+        content: &str,
+        importance: i32,
+    ) -> Result<String, MemoryError> {
+        if let Some(cid) = conversation_id {
+            self.assert_conversation_exists(cid)?;
+        }
+        let trimmed = content.trim();
+        if trimmed.is_empty() {
+            return Err(MemoryError::InvalidAnchorType("anchor content is empty".into()));
+        }
+        let pid = self.active_personality()?;
+        let conn = self.conn()?;
+        if let Some(existing) =
+            Self::anchor_id_for_content(&conn, conversation_id, trimmed, &pid)?
+        {
+            let imp = importance.clamp(1, 5);
+            conn.execute(
+                "UPDATE anchors SET importance = MAX(importance, ?1) WHERE id = ?2 AND personality_id = ?3",
+                params![imp, existing, pid],
+            )?;
+            return Ok(existing);
+        }
+        Self::insert_anchor_row(
+            &conn,
+            conversation_id,
+            anchor_type,
+            trimmed,
+            importance.clamp(1, 5),
+            &pid,
+        )
+    }
+
+    fn set_anchor_embedding(
+        &self,
+        anchor_id: &str,
+        embedding_blob: &[u8],
+        _model_label: &str,
+    ) -> Result<(), MemoryError> {
+        let pid = self.active_personality()?;
+        let conn = self.conn()?;
+        let n = conn.execute(
+            "UPDATE anchors SET embedding = ?1 WHERE id = ?2 AND personality_id = ?3",
+            params![embedding_blob, anchor_id, pid],
+        )?;
+        if n == 0 {
+            return Err(MemoryError::InvalidAnchorType(format!(
+                "anchor not found: {anchor_id}"
+            )));
+        }
+        Ok(())
+    }
+
+    fn list_anchors_without_embedding(&self, limit: usize) -> Result<Vec<StoredAnchor>, MemoryError> {
+        let pid = self.active_personality()?;
+        let lim: i64 = limit.try_into().unwrap_or(i64::MAX);
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, conversation_id, anchor_type, content, importance, embedding, created_at
+             FROM anchors
+             WHERE personality_id = ?1 AND (embedding IS NULL OR length(embedding) < 5)
+             ORDER BY datetime(created_at) DESC
+             LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![pid, lim], MemoryAnchor::row_to_anchor)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(MemoryError::from)
+    }
+
+    fn clear_all_embeddings(&self) -> Result<(), MemoryError> {
+        let pid = self.active_personality()?;
+        let conn = self.conn()?;
+        conn.execute(
+            "UPDATE anchors SET embedding = NULL WHERE personality_id = ?1",
+            [pid],
+        )?;
+        Ok(())
+    }
+
+    fn count_anchors_with_embedding(&self) -> Result<u32, MemoryError> {
+        let pid = self.active_personality()?;
+        let conn = self.conn()?;
+        let n: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM anchors
+             WHERE personality_id = ?1 AND embedding IS NOT NULL AND length(embedding) > 4",
+            [pid],
+            |r| r.get(0),
+        )?;
+        Ok(n.try_into().unwrap_or(0))
     }
 
     fn list_anchors_for_thread(
@@ -1981,6 +2326,72 @@ mod anchor_storage_tests {
         let list = ConversationMemory::list_anchors_for_thread(&mem, &conv_id, 50).expect("list");
         let got = list.iter().find(|a| a.id == aid).expect("row");
         assert_eq!(got.content, body);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn recall_query_vision_expands_to_colorblind() {
+        let exp = MemoryAnchor::prepare_recall_query("Do you know anything about my vision?");
+        assert!(exp.primary.iter().any(|t| t == "vision"));
+        assert!(
+            exp.expanded.iter().any(|t| t == "colorblind"),
+            "vision queries should expand to colorblind for lexical recall: {:?}",
+            exp.expanded
+        );
+    }
+
+    #[test]
+    fn extract_anchors_from_conversation_inserts_without_deadlock() {
+        let dir = std::env::temp_dir().join(format!("nova_mem_extract_{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        let path = dir.join("m.sqlite");
+        let mem =
+            MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
+        let conv = ConversationMemory::create_conversation(&mem, "extract-test").expect("conv");
+        ConversationMemory::store_message(
+            &mem,
+            &conv,
+            MessageRole::User,
+            "I am colorblind and prefer high-contrast themes for all UI work.",
+            None,
+            None,
+        )
+        .expect("msg");
+        let ids = ConversationMemory::create_anchor_from_conversation(&mem, &conv, 8)
+            .expect("extract must not deadlock on conn mutex");
+        assert!(!ids.is_empty());
+        let list = ConversationMemory::list_anchors_for_thread(&mem, &conv, 50).expect("list");
+        assert!(!list.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ingest_user_message_creates_global_anchor() {
+        let dir = std::env::temp_dir().join(format!("nova_mem_ingest_{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        let path = dir.join("m.sqlite");
+        let mem =
+            MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
+        let conv = ConversationMemory::create_conversation(&mem, "t1").expect("conv");
+        let ids = ConversationMemory::ingest_user_message_anchors(
+            &mem,
+            &conv,
+            "I am colorblind and prefer high-contrast themes.",
+        )
+        .expect("ingest");
+        assert!(!ids.is_empty());
+        let bundle =
+            ConversationMemory::memory_recall(&mem, "vision", None, 8, 4, None).expect("recall");
+        assert!(
+            bundle.anchors.iter().any(|a| a.content.to_lowercase().contains("colorblind"))
+                || bundle
+                    .messages
+                    .iter()
+                    .any(|m| m.content.to_lowercase().contains("colorblind")),
+            "vision recall should surface colorblind fact: anchors={:?} msgs={:?}",
+            bundle.anchors,
+            bundle.messages
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

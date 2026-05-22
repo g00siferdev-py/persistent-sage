@@ -7,7 +7,8 @@ use tauri::{AppHandle, Emitter, State};
 use std::path::Path;
 
 use crate::attachments::{self, model_supports_vision};
-use crate::memory::{ConversationMemory, MemoryRecallBundle, MessageRole, DEFAULT_PERSONALITY_ID};
+use crate::memory::{ConversationMemory, MessageRole, StoredMessage, DEFAULT_PERSONALITY_ID};
+use std::time::Duration;
 use crate::provider::{
     build_engine, ChatSendResult, ChatTurn, CompletionRequest, CompletionResponse, LLMProviderEngine,
     ProviderError, StreamChunk, ToolCall, ToolDefinition,
@@ -47,43 +48,13 @@ fn should_auto_memory_recall(user_text: &str) -> bool {
         "favorite",
         "preference",
         "previously said",
+        "vision",
+        "colorblind",
+        "colourblind",
+        "about my",
+        "know about",
     ];
     KEYS.iter().any(|k| lower.contains(k))
-}
-
-fn format_recall_for_prompt(bundle: &MemoryRecallBundle, max_chars: usize) -> String {
-    let mut out = String::new();
-    if !bundle.anchors.is_empty() {
-        out.push_str("**Anchors**\n");
-        for a in &bundle.anchors {
-            out.push_str(&format!(
-                "- [{}] (importance {}): {}\n",
-                a.anchor_type, a.importance, a.content
-            ));
-        }
-        out.push('\n');
-    }
-    if !bundle.messages.is_empty() {
-        out.push_str("**Related past messages**\n");
-        for m in &bundle.messages {
-            let label = match m.role {
-                MessageRole::User => "User",
-                MessageRole::Assistant => "Assistant",
-            };
-            let snippet: String = m.content.chars().take(200).collect();
-            let thread = match (&m.conversation_title, &m.conversation_id) {
-                (Some(title), _) if !title.trim().is_empty() => format!(" [thread: {title}]"),
-                (_, Some(id)) if !id.trim().is_empty() => format!(" [thread id: {id}]"),
-                _ => String::new(),
-            };
-            out.push_str(&format!("- **{label}**{thread}: {snippet}\n"));
-        }
-    }
-    if out.chars().count() > max_chars {
-        out.chars().take(max_chars.saturating_sub(1)).collect::<String>() + "…"
-    } else {
-        out
-    }
 }
 
 fn emit_synthetic_stream_deltas(app: &AppHandle, conversation_id: &str, text: &str) {
@@ -256,6 +227,7 @@ async fn apply_tool_round_messages(
     database_allow_write: bool,
     browser_ignore_robots: bool,
     personality: Option<&crate::personality::PersonalityManager>,
+    memory_tools: Option<(&crate::settings::SettingsManager, &dyn ConversationMemory)>,
     messages: &mut Vec<ChatTurn>,
     round: &CompletionResponse,
     backend: AgentWebToolBackend,
@@ -279,6 +251,7 @@ async fn apply_tool_round_messages(
                     database_allow_write,
                     browser_ignore_robots,
                     personality,
+                    memory_tools,
                     &tc.name,
                     &tc.arguments_json,
                 )
@@ -317,6 +290,7 @@ async fn apply_tool_round_messages(
                     database_allow_write,
                     browser_ignore_robots,
                     personality,
+                    memory_tools,
                     &tc.name,
                     &tc.arguments_json,
                 )
@@ -356,6 +330,7 @@ async fn apply_tool_round_messages(
                     database_allow_write,
                     browser_ignore_robots,
                     personality,
+                    memory_tools,
                     &tc.name,
                     &tc.arguments_json,
                 )
@@ -394,6 +369,7 @@ async fn agent_complete_with_tools(
     database_allow_write: bool,
     browser_ignore_robots: bool,
     personality: Option<&crate::personality::PersonalityManager>,
+    memory_tools: Option<(&crate::settings::SettingsManager, &dyn ConversationMemory)>,
     mut messages: Vec<ChatTurn>,
     max_tokens: Option<u32>,
     temperature: f32,
@@ -438,6 +414,7 @@ async fn agent_complete_with_tools(
             database_allow_write,
             browser_ignore_robots,
             personality,
+            memory_tools,
             &mut messages,
             &round,
             backend,
@@ -459,6 +436,7 @@ async fn try_complete_after_embedded_tool_xml(
     database_allow_write: bool,
     browser_ignore_robots: bool,
     personality: Option<&crate::personality::PersonalityManager>,
+    memory_tools: Option<(&crate::settings::SettingsManager, &dyn ConversationMemory)>,
     mut messages: Vec<ChatTurn>,
     assistant_xml: &str,
     max_tokens: Option<u32>,
@@ -489,6 +467,7 @@ async fn try_complete_after_embedded_tool_xml(
         database_allow_write,
         browser_ignore_robots,
         personality,
+        memory_tools,
         &mut messages,
         &round,
         backend,
@@ -503,6 +482,7 @@ async fn try_complete_after_embedded_tool_xml(
         database_allow_write,
         browser_ignore_robots,
         personality,
+        memory_tools,
         messages,
         max_tokens,
         temperature,
@@ -519,9 +499,9 @@ fn user_facing_tool_markup_message(provider_id: &str, has_images: bool) -> Strin
                 image is attached with local Ollama. Send the request without an image, or switch provider."
             .into();
     }
-    "I tried to call a built-in tool, but tool execution was not active for this turn. In Settings → Tools, \
-     enable **Allow web tools** and/or **Allow personality self-edit**, use OpenAI/Ollama/Anthropic (not Placeholder), \
-     and pick a tool-capable model."
+    "I tried to call a built-in tool, but tool execution was not active for this turn. Use OpenAI/Ollama/Anthropic \
+     (not Placeholder) with a tool-capable model. Enable **Allow web tools** in Settings → Tools if needed; \
+     **Memory Search** is available whenever a real provider is selected."
         .into()
 }
 
@@ -576,6 +556,17 @@ async fn run_chat_completion(
     if personality_edit_enabled {
         tool_definitions.extend(crate::personality_tools::tool_definitions());
     }
+    let provider_id = engine.provider_id();
+    let memory_tools_active = provider_id != "placeholder";
+    if memory_tools_active {
+        tool_definitions.extend(crate::memory_tools::tool_definitions());
+    }
+    let memory_tools_ctx = memory_tools_active.then(|| {
+        (
+            &*state.settings,
+            state.memory.as_ref() as &dyn ConversationMemory,
+        )
+    });
     let workspace_root_for_tools = state
         .settings
         .agent_workspace_enabled()
@@ -587,7 +578,6 @@ async fn run_chat_completion(
         personality_edit_enabled.then(|| state.personality.as_ref());
 
     let has_images = attachments::messages_include_images(&messages);
-    let provider_id = engine.provider_id();
     // Ollama often ignores `images` when `tools` are present — prefer vision over tools for that turn.
     let agent_tool_backend = (!tool_definitions.is_empty())
         .then(|| web_tool_backend_for_provider(provider_id))
@@ -614,6 +604,9 @@ async fn run_chat_completion(
                 if personality_edit_enabled {
                     system.content
                         .push_str(crate::personality_tools::personality_system_hint());
+                }
+                if memory_tools_active {
+                    system.content.push_str(crate::memory_tools::memory_system_hint());
                 }
             }
         }
@@ -648,6 +641,7 @@ async fn run_chat_completion(
             database_allow_write,
             browser_ignore_robots,
             personality_for_tools,
+            memory_tools_ctx,
             messages,
             max_tokens,
             temperature,
@@ -751,6 +745,7 @@ async fn run_chat_completion(
                     database_allow_write,
                     browser_ignore_robots,
                     personality_for_tools,
+                    memory_tools_ctx,
                     messages_for_tool_recovery,
                     &full,
                     max_tokens,
@@ -796,6 +791,10 @@ pub struct PendingImage {
     pub mime: String,
 }
 
+/// Messages loaded into the model context (smaller = faster prep on long threads).
+const CHAT_CONTEXT_RECENT: usize = 32;
+const CHAT_PREP_TIMEOUT: Duration = Duration::from_secs(12);
+
 /// One user turn on an existing conversation — same path for manual send and scheduled Pulse.
 pub async fn execute_chat_turn(
     app: &AppHandle,
@@ -816,6 +815,14 @@ pub async fn execute_chat_turn(
     } else {
         pid
     };
+
+    let _ = app.emit(
+        "chat:stream-start",
+        ChatStreamStart {
+            conversation_id: conversation_id.to_string(),
+        },
+    );
+
     state
         .personality
         .set_active_profile_id(pid)
@@ -839,50 +846,102 @@ pub async fn execute_chat_turn(
     }
 
     let (img_rel, img_mime) = match &pending_image {
-        Some(p) => (Some(p.rel_path.as_str()), Some(p.mime.as_str())),
+        Some(p) => (Some(p.rel_path.clone()), Some(p.mime.clone())),
         None => (None, None),
     };
 
-    state
-        .memory
-        .store_message(conversation_id, MessageRole::User, text, img_rel, img_mime)
-        .map_err(|e| e.to_string())?;
-
-    let _ = app.emit(
-        "chat:stream-start",
-        ChatStreamStart {
-            conversation_id: conversation_id.to_string(),
-        },
-    );
-
     let companion_label = state.personality.companion_display_name();
-    let mut briefing = state
-        .memory
-        .get_startup_briefing(conversation_id, &companion_label)
-        .map_err(|e| e.to_string())?;
-
+    let memory = state.memory.clone();
+    let conv_id = conversation_id.to_string();
+    let user_text = text.to_string();
     let recall_source = if !text.is_empty() {
-        text
+        text.to_string()
     } else {
-        "image attachment"
+        "image attachment".into()
     };
-    if should_auto_memory_recall(recall_source) {
-        let recall_q: String = recall_source.chars().take(520).collect();
-        match state.memory.memory_recall(&recall_q, None, 12, 14) {
-            Ok(bundle) if !bundle.anchors.is_empty() || !bundle.messages.is_empty() => {
-                let block = format_recall_for_prompt(&bundle, 1_800);
-                briefing.push_str("\n\n## Retrieved memory (auto)\n\n");
-                briefing.push_str(&block);
-            }
-            Ok(_) => {}
-            Err(e) => eprintln!("nova: memory auto-recall failed: {e}"),
-        }
-    }
+    let companion_for_prep = companion_label.clone();
 
-    let recent = state
-        .memory
-        .get_recent(conversation_id, 48)
-        .map_err(|e| e.to_string())?;
+    let prep = tokio::time::timeout(
+        CHAT_PREP_TIMEOUT,
+        tokio::task::spawn_blocking(move || -> Result<(String, Vec<StoredMessage>), String> {
+            memory
+                .store_message(
+                    &conv_id,
+                    MessageRole::User,
+                    &user_text,
+                    img_rel.as_deref(),
+                    img_mime.as_deref(),
+                )
+                .map_err(|e| e.to_string())?;
+
+            let mut briefing = memory
+                .get_startup_briefing(&conv_id, &companion_for_prep)
+                .map_err(|e| e.to_string())?;
+
+            if should_auto_memory_recall(&recall_source) {
+                let recall_q: String = recall_source.chars().take(520).collect();
+                match memory.memory_recall(&recall_q, None, 8, 4, None) {
+                    Ok(bundle)
+                        if !bundle.anchors.is_empty() || !bundle.messages.is_empty() =>
+                    {
+                        let block = crate::memory_tools::format_recall_for_prompt(&bundle, 1_800);
+                        briefing.push_str("\n\n## Retrieved memory (auto)\n\n");
+                        briefing.push_str(&block);
+                    }
+                    Ok(_) => {}
+                    Err(e) => eprintln!("nova: memory auto-recall failed: {e}"),
+                }
+            }
+
+            let recent = memory
+                .get_recent(&conv_id, CHAT_CONTEXT_RECENT)
+                .map_err(|e| e.to_string())?;
+            Ok((briefing, recent))
+        }),
+    )
+    .await;
+
+    let (briefing, recent) = match prep {
+        Ok(Ok(Ok(ok))) => ok,
+        Ok(Ok(Err(e))) => return Err(e),
+        Ok(Err(e)) => return Err(e.to_string()),
+        Err(_) => {
+            eprintln!(
+                "nova: chat prep timed out after {:?} — continuing with reduced context",
+                CHAT_PREP_TIMEOUT
+            );
+            let recent = state
+                .memory
+                .get_recent(conversation_id, CHAT_CONTEXT_RECENT)
+                .unwrap_or_default();
+            (
+                format!(
+                    "# Session context\n\n_Memory prep timed out; using transcript only._\n"
+                ),
+                recent,
+            )
+        }
+    };
+
+    if !text.is_empty() {
+        if !state.settings.memory_llm_extraction_enabled() {
+            let memory = state.memory.clone();
+            let conv = conversation_id.to_string();
+            let t = text.to_string();
+            tokio::task::spawn_blocking(move || {
+                if let Err(e) = memory.ingest_user_message_anchors(&conv, &t) {
+                    eprintln!("nova: auto-ingest anchors failed: {e}");
+                }
+            });
+        }
+        crate::memory_extract::spawn_post_message_memory(
+            state.http.clone(),
+            state.settings.clone(),
+            state.memory.clone(),
+            conversation_id.to_string(),
+            text.to_string(),
+        );
+    }
 
     let persona = state.personality.system_prompt_prefix();
     let system_content = {
@@ -897,10 +956,22 @@ pub async fn execute_chat_turn(
     let provider_id = engine.provider_id().to_string();
     let data_dir = state.data_directory.as_path();
 
+    let image_turn_id = recent
+        .iter()
+        .filter(|m| m.role == MessageRole::User && m.image_attachment.is_some())
+        .max_by_key(|m| m.id)
+        .map(|m| m.id);
+
     let mut messages: Vec<ChatTurn> = Vec::with_capacity(recent.len() + 1);
     messages.push(ChatTurn::text("system", system_content));
     for m in recent {
-        let mut turn = attachments::chat_turn_from_stored(&provider_id, data_dir, &m)?;
+        let include_image = image_turn_id == Some(m.id);
+        let mut turn = attachments::chat_turn_from_stored_with_image_policy(
+            &provider_id,
+            data_dir,
+            &m,
+            include_image,
+        )?;
         if m.role == MessageRole::Assistant
             && crate::agent_tools::content_has_embedded_tool_calls(&turn.content)
         {
