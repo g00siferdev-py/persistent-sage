@@ -2106,7 +2106,7 @@ dependencies = [
 
 [[package]]
 name = "nova"
-version = "0.2.0-beta.1"
+version = "0.2.0-beta.2"
 dependencies = [
  "argon2",
  "async-trait",

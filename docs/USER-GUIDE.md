@@ -86,13 +86,26 @@ Read-only panel in the sidebar: context Nova injects into the model (recent tran
 
 Anchors for the current thread plus global anchors (`conversation_id` null).
 
+### What is stored automatically
+
+Every chat message (user and assistant) is saved to SQLite in `nova_memory.sqlite` for that companion profile. That is separate from **anchors**, which are compact memory snippets used for recall.
+
+After each **user** message, Nova can store memory in two ways (Settings → General → **Memory**):
+
+1. **LLM memory extraction** (on by default) — A small JSON completion extracts durable facts (preferences, health, accessibility) as `fact` / `insight` / `curated` anchors (global or thread scope).
+2. **Heuristic raw anchors** — When LLM extraction is off, keyword heuristics create raw anchors (thread + global copies when new).
+
+### Semantic recall
+
+When **Semantic recall (embeddings)** is enabled, anchors are embedded in the background (not on every keystroke). During chat, the model can call **`memory_search`** for semantic + keyword recall; auto-injected briefing uses fast keyword/FTS only so the UI stays responsive. Use **Re-index memory embeddings** after changing provider or embedding model.
+
 ### Extract raw anchors
 
-Heuristic extraction from recent **user** messages in the active thread.
+**Not required for chat storage.** This button bulk-processes the last ~40 **user** messages in the **active thread only** and adds any missing raw anchors (useful after long chats or if auto-ingest missed something). It does not replace normal message history or LLM extraction.
 
 ### Hybrid recall search
 
-Keyword + FTS search across anchors and messages; may include cross-thread hits with conversation titles.
+Keyword + FTS + optional semantic search across anchors and **all threads** for this companion. Associative terms help (e.g. a query about “vision” also searches for “colorblind”).
 
 ---
 
@@ -141,6 +154,7 @@ For migrating a long-running OpenClaw agent with maximum fidelity, see [§ 11 Mi
 | Section | Purpose |
 |---------|---------|
 | **Generation** | Temperature, max output tokens |
+| **Memory** | LLM extraction, semantic recall, optional embedding model override, re-index embeddings |
 | **Pulse** | Enable timer, interval (minutes), instructions; runs in **sidebar-selected** thread |
 | **Data** | Reveal data folder, wipe memories, factory reset |
 | **About** | Backend version |
@@ -193,9 +207,9 @@ Full detail: [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md)
 | Topic | Status |
 |-------|--------|
 | Database encryption | Not implemented |
-| Light theme | Not implemented |
+| Light theme | Settings → General → Appearance → Dark mode (off = light) |
 | Browser-only `npm run dev` | No backend |
-| Semantic vector search | Schema ready; recall is FTS + keyword today |
+| Semantic vector search | Optional in Settings → Memory; hybrid with FTS + keyword |
 | Dedicated projects UI | Projects in briefing only |
 | Pulse + tools | Pulse uses normal chat path; tools follow same rules as manual send |
 

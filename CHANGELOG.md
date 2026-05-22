@@ -10,6 +10,30 @@ _Nothing yet._
 
 ---
 
+## [0.2.0-beta.2] — 2026-05-19
+
+Post-beta polish: semantic memory, UI theme, settings clarity, and anchor extraction stability.
+
+### Added
+
+- **Semantic memory** — LLM JSON extraction after user messages; hybrid FTS/keyword + cosine recall; `memory_search` agent tool; background embedding (OpenAI, Ollama, Ollama Cloud); **Re-index memory embeddings** in Settings → General → Memory.
+- **Light theme** — Settings → General → Appearance → **Dark mode** toggle; preference stored in `localStorage` (`nova-theme`).
+- **Friendly tool labels** — Settings and agent prompts show names like “Web Search” while internal ids stay unchanged (`toolDisplayNames.ts`).
+
+### Changed
+
+- **Settings → Tools** — Dependent toggles nested with visual hierarchy (browser fetch under web tools, DB writes under app data query).
+- **Chat prep** — Non-blocking memory pipeline, prep timeout, lexical-only auto-recall on hot path; stream start emitted earlier.
+- **USER-GUIDE** — Memory section documents auto-ingest, semantic recall, and extract-raw scope.
+
+### Fixed
+
+- **Extract raw anchors** — SQLite mutex deadlock when bulk-extracting anchors (UI freeze/crash).
+- **Anchor ingest / upsert** — Same re-entrant lock pattern in auto-ingest and memory upsert.
+- **Ollama Cloud embeddings** — `embed_texts` routes `ollama_cloud` like local Ollama.
+
+---
+
 ## [0.2.0-beta.1] — 2026-05-19
 
 **Nova is ready for beta testing.** See [README.md](./README.md#beta-testing) for how to install from source, report issues, and contribute.
