@@ -9,9 +9,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "branding:nsis": "python3 scripts/generate-nsis-branding.py",
+    "branding:nsis": "node scripts/generate-nsis-branding.mjs",
     "branding:icons": "npx tauri icon packaging/branding/NovaIcon1024.png -o src-tauri/icons",
-    "build:windows-installer": "npm run branding:nsis && npm run build && tauri build",
+    "build:windows-installer": "npm run build && tauri build",
     "package:portable": "node scripts/package-portable.mjs"
   },
   "dependencies": {
@@ -27,6 +27,7 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4.3.0",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"

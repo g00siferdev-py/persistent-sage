@@ -19,8 +19,13 @@ From the repository root:
 
 ```bat
 npm install
-npm run branding:nsis
 npm run build:windows-installer
+```
+
+Installer banner images (`packaging\windows\*.bmp`) are already in the repo. Regenerate only after changing logos:
+
+```bat
+npm run branding:nsis
 ```
 
 Output (when bundling succeeds):
@@ -62,6 +67,7 @@ Creates `dist\NovaPortable\` with `nova.exe`, `Start-Nova-Portable.bat`, and `RE
 
 | Issue | Fix |
 |-------|-----|
+| `python` / `python3` not found | Use current `main` — `build:windows-installer` no longer needs Python. Run `git pull` then `npm install`. |
 | `npm run tauri build` but no `bundle\` folder | Install **NSIS** and re-run. Check the log for `bundling` / `error`. |
 | App won't start | Install [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) |
 | SmartScreen warning | Unsigned beta build → **More info → Run anyway** |
