@@ -1,6 +1,6 @@
 [package]
 name = "nova"
-version = "0.2.0-beta.2"
+version = "0.2.0-beta.3"
 description = "Nova — portable AI companion platform (Tauri shell)"
 authors = ["g00siferdev-py"]
 edition = "2021"

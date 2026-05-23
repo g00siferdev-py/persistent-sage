@@ -38,7 +38,8 @@ use provider::{
 use personality::{PersonalityFile, PersonalityManager, PersonalitySnapshot};
 use settings::{SettingsManager, SettingsUpdatePayload, SettingsView};
 use serde::Serialize;
-use tauri::State;
+use std::time::Duration;
+use tauri::{Manager, State};
 
 // --- App state ----------------------------------------------------------------
 
@@ -608,6 +609,18 @@ pub fn run() {
             data_directory,
         ))
         .setup(|app| {
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // Branded splash (~3.5s), then show main window.
+                tokio::time::sleep(Duration::from_millis(3_500)).await;
+                if let Some(splash) = handle.get_webview_window("splashscreen") {
+                    let _ = splash.close();
+                }
+                if let Some(main) = handle.get_webview_window("main") {
+                    let _ = main.show();
+                    let _ = main.set_focus();
+                }
+            });
             pulse::spawn_pulse_loop(app.handle().clone());
             Ok(())
         })

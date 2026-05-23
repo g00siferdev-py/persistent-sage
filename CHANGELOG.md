@@ -10,6 +10,24 @@ _Nothing yet._
 
 ---
 
+## [0.2.0-beta.3] — 2026-05-19
+
+Windows installer, portable packaging, first-run onboarding, and branding.
+
+### Added
+
+- **First-run onboarding** — Setup wizard (install type, provider, memory); **Settings → General → Run setup wizard again**.
+- **Windows NSIS installer** — Branded installer with WebView2 bootstrapper, Start Menu shortcuts, optional **Nova (Portable)** shortcut; see **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)**.
+- **Portable packaging** — `npm run package:portable` → `dist/NovaPortable/`; `NOVA_PORTABLE=1` via `Start-Nova-Portable.bat`.
+- **Splash screen** — Branded splash (~3.5s) on app start; logo in sidebar.
+- **Branding scripts** — `npm run branding:icons`, `npm run branding:nsis`; assets under `packaging/branding/`.
+
+### Changed
+
+- **Tauri icons** — Regenerated from Nova logo for installer and taskbar.
+
+---
+
 ## [0.2.0-beta.2] — 2026-05-19
 
 Post-beta polish: semantic memory, UI theme, settings clarity, and anchor extraction stability.

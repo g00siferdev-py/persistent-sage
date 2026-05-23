@@ -131,13 +131,16 @@ export function ConversationSidebar({
 
   return (
     <aside className="flex h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-r border-slate-200 dark:border-slate-800/80 bg-slate-100 dark:bg-slate-900/40">
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800/80 px-4 py-3">
+      <div className="flex items-center gap-3 border-b border-slate-200 dark:border-slate-800/80 px-4 py-3">
         <img
-          src="/nova-icon.svg"
-          alt=""
-          className="size-9 rounded-lg ring-1 ring-slate-700/80"
+          src="/nova-logo.png"
+          alt="Nova"
+          className="size-10 shrink-0 rounded-lg object-contain shadow-sm shadow-cyan-500/15 ring-1 ring-slate-300/80 dark:ring-cyan-500/25"
         />
         <div className="min-w-0">
+          <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            Nova
+          </p>
           <p className="truncate text-sm font-semibold tracking-tight text-slate-900 dark:text-white">
             {companionName}
           </p>

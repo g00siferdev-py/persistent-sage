@@ -1,0 +1,17 @@
+{
+  "bundle": {
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "nsis": {
+        "headerImage": "../packaging/windows/nsis-header.bmp",
+        "sidebarImage": "../packaging/windows/nsis-sidebar.bmp",
+        "installerIcon": "icons/icon.ico",
+        "installMode": "currentUser",
+        "startMenuFolder": "Nova",
+        "installerHooks": "../packaging/windows/installer-hooks.nsi"
+      }
+    }
+  }
+}

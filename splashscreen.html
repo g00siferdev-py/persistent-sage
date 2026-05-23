@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("nova-theme");
+          if (t !== "light" && t !== "dark") t = "dark";
+          document.documentElement.classList.toggle("dark", t === "dark");
+          document.documentElement.style.colorScheme = t;
+        } catch (e) {
+          document.documentElement.classList.add("dark");
+          document.documentElement.style.colorScheme = "dark";
+        }
+      })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/nova-logo.png" />
+    <title>Nova</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/splash-main.tsx"></script>
+  </body>
+</html>

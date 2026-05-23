@@ -28,6 +28,8 @@ type Props = {
   onCompanionActiveProfileChange?: (profileId: string) => void | Promise<void>;
   /** Profile id currently used for chat memory (from `useChat`). */
   chatActiveProfileId?: string;
+  /** Re-open the first-run setup wizard (from ChatLayout). */
+  onRequestOnboarding?: () => void;
 };
 
 const TOOLS_SECTION_INFO = (
@@ -172,6 +174,7 @@ type SettingsView = {
   hasOpenaiApiKey: boolean;
   hasAnthropicApiKey: boolean;
   hasOllamaApiKey: boolean;
+  onboardingCompleted: boolean;
 };
 
 type SettingsPatch = {
@@ -197,6 +200,7 @@ type SettingsPatch = {
   memoryLlmExtractionEnabled?: boolean;
   memorySemanticEnabled?: boolean;
   embeddingModel?: string;
+  onboardingCompleted?: boolean;
 };
 
 const MEMORY_LLM_INFO = (
@@ -396,6 +400,7 @@ export function SettingsPanel({
   onLayoutModeChange,
   onCompanionActiveProfileChange,
   chatActiveProfileId,
+  onRequestOnboarding,
 }: Props) {
   const { isDark, setDarkMode } = useTheme();
   const open = layoutMode !== "hidden";
@@ -1478,6 +1483,20 @@ export function SettingsPanel({
 
           {settingsTab === "general" ? (
             <>
+          <SettingsSection title="Setup" description="First-run wizard and install type.">
+            <button
+              type="button"
+              onClick={() => onRequestOnboarding?.()}
+              className="w-full rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 py-2.5 text-sm font-medium text-indigo-800 transition hover:bg-indigo-500/20 dark:text-indigo-200"
+            >
+              Run setup wizard again
+            </button>
+            <p className="text-[11px] text-slate-500">
+              Provider, API keys, and desktop vs USB storage tips. Windows installer guide:{" "}
+              <span className="font-mono text-slate-600 dark:text-slate-400">docs/INSTALL-WINDOWS.md</span>
+            </p>
+          </SettingsSection>
+
           <SettingsSection title="Appearance">
             <SettingsToggleCard
               id="dark-mode"

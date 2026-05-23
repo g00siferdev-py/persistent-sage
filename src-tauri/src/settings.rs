@@ -104,6 +104,9 @@ pub struct SettingsFile {
     pub embedding_model: String,
     #[serde(default)]
     pub encrypted_api_keys: HashMap<String, EncryptedApiKeyBlob>,
+    /// First-run setup wizard in the UI (provider + API keys).
+    #[serde(default)]
+    pub onboarding_completed: bool,
 }
 
 fn default_memory_llm_extraction() -> bool {
@@ -189,6 +192,7 @@ impl Default for SettingsFile {
             memory_semantic_enabled: true,
             embedding_model: String::new(),
             encrypted_api_keys: HashMap::new(),
+            onboarding_completed: false,
         }
     }
 }
@@ -222,6 +226,7 @@ pub struct SettingsView {
     pub has_openai_api_key: bool,
     pub has_anthropic_api_key: bool,
     pub has_ollama_api_key: bool,
+    pub onboarding_completed: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -251,6 +256,7 @@ pub struct SettingsUpdatePayload {
     pub memory_llm_extraction_enabled: Option<bool>,
     pub memory_semantic_enabled: Option<bool>,
     pub embedding_model: Option<String>,
+    pub onboarding_completed: Option<bool>,
 }
 
 // --- Crypto ------------------------------------------------------------------
@@ -550,6 +556,7 @@ impl SettingsManager {
                 inner.encrypted_api_keys.get("anthropic"),
             ),
             has_ollama_api_key: can_decrypt_api_blob(&self.aes_key, inner.encrypted_api_keys.get("ollama")),
+            onboarding_completed: inner.onboarding_completed,
         })
     }
 
@@ -820,6 +827,9 @@ impl SettingsManager {
         }
         if let Some(s) = patch.embedding_model {
             inner.embedding_model = s.trim().to_string();
+        }
+        if let Some(b) = patch.onboarding_completed {
+            inner.onboarding_completed = b;
         }
         inner.version = SETTINGS_VERSION;
         drop(inner);

@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
 **Repository:** [github.com/g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova)  
-**Status:** **Open beta** (`0.2.0-beta.1`) — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/project-nova/issues)
+**Status:** **Open beta** (`0.2.0-beta.3`) — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/project-nova/issues)
 
 ---
 
@@ -18,13 +18,13 @@ Nova is ready for **beta testers** who are comfortable building from source and 
 | Step | Action |
 |------|--------|
 | 1 | **Clone** — `git clone https://github.com/g00siferdev-py/project-nova.git && cd project-nova` |
-| 2 | **Install** — Follow **[docs/INSTALL.md](./docs/INSTALL.md)** (Rust, Node LTS, Tauri OS packages) |
+| 2 | **Install** — **[docs/INSTALL.md](./docs/INSTALL.md)** (all platforms); **Windows:** **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)** (installer + portable USB) |
 | 3 | **Run** — `npm install` then `npm run tauri dev` |
 | 4 | **Configure** — **Settings → Provider** (API key + model), then start a chat |
 | 5 | **Report** — Open an issue on [g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova/issues) with OS, provider, and steps to reproduce |
 | 6 | **Contribute** — See **[CONTRIBUTING.md](./CONTRIBUTING.md)** |
 
-Pre-built installers may appear under **GitHub Releases** as beta builds are published; until then, source install is the supported path.
+On **Windows**, build the installer with `npm run build:windows-installer` (requires [NSIS](https://nsis.sourceforge.io/)) or ship **`dist/NovaPortable/`** from `npm run package:portable`. Pre-built assets may appear under **GitHub Releases** as betas are published.
 
 ---
 

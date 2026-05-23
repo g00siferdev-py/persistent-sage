@@ -10,6 +10,7 @@ import {
   saveSettingsLayoutMode,
   type SettingsLayoutMode,
 } from "@/lib/settingsLayout";
+import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 
 /** Subset of `settings_get` for the main-window provider hint (no secrets). */
 type SettingsForHint = {
@@ -17,6 +18,7 @@ type SettingsForHint = {
   hasOpenaiApiKey: boolean;
   hasAnthropicApiKey: boolean;
   hasOllamaApiKey: boolean;
+  onboardingCompleted: boolean;
 };
 
 function truncate(s: string, max: number): string {
@@ -30,6 +32,8 @@ export function ChatLayout() {
     loadSettingsLayoutMode(),
   );
   const [backendHint, setBackendHint] = useState<string | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
   const prevSettingsLayoutMode = useRef<SettingsLayoutMode>(settingsLayoutMode);
 
   const setSettingsLayout = useCallback((mode: SettingsLayoutMode) => {
@@ -78,6 +82,19 @@ export function ChatLayout() {
   useEffect(() => {
     void loadBackendHint();
   }, [loadBackendHint]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const s = await invoke<SettingsForHint>("settings_get");
+        setShowOnboarding(!s.onboardingCompleted);
+      } catch {
+        setShowOnboarding(false);
+      } finally {
+        setOnboardingChecked(true);
+      }
+    })();
+  }, []);
 
   const {
     conversations,
@@ -129,7 +146,15 @@ export function ChatLayout() {
     : truncate(briefing, 120) || "Local SQLite · private by default";
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
+    <div className="relative flex h-full w-full overflow-hidden">
+      {onboardingChecked && showOnboarding ? (
+        <OnboardingWizard
+          onComplete={() => {
+            setShowOnboarding(false);
+            void loadBackendHint();
+          }}
+        />
+      ) : null}
       <ConversationSidebar
         conversations={conversations}
         hasThreadsInDatabase={conversationsForTitle.length > 0}
@@ -190,6 +215,7 @@ export function ChatLayout() {
         onCompanionActiveProfileChange={(profileId) =>
           void applyActivePersonality(profileId)
         }
+        onRequestOnboarding={() => setShowOnboarding(true)}
       />
     </div>
   );
