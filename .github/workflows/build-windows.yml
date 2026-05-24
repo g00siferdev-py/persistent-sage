@@ -46,7 +46,7 @@ jobs:
         run: npm ci
 
       - name: Build Tauri app (NSIS installer + exe)
-        run: npm run tauri build
+        run: npm run tauri build -- --bundles nsis
         env:
           # Safer on shared runners; omit to use default parallelism.
           CARGO_BUILD_JOBS: 2

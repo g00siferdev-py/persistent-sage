@@ -51,7 +51,7 @@ The same workflow runs, uploads artifacts, and creates a **draft prerelease** on
 | Workflow not listed | Push `.github/workflows/build-windows.yml` to the default branch |
 | `Resource not accessible by integration` | Enable **Read and write** workflow permissions (above) |
 | Artifact missing `*-setup.exe` | Open the failed job log; search for `nsis` / `bundling` errors |
-| MSI error about pre-release / `65535` | Windows CI builds **NSIS only** (`tauri.windows.conf.json`). Versions like `0.2.0-beta.3` are not valid for MSI/WiX. |
+| MSI error about pre-release / `65535` | MSI is excluded from bundle targets (WiX rejects `beta.3`). CI runs `tauri build -- --bundles nsis`. Pull latest `main` and re-run. |
 | Release not created | Only **tag** pushes (`v*`) create a Release; manual runs only upload Artifacts |
 
 For installing on a test PC after download, see **[INSTALL-WINDOWS.md](./INSTALL-WINDOWS.md)**.
