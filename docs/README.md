@@ -9,6 +9,8 @@ Nova is a **local-first desktop AI companion** (Tauri 2 + React + Rust). Everyth
 | Document | Audience | Contents |
 |----------|----------|----------|
 | [**INSTALL.md**](./INSTALL.md) | Everyone installing Nova | Prerequisites, clone, build, first-run configuration, environment variables |
+| [**INSTALL-WINDOWS.md**](./INSTALL-WINDOWS.md) | Windows testers | Installer, portable USB, troubleshooting |
+| [**BUILD-CI.md**](./BUILD-CI.md) | Low-RAM / no local build | GitHub Actions Windows installer + portable zip |
 | [**DATA-AND-PRIVACY.md**](./DATA-AND-PRIVACY.md) | Security-conscious users | What stays on disk, what is encrypted, what is **not** encrypted |
 | [**USER-GUIDE.md**](./USER-GUIDE.md) | Daily users | UI layout, chat, memory, settings, Pulse, OpenClaw migration |
 | [**ARCHITECTURE.md**](./ARCHITECTURE.md) | Developers | Stack, data flow, key modules, IPC surface |

@@ -6,6 +6,10 @@ Two supported ways to run Nova: **desktop install** (recommended) and **portable
 
 ## Option A — Windows installer (recommended for beta testers)
 
+### Build on GitHub (no local compile)
+
+If local `npm run build:windows-installer` fails (low RAM, missing tools), use **GitHub Actions** instead. See **[docs/BUILD-CI.md](./BUILD-CI.md)** — run **Actions → Build Windows**, then download the installer from **Artifacts** (or from a **Release** after pushing a `v*` tag).
+
 ### Prerequisites on the build machine
 
 1. [Node.js LTS](https://nodejs.org/)

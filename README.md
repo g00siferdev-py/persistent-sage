@@ -24,7 +24,7 @@ Nova is ready for **beta testers** who are comfortable building from source and 
 | 5 | **Report** — Open an issue on [g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova/issues) with OS, provider, and steps to reproduce |
 | 6 | **Contribute** — See **[CONTRIBUTING.md](./CONTRIBUTING.md)** |
 
-On **Windows**, build the installer with `npm run build:windows-installer` (requires [NSIS](https://nsis.sourceforge.io/)) or ship **`dist/NovaPortable/`** from `npm run package:portable`. Pre-built assets may appear under **GitHub Releases** as betas are published.
+On **Windows**, build locally with `npm run build:windows-installer` (requires [NSIS](https://nsis.sourceforge.io/)) or use **[GitHub Actions](./docs/BUILD-CI.md)** to build on `windows-latest` and download the installer. Pre-built assets may appear under **GitHub Releases** when you push a `v*` tag.
 
 ---
 
