@@ -55,3 +55,5 @@ The same workflow runs, uploads artifacts, and creates a **draft prerelease** on
 | Release not created | Only **tag** pushes (`v*`) create a Release; manual runs only upload Artifacts |
 
 For installing on a test PC after download, see **[INSTALL-WINDOWS.md](./INSTALL-WINDOWS.md)**.
+
+To ship builds to users, see **[PUBLISH.md](./PUBLISH.md)**.

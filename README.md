@@ -13,18 +13,17 @@
 
 ## Beta testing
 
-Nova is ready for **beta testers** who are comfortable building from source and filing issues when something breaks.
+Nova is in **open beta**. **Windows users** can install from **[GitHub Releases](https://github.com/g00siferdev-py/project-nova/releases)** (pre-built installer). Developers and other platforms: build from source below.
 
 | Step | Action |
 |------|--------|
-| 1 | **Clone** — `git clone https://github.com/g00siferdev-py/project-nova.git && cd project-nova` |
-| 2 | **Install** — **[docs/INSTALL.md](./docs/INSTALL.md)** (all platforms); **Windows:** **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)** (installer + portable USB) |
-| 3 | **Run** — `npm install` then `npm run tauri dev` |
-| 4 | **Configure** — **Settings → Provider** (API key + model), then start a chat |
-| 5 | **Report** — Open an issue on [g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova/issues) with OS, provider, and steps to reproduce |
-| 6 | **Contribute** — See **[CONTRIBUTING.md](./CONTRIBUTING.md)** |
+| 1 | **Windows install** — **[Releases](https://github.com/g00siferdev-py/project-nova/releases)** → download `Nova_*_x64-setup.exe` → run installer. See **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)** (portable USB, SmartScreen, troubleshooting). |
+| 2 | **Build from source** — `git clone https://github.com/g00siferdev-py/project-nova.git && cd project-nova` → **[docs/INSTALL.md](./docs/INSTALL.md)** (Linux/macOS; Windows optional local build). |
+| 3 | **Configure** — **Settings → Provider** (API key + model), then start a chat |
+| 4 | **Report** — [GitHub Issues](https://github.com/g00siferdev-py/project-nova/issues) with OS, Nova version, provider, steps to reproduce |
+| 5 | **Contribute** — **[CONTRIBUTING.md](./CONTRIBUTING.md)** |
 
-On **Windows**, build locally with `npm run build:windows-installer` (requires [NSIS](https://nsis.sourceforge.io/)) or use **[GitHub Actions](./docs/BUILD-CI.md)** to build on `windows-latest` and download the installer. Pre-built assets may appear under **GitHub Releases** when you push a `v*` tag.
+**Maintainers:** how to publish installers → **[docs/PUBLISH.md](./docs/PUBLISH.md)**. CI builds → **[docs/BUILD-CI.md](./docs/BUILD-CI.md)**.
 
 ---
 
@@ -33,6 +32,9 @@ On **Windows**, build locally with `npm run build:windows-installer` (requires [
 | Guide | Description |
 |-------|-------------|
 | **[docs/INSTALL.md](./docs/INSTALL.md)** | **Fresh install** — prerequisites, clone, build, first-run setup |
+| **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)** | **Windows users** — download from Releases, installer, portable USB |
+| **[docs/PUBLISH.md](./docs/PUBLISH.md)** | **Maintainers** — publish beta builds to GitHub Releases |
+| **[docs/BUILD-CI.md](./docs/BUILD-CI.md)** | CI Windows builds (Actions) |
 | **[docs/USER-GUIDE.md](./docs/USER-GUIDE.md)** | Day-to-day usage — chat, memory, settings, Pulse, OpenClaw migration |
 | **[docs/DATA-AND-PRIVACY.md](./docs/DATA-AND-PRIVACY.md)** | What is stored locally; **API keys encrypted**, **database not encrypted** |
 | **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** | Technical overview for developers |

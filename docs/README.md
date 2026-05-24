@@ -2,7 +2,7 @@
 
 Nova is a **local-first desktop AI companion** (Tauri 2 + React + Rust). Everything in this folder is written for beta testers, contributors, and anyone performing a **fresh install** from source.
 
-**Project:** [g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova) · **Version:** 0.2.0-beta.1 (open beta)
+**Project:** [g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova) · **Version:** 0.2.0-beta.3 (open beta)
 
 ## Start here
 
@@ -10,7 +10,8 @@ Nova is a **local-first desktop AI companion** (Tauri 2 + React + Rust). Everyth
 |----------|----------|----------|
 | [**INSTALL.md**](./INSTALL.md) | Everyone installing Nova | Prerequisites, clone, build, first-run configuration, environment variables |
 | [**INSTALL-WINDOWS.md**](./INSTALL-WINDOWS.md) | Windows testers | Installer, portable USB, troubleshooting |
-| [**BUILD-CI.md**](./BUILD-CI.md) | Low-RAM / no local build | GitHub Actions Windows installer + portable zip |
+| [**PUBLISH.md**](./PUBLISH.md) | Maintainers | Ship installers via GitHub Releases |
+| [**BUILD-CI.md**](./BUILD-CI.md) | Maintainers | GitHub Actions Windows builds |
 | [**DATA-AND-PRIVACY.md**](./DATA-AND-PRIVACY.md) | Security-conscious users | What stays on disk, what is encrypted, what is **not** encrypted |
 | [**USER-GUIDE.md**](./USER-GUIDE.md) | Daily users | UI layout, chat, memory, settings, Pulse, OpenClaw migration |
 | [**ARCHITECTURE.md**](./ARCHITECTURE.md) | Developers | Stack, data flow, key modules, IPC surface |

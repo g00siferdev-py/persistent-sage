@@ -1,42 +1,19 @@
 # Installing Nova on Windows (beta)
 
+Download the installer from **[GitHub Releases](https://github.com/g00siferdev-py/project-nova/releases)** (`Nova_*_x64-setup.exe`). No Node or Rust required.
+
 Two supported ways to run Nova: **desktop install** (recommended) and **portable** (USB / flash drive).
 
 ---
 
-## Option A — Windows installer (recommended for beta testers)
+## Option A — Windows installer (recommended)
 
-### Build on GitHub (no local compile)
+### Install from Releases
 
-If local `npm run build:windows-installer` fails (low RAM, missing tools), use **GitHub Actions** instead. See **[docs/BUILD-CI.md](./BUILD-CI.md)** — run **Actions → Build Windows**, then download the installer from **Artifacts** (or from a **Release** after pushing a `v*` tag).
-
-### Prerequisites on the build machine
-
-1. [Node.js LTS](https://nodejs.org/)
-2. [Rust](https://rustup.rs/)
-3. [Tauri Windows prerequisites](https://v2.tauri.app/start/prerequisites/) (Visual Studio Build Tools with **Desktop development with C++**)
-4. **[NSIS 3](https://nsis.sourceforge.io/Download)** — required for `*-setup.exe`. Add `makensis` to your PATH.
-
-### Build the installer
-
-From the repository root:
-
-```bat
-npm install
-npm run build:windows-installer
-```
-
-Installer banner images (`packaging\windows\*.bmp`) are already in the repo. Regenerate only after changing logos:
-
-```bat
-npm run branding:nsis
-```
-
-Output (when bundling succeeds):
-
-```text
-src-tauri\target\release\bundle\nsis\Nova_*_x64-setup.exe
-```
+1. Open **[Releases](https://github.com/g00siferdev-py/project-nova/releases)** and pick the latest beta (e.g. `v0.2.0-beta.3`).
+2. Download **`Nova_*_x64-setup.exe`**.
+3. Run the installer. If **SmartScreen** warns (unsigned beta): **More info → Run anyway**.
+4. Open **Nova** from the Start Menu and complete the **setup wizard**.
 
 The installer will:
 
@@ -47,15 +24,22 @@ The installer will:
   - **Start Nova (Portable)** — keeps `data\` next to `nova.exe` (USB-friendly)
 - Write `README.txt` in the install folder
 
-### First launch
+### Build from source (optional)
 
-Open **Nova** from the Start Menu. A short **setup wizard** helps you pick a provider and API key.
+Maintainers and developers: **[docs/BUILD-CI.md](./BUILD-CI.md)** (GitHub Actions) or install Node, Rust, and [NSIS](https://nsis.sourceforge.io/), then:
+
+```bat
+npm install
+npm run build:windows-installer
+```
+
+See **[docs/PUBLISH.md](./PUBLISH.md)** to publish builds for users.
 
 ---
 
 ## Option B — Portable folder (no installer)
 
-After `npm run tauri build`:
+From **Releases**, download **`NovaPortable.zip`**, or build locally (below).
 
 ```bat
 npm run package:portable
