@@ -25,7 +25,10 @@ if (!signature) {
   throw new Error(`Updater signature file is empty: ${sigPath}`);
 }
 
-const assetUrl = `https://github.com/${repo}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(installer)}`;
+// GitHub release uploads normalize spaces in asset names to dots while keeping
+// the display label human-friendly. The updater needs the actual asset name.
+const githubAssetName = installer.replace(/\s+/g, ".");
+const assetUrl = `https://github.com/${repo}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(githubAssetName)}`;
 
 const manifest = {
   version,
@@ -42,4 +45,4 @@ const manifest = {
 await mkdir(outDir, { recursive: true });
 await writeFile(outPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 console.log(`persistent-sage-updater: wrote ${outPath}`);
-console.log(`persistent-sage-updater: ${installer}`);
+console.log(`persistent-sage-updater: ${githubAssetName}`);
