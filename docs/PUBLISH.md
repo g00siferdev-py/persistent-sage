@@ -18,14 +18,14 @@ How to ship a **Windows installer** to users without asking them to compile from
 
 ### Option A — Tag + CI (automated draft)
 
-1. Confirm version in `package.json` and `src-tauri/tauri.conf.json` (e.g. `0.2.0-beta.7`).
+1. Confirm version in `package.json` and `src-tauri/tauri.conf.json` (e.g. `0.2.0-beta.8`).
 2. Update **[CHANGELOG.md](../CHANGELOG.md)** for that version.
 3. Commit and push `main`.
 4. Create and push a tag (must start with `v`):
 
    ```bash
-   git tag v0.2.0-beta.7
-   git push origin v0.2.0-beta.7
+   git tag v0.2.0-beta.8
+   git push origin v0.2.0-beta.8
    ```
 
 5. Wait for **Actions → Build Windows** to finish (triggered by the tag).
@@ -52,8 +52,8 @@ The Tauri updater uses GitHub's `releases/latest` endpoint, which excludes GitHu
 
 1. Download **Artifacts** from a successful **Build Windows** run.
 2. **Releases → Draft a new release**
-3. **Choose a tag:** create `v0.2.0-beta.7` on `main`.
-4. Title: `Persistent Sage 0.2.0-beta.7`
+3. **Choose a tag:** create `v0.2.0-beta.8` on `main`.
+4. Title: `Persistent Sage 0.2.0-beta.8`
 5. Leave **Set as a pre-release** unchecked for updater-enabled releases.
 6. Attach:
    - `Persistent.Sage_*_x64-setup.exe`
@@ -96,7 +96,7 @@ After publishing:
 
 1. Bump version in `package.json`, `src-tauri/tauri.conf.json`, `Cargo.toml` / lock if needed.
 2. CHANGELOG entry.
-3. Push `main`, then tag `v0.2.0-beta.7` (or next version).
+3. Push `main`, then tag `v0.2.0-beta.8` (or next version).
 4. Publish the draft Release when CI completes.
 
 To rebuild without a new tag: **Actions → Build Windows → Run workflow**, download artifact, attach to a **new** Release or replace assets on an unpublished draft (avoid replacing files on a release users already downloaded without noting it in release notes).

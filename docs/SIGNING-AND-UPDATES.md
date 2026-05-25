@@ -23,7 +23,7 @@ The Tauri updater checks this public metadata endpoint:
 https://github.com/g00siferdev-py/persistent-sage/releases/latest/download/latest.json
 ```
 
-For that endpoint to work, beta releases must be published as normal GitHub releases, not GitHub prereleases. The version number and release notes still identify the build as beta, for example `0.2.0-beta.7`.
+For that endpoint to work, beta releases must be published as normal GitHub releases, not GitHub prereleases. The version number and release notes still identify the build as beta, for example `0.2.0-beta.8`.
 
 Each updater-enabled release must include:
 

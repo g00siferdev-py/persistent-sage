@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.2.0-beta.8] — 2026-05-25
+
+### Fixed
+
+- **First-run setup API key entry** — selecting a cloud provider now shows the API-key box directly in setup and no longer blocks switching providers when another provider is missing a saved key.
+
+---
+
 ## [0.2.0-beta.7] — 2026-05-25
 
 ### Added

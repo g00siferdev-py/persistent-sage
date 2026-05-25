@@ -34,8 +34,8 @@ The zip contains:
 Create and push a version tag matching `package.json` / `tauri.conf.json`:
 
 ```bash
-git tag v0.2.0-beta.7
-git push origin v0.2.0-beta.7
+git tag v0.2.0-beta.8
+git push origin v0.2.0-beta.8
 ```
 
 Use the next current version.

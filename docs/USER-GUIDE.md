@@ -1,6 +1,6 @@
 # Persistent Sage user guide
 
-Complete guide to the Persistent Sage desktop application as shipped in **version 0.2.0-beta.7** (open beta).
+Complete guide to the Persistent Sage desktop application as shipped in **version 0.2.0-beta.8** (open beta).
 
 **Runtime requirement:** `npm run tauri dev` or an installed release build. Browser-only Vite preview cannot access chat, memory, or settings backends.
 

@@ -2,7 +2,7 @@
 #
 # Triggers:
 #   - Actions → "Build Windows" → Run workflow (any branch)
-#   - Push a version tag, e.g. v0.2.0-beta.7 → build + draft GitHub Release
+#   - Push a version tag, e.g. v0.2.0-beta.8 → build + draft GitHub Release
 #
 # Repo settings: Settings → Actions → General → Workflow permissions →
 #   "Read and write permissions" (required for tag releases).
