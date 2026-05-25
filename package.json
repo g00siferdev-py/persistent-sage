@@ -1,7 +1,7 @@
 {
   "name": "persistent-sage",
   "private": true,
-  "version": "0.2.0-beta.4",
+  "version": "0.2.0-beta.6",
   "description": "Persistent Sage — local-first AI companion desktop app (Tauri + React)",
   "type": "module",
   "scripts": {
