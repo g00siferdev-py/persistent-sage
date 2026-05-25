@@ -196,9 +196,7 @@ pub fn run_personality_tool(
                     }
                 }
                 _ => {
-                    return Err(tool_err(
-                        "avatarDescription must be a string or null",
-                    ));
+                    return Err(tool_err("avatarDescription must be a string or null"));
                 }
             };
 

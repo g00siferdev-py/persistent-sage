@@ -1,5 +1,5 @@
 /**
- * Import Nova `personality.json` exports and OpenClaw-style markdown identity files.
+ * Import Persistent Sage `personality.json` exports and OpenClaw-style markdown identity files.
  *
  * OpenClaw workspace identity layer (typical files):
  * - SOUL.md — core truths, boundaries, vibe, continuity
@@ -32,7 +32,7 @@ function normalizeProfile(raw: Record<string, unknown>, fallbackId: string): Per
   return {
     id: pickStr(raw, "id", "profileId") || fallbackId,
     profileName: pickStr(raw, "profileName", "profile_name", "name") || "Imported profile",
-    companionName: pickStr(raw, "companionName", "companion_name") || "Nova",
+    companionName: pickStr(raw, "companionName", "companion_name") || "Sage",
     corePersonality: pickStr(raw, "corePersonality", "core_personality"),
     toneOfVoice: pickStr(raw, "toneOfVoice", "tone_of_voice"),
     backgroundStory: pickStr(raw, "backgroundStory", "background_story"),
@@ -125,7 +125,7 @@ export function parsePersonalityJson(text: string): PersonalityJsonImport {
   }
 
   throw new Error(
-    "Unrecognized JSON shape. Expected Nova personality.json (with profiles[]) or a single profile object.",
+    "Unrecognized JSON shape. Expected personality.json (with profiles[]) or a single profile object.",
   );
 }
 
@@ -378,7 +378,7 @@ function bundleFileKinds(bundle: OpenclawBundle): OpenclawFileKind[] {
 }
 
 /**
- * Map an OpenClaw file bundle to a Nova profile (preview before save).
+ * Map an OpenClaw file bundle to a Persistent Sage profile (preview before save).
  */
 function emptyOpenclawPreview(fatalError: string, unrecognizedFileNames: string[] = []): OpenclawImportPreview {
   return {

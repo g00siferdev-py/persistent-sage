@@ -11,9 +11,9 @@ export type InvokeMessageRole = "user" | "assistant";
 
 /** Sync MemoryAnchor + on-disk active companion (`memory_set_active_personality` IPC). */
 export async function memorySetActivePersonality(personalityId: string): Promise<void> {
-  console.info("[nova-chat] invoke memory_set_active_personality", { personalityId });
+  console.info("[persistent-sage-chat] invoke memory_set_active_personality", { personalityId });
   await invoke("memory_set_active_personality", { personalityId });
-  console.info("[nova-chat] memory_set_active_personality IPC finished", { personalityId });
+  console.info("[persistent-sage-chat] memory_set_active_personality IPC finished", { personalityId });
 }
 
 export async function memoryListConversations(): Promise<StoredConversation[]> {
@@ -21,9 +21,9 @@ export async function memoryListConversations(): Promise<StoredConversation[]> {
 }
 
 export async function memoryCreateConversation(title: string): Promise<string> {
-  console.info("[nova-chat] invoke memory_create_conversation", { title });
+  console.info("[persistent-sage-chat] invoke memory_create_conversation", { title });
   const id = await invoke<string>("memory_create_conversation", { title });
-  console.info("[nova-chat] memory_create_conversation IPC finished", { conversationId: id, title });
+  console.info("[persistent-sage-chat] memory_create_conversation IPC finished", { conversationId: id, title });
   return id;
 }
 

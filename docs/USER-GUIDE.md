@@ -1,14 +1,14 @@
-# Nova user guide
+# Persistent Sage user guide
 
-Complete guide to the Nova desktop application as shipped in **version 0.2.0-beta.1** (open beta).
+Complete guide to the Persistent Sage desktop application as shipped in **version 0.2.0-beta.4** (open beta).
 
 **Runtime requirement:** `npm run tauri dev` or an installed release build. Browser-only Vite preview cannot access chat, memory, or settings backends.
 
 ---
 
-## 1. What Nova does
+## 1. What Persistent Sage does
 
-Nova is a **local-first AI companion**:
+Persistent Sage is a **local-first AI companion**:
 
 - Multi-thread **chat** with streaming replies
 - **Memory Anchor** — SQLite-backed long-term memory (anchors, briefings, hybrid search)
@@ -59,7 +59,7 @@ Choose which **companion profile** receives new chats and memory scoping. Switch
 
 ### Streaming
 
-Nova emits `chat:stream-start`, token deltas on `chat:stream`, and `done`. A “Thinking…” state shows before the first token.
+Persistent Sage emits `chat:stream-start`, token deltas on `chat:stream`, and `done`. A “Thinking…” state shows before the first token.
 
 ### Errors
 
@@ -80,7 +80,7 @@ Amber banner at the top for IPC, provider, or validation errors (for example non
 
 ### Startup briefing
 
-Read-only panel in the sidebar: context Nova injects into the model (recent transcript excerpts, anchors, projects, preferences).
+Read-only panel in the sidebar: context Persistent Sage injects into the model (recent transcript excerpts, anchors, projects, preferences).
 
 ### Recent anchors
 
@@ -90,7 +90,7 @@ Anchors for the current thread plus global anchors (`conversation_id` null).
 
 Every chat message (user and assistant) is saved to SQLite in `nova_memory.sqlite` for that companion profile. That is separate from **anchors**, which are compact memory snippets used for recall.
 
-After each **user** message, Nova can store memory in two ways (Settings → General → **Memory**):
+After each **user** message, Persistent Sage can store memory in two ways (Settings → General → **Memory**):
 
 1. **LLM memory extraction** (on by default) — A small JSON completion extracts durable facts (preferences, health, accessibility) as `fact` / `insight` / `curated` anchors (global or thread scope).
 2. **Heuristic raw anchors** — When LLM extraction is off, keyword heuristics create raw anchors (thread + global copies when new).
@@ -118,7 +118,7 @@ Open **Settings** from the chat header. Four tabs:
 - Switch, create, or delete personality **profiles**
 - Edit companion name, tone, values, special instructions
 - **Live system prompt preview**
-- **Import Nova JSON** or **Import OpenClaw markdown…** (preview mapped fields, then add a profile)
+- **Import Persistent Sage JSON** or **Import OpenClaw markdown…** (preview mapped fields, then add a profile)
 - **Save changes** / **Save as new profile**
 
 File on disk: `personality.json`
@@ -178,7 +178,7 @@ Images save to `{data_dir}/attachments/{conversationId}/`. Paths are stored in S
 
 - Add a short caption (“What is in this photo?”) with the image
 - For Ollama Cloud **kimi** and similar models, ensure Provider tab shows the correct model id
-- If the model acts blind, check terminal logs for `nova: chat completion includes image(s)`
+- If the model acts blind, check terminal logs for `persistent-sage: chat completion includes image(s)`
 
 ---
 
@@ -197,8 +197,8 @@ Full detail: [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md)
 
 | Variable | Purpose |
 |----------|---------|
-| `NOVA_DATA_DIR` | Custom data folder |
-| `NOVA_PORTABLE=1` | Portable `data/` next to executable |
+| `PERSISTENT_SAGE_DATA_DIR` | Custom data folder (legacy `NOVA_DATA_DIR` also works) |
+| `PERSISTENT_SAGE_PORTABLE=1` | Portable `data/` next to executable (legacy `NOVA_PORTABLE=1` also works) |
 
 ---
 
@@ -224,16 +224,16 @@ Full detail: [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md)
 - [x] Pulse in open thread
 - [x] Image attach for vision models
 - [x] Agent tools (optional), including `fetch_browser`
-- [x] OpenClaw / Nova JSON personality import
+- [x] OpenClaw / Persistent Sage JSON personality import
 - [x] Portable / custom data directory
 
 ---
 
 ## 11. Migrating from OpenClaw
 
-Nova can import OpenClaw-style markdown from **Settings → Companion → Import OpenClaw markdown…** (`SOUL.md`, `IDENTITY.md`, `USER.md`, `JOURNAL.md`, `MEMORY.md`, `TOOLS.md`). That path is useful for a quick profile, but it may not capture everything a mature OpenClaw agent accumulated.
+Persistent Sage can import OpenClaw-style markdown from **Settings → Companion → Import OpenClaw markdown…** (`SOUL.md`, `IDENTITY.md`, `USER.md`, `JOURNAL.md`, `MEMORY.md`, `TOOLS.md`). That path is useful for a quick profile, but it may not capture everything a mature OpenClaw agent accumulated.
 
-**Today, the most effective migration** uses Nova’s workspace and personality self-edit:
+**Today, the most effective migration** uses Persistent Sage’s workspace and personality self-edit:
 
 ### Prerequisites
 
@@ -243,7 +243,7 @@ Nova can import OpenClaw-style markdown from **Settings → Companion → Import
 
 ### Step 1 — Copy markdown into workspace
 
-Copy these files from your OpenClaw workspace into Nova’s `workspace/` directory:
+Copy these files from your OpenClaw workspace into Persistent Sage’s `workspace/` directory:
 
 - `IDENTITY.md`
 - `SOUL.md`

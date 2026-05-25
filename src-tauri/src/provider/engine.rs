@@ -3,9 +3,7 @@
 use async_trait::async_trait;
 
 use super::error::ProviderError;
-use super::types::{
-    CompletionRequest, CompletionResponse, ModelInfo, StreamChunk, ToolDefinition,
-};
+use super::types::{CompletionRequest, CompletionResponse, ModelInfo, StreamChunk, ToolDefinition};
 
 #[async_trait]
 pub trait LLMProviderEngine: Send + Sync {
@@ -14,7 +12,10 @@ pub trait LLMProviderEngine: Send + Sync {
     fn model_info(&self) -> ModelInfo;
 
     /// Non-streaming completion (aggregates model output).
-    async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse, ProviderError>;
+    async fn complete(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<CompletionResponse, ProviderError>;
 
     /// Token/delta stream; send [`StreamChunk`] with `done: true` as the final message.
     async fn stream(
@@ -24,10 +25,7 @@ pub trait LLMProviderEngine: Send + Sync {
     ) -> Result<(), ProviderError>;
 
     /// Optional: tools the model may call (OpenAI format). Default: use request.tools.
-    fn merge_tools<'a>(
-        &self,
-        request: &'a CompletionRequest,
-    ) -> Option<&'a Vec<ToolDefinition>> {
+    fn merge_tools<'a>(&self, request: &'a CompletionRequest) -> Option<&'a Vec<ToolDefinition>> {
         request.tools.as_ref()
     }
 }

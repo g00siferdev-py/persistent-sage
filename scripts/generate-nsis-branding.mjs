@@ -7,8 +7,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SRC_HEADER = join(ROOT, "public", "nova-logo.png");
-const SRC_SIDEBAR = join(ROOT, "packaging", "branding", "NovaLogo.png");
+const SRC_HEADER = join(ROOT, "public", "persistent-sage-icon.png");
+const SRC_SIDEBAR = join(ROOT, "public", "persistent-sage-splash.png");
 const OUT_DIR = join(ROOT, "packaging", "windows");
 const OUT_HEADER = join(OUT_DIR, "nsis-header.bmp");
 const OUT_SIDEBAR = join(OUT_DIR, "nsis-sidebar.bmp");
@@ -126,7 +126,7 @@ async function main() {
     const sidebarSrc = existsSync(SRC_SIDEBAR) ? SRC_SIDEBAR : SRC_HEADER;
     sidebarRows = await rowsFromPng(sharp, sidebarSrc, 164, 314);
   } catch (e) {
-    console.warn(`nova-branding: ${e} — solid placeholder`);
+    console.warn(`persistent-sage-branding: ${e} — solid placeholder`);
     headerRows = solidRows(150, 57, BG);
     sidebarRows = solidRows(164, 314, BG);
   }

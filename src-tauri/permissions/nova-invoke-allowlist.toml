@@ -1,7 +1,7 @@
-# Application IPC allowlist for the Nova main webview (replaces implicit allow-all for custom commands).
+# Application IPC allowlist for the Persistent Sage main webview (replaces implicit allow-all for custom commands).
 [[permission]]
 identifier = "nova-invoke-allowlist"
-description = "Custom invoke commands used by the Nova UI (see generate_handler! in lib.rs)."
+description = "Custom invoke commands used by the Persistent Sage UI (see generate_handler! in lib.rs)."
 commands.allow = [
   "read_text_files",
   "app_version",
@@ -13,6 +13,8 @@ commands.allow = [
   "openai_list_models",
   "ollama_list_local_models",
   "anthropic_list_models",
+  "gemini_list_models",
+  "xai_list_models",
   "provider_switch",
   "settings_get",
   "settings_update",

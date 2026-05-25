@@ -1,6 +1,6 @@
-# Installing Nova from source
+# Installing Persistent Sage from source
 
-This guide walks through a **complete fresh install** on a new machine. Nova is distributed as source; you build the desktop app locally with **Rust**, **Node.js**, and **Tauri 2** tooling.
+This guide walks through a **complete fresh install** on a new machine. Persistent Sage is distributed as source; you build the desktop app locally with **Rust**, **Node.js**, and **Tauri 2** tooling.
 
 ---
 
@@ -9,12 +9,12 @@ This guide walks through a **complete fresh install** on a new machine. Nova is 
 | Step | What you get |
 |------|----------------|
 | Install toolchain | `rustc`, `npm`, OS libraries for WebKit/GTK |
-| Clone repository | Nova source tree |
+| Clone repository | Persistent Sage source tree |
 | `npm install` | Frontend dependencies |
 | `npm run tauri dev` | Runnable desktop app with hot reload |
 | `npm run tauri build` *(optional)* | Release installer under `src-tauri/target/release/bundle/` |
 
-**First launch** creates a data directory on disk (see [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md)). Nothing is uploaded to a Nova-operated cloud service.
+**First launch** creates a data directory on disk (see [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md)). Nothing is uploaded to a Persistent Sage-operated cloud service.
 
 ---
 
@@ -103,7 +103,7 @@ This installs React, Vite, Tauri CLI, and Tailwind tooling declared in `package.
 
 ---
 
-## 5. Run Nova (development)
+## 5. Run Persistent Sage (development)
 
 **Chat, memory, settings, and providers require the Tauri shell.** The Vite-only dev server does not load the Rust backend.
 
@@ -111,16 +111,16 @@ This installs React, Vite, Tauri CLI, and Tailwind tooling declared in `package.
 npm run tauri dev
 ```
 
-On first run, Nova creates:
+On first run, Persistent Sage creates:
 
 | Path (typical Linux) | Contents |
 |----------------------|----------|
-| `~/.local/share/nova/nova_memory.sqlite` | Conversations, messages, anchors (SQLite) |
-| `~/.local/share/nova/settings.json` | Provider choice, models, toggles |
-| `~/.local/share/nova/personality.json` | Companion profiles |
-| `~/.local/share/nova/.nova_crypto/` | Key-encryption material |
-| `~/.local/share/nova/workspace/` | Sandboxed agent file tools (optional) |
-| `~/.local/share/nova/attachments/` | Image files for vision chat (when used) |
+| `~/.local/share/persistent-sage/data/nova_memory.sqlite` | Conversations, messages, anchors (SQLite) |
+| `~/.local/share/persistent-sage/data/settings.json` | Provider choice, models, toggles |
+| `~/.local/share/persistent-sage/data/personality.json` | Companion profiles |
+| `~/.local/share/persistent-sage/data/.nova_crypto/` | Key-encryption material |
+| `~/.local/share/persistent-sage/data/workspace/` | Sandboxed agent file tools (optional) |
+| `~/.local/share/persistent-sage/data/attachments/` | Image files for vision chat (when used) |
 
 The first compile may take several minutes while Rust dependencies build.
 
@@ -175,28 +175,28 @@ Open **Settings** from the chat header (right side). Tabs:
 
 | Variable | Effect |
 |----------|--------|
-| `NOVA_DATA_DIR` | Absolute path; all app data files live in this folder |
-| `NOVA_PORTABLE=1` | Data under `{executable_dir}/data/` (USB-style layout) |
+| `PERSISTENT_SAGE_DATA_DIR` | Absolute path; all app data files live in this folder (legacy `NOVA_DATA_DIR` also works) |
+| `PERSISTENT_SAGE_PORTABLE=1` | Data under `{executable_dir}/data/` (USB-style layout; legacy `NOVA_PORTABLE=1` also works) |
 | *(unset)* | OS default application data location |
 
 **Linux / macOS example:**
 
 ```bash
-export NOVA_DATA_DIR="$HOME/NovaData"
-mkdir -p "$NOVA_DATA_DIR"
+export PERSISTENT_SAGE_DATA_DIR="$HOME/PersistentSageData"
+mkdir -p "$PERSISTENT_SAGE_DATA_DIR"
 npm run tauri dev
 ```
 
 **One-shot:**
 
 ```bash
-NOVA_DATA_DIR="$HOME/NovaData" npm run tauri dev
+PERSISTENT_SAGE_DATA_DIR="$HOME/PersistentSageData" npm run tauri dev
 ```
 
 **Windows (cmd):**
 
 ```cmd
-set NOVA_DATA_DIR=C:\Users\YourUser\NovaData
+set PERSISTENT_SAGE_DATA_DIR=C:\Users\YourUser\PersistentSageData
 npm run tauri dev
 ```
 
@@ -225,7 +225,7 @@ Portable mode uses stricter SQLite durability settings (`DELETE` journal, `synch
 | Rust compile failures | `rustup update stable`; verify `rustc --version` |
 | Placeholder replies only | **Settings → Provider** — select a live backend and API key |
 | Images ignored on Ollama | Use a vision model (e.g. llava, kimi); agent tools are disabled for image turns |
-| Empty conversation list after restore | Quit Nova before copying `nova_memory.sqlite`; restart app |
+| Empty conversation list after restore | Quit Persistent Sage before copying `nova_memory.sqlite`; restart app |
 | `no such column: image_attachment` | Update to latest `main` and restart (migration runs on open) |
 
 ---
@@ -243,7 +243,7 @@ Then run `npm run tauri dev`, send a test message, and confirm the sidebar shows
 
 ## 12. Beta testing
 
-Nova **0.2.0-beta.1** is in **open beta**. After you complete § 11 (verify install):
+Persistent Sage **0.2.0-beta.4** is in **open beta**. After you complete § 11 (verify install):
 
 1. Configure a live provider and send several chat turns.
 2. Try **Settings → Companion** (personalities, optional OpenClaw import).

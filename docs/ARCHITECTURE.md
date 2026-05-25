@@ -1,6 +1,6 @@
 # Architecture overview
 
-Nova is a **Tauri 2** desktop application: a **React 19** frontend talks to a **Rust** backend over IPC. All persistent state lives on disk under the application data directory.
+Persistent Sage is a **Tauri 2** desktop application: a **React 19** frontend talks to a **Rust** backend over IPC. All persistent state lives on disk under the application data directory.
 
 ---
 
@@ -90,7 +90,7 @@ Held in Tauri managed state (`lib.rs`):
 
 `ChatTurn` may carry provider-specific JSON overrides (`openai_message`, `ollama_message`, `anthropic_message`) for tool rounds and vision.
 
-**Ollama + images:** When the transcript includes images, Nova **disables agent tools** for that request because Ollama often ignores `images` when `tools` are present.
+**Ollama + images:** When the transcript includes images, Persistent Sage **disables agent tools** for that request because Ollama often ignores `images` when `tools` are present.
 
 ---
 
@@ -132,10 +132,10 @@ Commands are allowlisted in `src-tauri/permissions/nova-invoke-allowlist.toml`. 
 
 | Variable | Effect |
 |----------|--------|
-| `NOVA_DATA_DIR` | Pin all app data to one directory |
-| `NOVA_PORTABLE=1` | `{exe}/data/` layout + stricter SQLite pragmas |
-| `NOVA_CHROME_PATH` | Chrome/Chromium/Edge for `fetch_browser` |
-| `NOVA_CHROME_NO_SANDBOX` | Sandbox flags for containerized Chrome |
+| `PERSISTENT_SAGE_DATA_DIR` | Pin all app data to one directory (legacy `NOVA_DATA_DIR` also works) |
+| `PERSISTENT_SAGE_PORTABLE=1` | `{exe}/data/` layout + stricter SQLite pragmas (legacy `NOVA_PORTABLE=1` also works) |
+| `PERSISTENT_SAGE_CHROME_PATH` | Chrome/Chromium/Edge for `fetch_browser` |
+| `PERSISTENT_SAGE_CHROME_NO_SANDBOX` | Sandbox flags for containerized Chrome |
 
 ---
 

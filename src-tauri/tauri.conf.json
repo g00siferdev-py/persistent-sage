@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Nova",
-  "version": "0.2.0-beta.3",
-  "identifier": "app.nova.desktop",
+  "productName": "Persistent Sage",
+  "version": "0.2.0-beta.4",
+  "identifier": "app.persistentsage.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Nova",
+        "title": "Persistent Sage",
         "width": 960,
         "height": 640,
         "minWidth": 640,
@@ -24,10 +24,10 @@
       },
       {
         "label": "splashscreen",
-        "title": "Nova",
+        "title": "Persistent Sage",
         "url": "splashscreen.html",
-        "width": 420,
-        "height": 500,
+        "width": 520,
+        "height": 410,
         "resizable": false,
         "fullscreen": false,
         "decorations": false,

@@ -1,4 +1,4 @@
-# Building Nova with GitHub Actions
+# Building Persistent Sage with GitHub Actions
 
 Use GitHub Actions when a local machine cannot complete a Windows build (low RAM, missing NSIS, etc.). The workflow runs on a **windows-latest** runner with ~7 GB RAM and the Visual Studio toolchain preinstalled.
 
@@ -14,23 +14,23 @@ Use GitHub Actions when a local machine cannot complete a Windows build (low RAM
 1. On GitHub, open **Actions**.
 2. Choose **Build Windows** in the left sidebar.
 3. Click **Run workflow**, pick the branch (usually `main`), then **Run workflow**.
-4. When the job finishes (often 15–30 minutes the first time), open the run → **Artifacts** → download `nova-windows-<sha>`.
+4. When the job finishes (often 15–30 minutes the first time), open the run → **Artifacts** → download `persistent-sage-windows-<sha>`.
 
 The zip contains:
 
 | File | Use |
 |------|-----|
-| `Nova_*_x64-setup.exe` | Normal Windows install |
-| `NovaPortable.zip` | Unzip to USB; run `Start-Nova-Portable.bat` |
-| `nova.exe` | Raw binary (optional) |
+| `Persistent Sage_*_x64-setup.exe` | Normal Windows install |
+| `PersistentSagePortable.zip` | Unzip to USB; run `Start-Persistent-Sage-Portable.bat` |
+| `persistent-sage.exe` | Raw binary (optional) |
 
 ## Release build (tag)
 
 Create and push a version tag matching `package.json` / `tauri.conf.json`:
 
 ```bash
-git tag v0.2.0-beta.3
-git push origin v0.2.0-beta.3
+git tag v0.2.0-beta.4
+git push origin v0.2.0-beta.4
 ```
 
 The same workflow runs, uploads artifacts, and creates a **draft prerelease** on GitHub with the installer and portable zip attached. Publish the draft from **Releases** when ready.

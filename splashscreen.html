@@ -5,7 +5,7 @@
     <script>
       (function () {
         try {
-          var t = localStorage.getItem("nova-theme");
+          var t = localStorage.getItem("persistent-sage-theme");
           if (t !== "light" && t !== "dark") t = "dark";
           document.documentElement.classList.toggle("dark", t === "dark");
           document.documentElement.style.colorScheme = t;
@@ -16,8 +16,8 @@
       })();
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/png" href="/nova-logo.png" />
-    <title>Nova</title>
+    <link rel="icon" type="image/png" href="/persistent-sage-icon.png" />
+    <title>Persistent Sage</title>
   </head>
   <body>
     <div id="root"></div>

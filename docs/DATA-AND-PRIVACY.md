@@ -1,6 +1,6 @@
 # Data storage and privacy
 
-Nova is designed as a **local-first** desktop companion. This document states clearly what is stored where, what is encrypted, and what is not—so you can make informed decisions before deploying Nova on a shared or portable machine.
+Persistent Sage is designed as a **local-first** desktop companion. This document states clearly what is stored where, what is encrypted, and what is not—so you can make informed decisions before deploying Persistent Sage on a shared or portable machine.
 
 ---
 
@@ -16,19 +16,19 @@ Nova is designed as a **local-first** desktop companion. This document states cl
 | Agent workspace files | `workspace/` | **No** | Only via tools you enable |
 | Pulse / chat traffic | In-memory + provider API | N/A | Yes — to configured LLM endpoint |
 
-**There is no Nova-operated cloud** that stores your conversations. After the app is built and run, persistence is **entirely on your device** unless you explicitly enable tools that contact third-party URLs.
+**There is no Persistent Sage-operated cloud** that stores your conversations. After the app is built and run, persistence is **entirely on your device** unless you explicitly enable tools that contact third-party URLs.
 
 ---
 
 ## Default data directory
 
-When `NOVA_DATA_DIR` and `NOVA_PORTABLE` are unset, Nova uses the OS application data path (via the `directories` crate), typically:
+When `PERSISTENT_SAGE_DATA_DIR`/`PERSISTENT_SAGE_PORTABLE` (or legacy `NOVA_*`) are unset, Persistent Sage uses the OS application data path (via the `directories` crate), typically:
 
 | OS | Example path |
 |----|----------------|
-| Linux | `~/.local/share/nova/` |
-| macOS | `~/Library/Application Support/Nova/` |
-| Windows | `%APPDATA%\Nova\` |
+| Linux | `~/.local/share/persistent-sage/data/` |
+| macOS | `~/Library/Application Support/Persistent Sage/` |
+| Windows | `%APPDATA%\Persistent Sage\` |
 
 ### Files in the data directory
 
@@ -58,16 +58,16 @@ The git repository **does not** contain your database or settings. Each machine 
 
 **The database file is not encrypted.** Anyone with filesystem access to your user account (or a copy of the file) can read conversation content with standard SQLite tools.
 
-Nova does **not** currently offer SQLCipher or OS-level full-disk encryption. Mitigations you may use:
+Persistent Sage does **not** currently offer SQLCipher or OS-level full-disk encryption. Mitigations you may use:
 
 - Full-disk encryption (LUKS, FileVault, BitLocker)
 - Restrictive file permissions on the data directory
-- `NOVA_DATA_DIR` on an encrypted volume or removable drive you control
+- `PERSISTENT_SAGE_DATA_DIR` on an encrypted volume or removable drive you control
 - Regular backups stored in encrypted archives
 
 ### Schema migrations
 
-Nova runs idempotent migrations on startup (`PRAGMA user_version`). New columns (for example image attachments) are added automatically when you upgrade the app. **Back up** `nova_memory.sqlite` before major upgrades or manual maintenance.
+Persistent Sage runs idempotent migrations on startup (`PRAGMA user_version`). New columns (for example image attachments) are added automatically when you upgrade the app. **Back up** `nova_memory.sqlite` before major upgrades or manual maintenance.
 
 ### Personality isolation
 
@@ -87,7 +87,7 @@ Provider API keys are stored as **AES-256-GCM** ciphertext in `settings.json`, w
 
 **Keys are not stored in plaintext** in the repository or in SQLite preference rows.
 
-When you send a chat message, Nova decrypts the key in process memory and passes it to the configured provider over HTTPS.
+When you send a chat message, Persistent Sage decrypts the key in process memory and passes it to the configured provider over HTTPS.
 
 ---
 
@@ -121,8 +121,8 @@ Images remain on disk in **unencrypted** files. The webview displays them via Ta
 
 | Mode | Behavior |
 |------|----------|
-| `NOVA_DATA_DIR=/path` | All files under `/path` |
-| `NOVA_PORTABLE=1` | `{exe_dir}/data/` — suitable for USB workflows |
+| `PERSISTENT_SAGE_DATA_DIR=/path` | All files under `/path` (legacy `NOVA_DATA_DIR` also works) |
+| `PERSISTENT_SAGE_PORTABLE=1` | `{exe_dir}/data/` — suitable for USB workflows (legacy `NOVA_PORTABLE=1` also works) |
 | Default | OS app data directory |
 
 Portable mode uses SQLite `DELETE` journal and `synchronous=FULL` for durability on removable media.
@@ -138,20 +138,20 @@ In **Settings → General**:
 | **Wipe all memories** | Clears SQLite user tables; re-seeds default thread; keeps settings and personalities |
 | **Factory reset** | Wipes database **and** resets `settings.json` / `personality.json` to defaults |
 
-Always **quit Nova** before copying or restoring `nova_memory.sqlite` manually.
+Always **quit Persistent Sage** before copying or restoring `nova_memory.sqlite` manually.
 
 ---
 
 ## Compliance-oriented notes
 
-Nova is **open beta** software (`0.2.0-beta.1`). It does not implement:
+Persistent Sage is **open beta** software (`0.2.0-beta.4`). It does not implement:
 
 - Database encryption
 - Multi-user access control
 - Audit logging
 - Data retention policies beyond manual delete/wipe
 
-Evaluate whether your threat model requires additional controls before storing sensitive content in Nova.
+Evaluate whether your threat model requires additional controls before storing sensitive content in Persistent Sage.
 
 ---
 

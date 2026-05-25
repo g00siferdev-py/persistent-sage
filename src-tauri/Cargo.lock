@@ -2105,35 +2105,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nova"
-version = "0.2.0-beta.2"
-dependencies = [
- "argon2",
- "async-trait",
- "base64 0.22.1",
- "chrono",
- "directories",
- "futures-util",
- "hex",
- "keyring",
- "opener",
- "reqwest 0.12.28",
- "ring",
- "rusqlite",
- "scraper",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "thiserror 2.0.18",
- "tokio",
- "url",
- "uuid",
- "which",
-]
-
-[[package]]
 name = "num-conv"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2453,6 +2424,35 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+
+[[package]]
+name = "persistent-sage"
+version = "0.2.0-beta.4"
+dependencies = [
+ "argon2",
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
+ "directories",
+ "futures-util",
+ "hex",
+ "keyring",
+ "opener",
+ "reqwest 0.12.28",
+ "ring",
+ "rusqlite",
+ "scraper",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "thiserror 2.0.18",
+ "tokio",
+ "url",
+ "uuid",
+ "which",
+]
 
 [[package]]
 name = "phf"

@@ -28,7 +28,7 @@ async fn run_pulse_tick(app: &AppHandle, state: &NovaState) {
     let view = match state.settings.view() {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("nova: pulse skipped — settings: {e}");
+            eprintln!("persistent-sage: pulse skipped — settings: {e}");
             return;
         }
     };
@@ -37,7 +37,11 @@ async fn run_pulse_tick(app: &AppHandle, state: &NovaState) {
         return;
     }
 
-    if view.selected_provider.trim().eq_ignore_ascii_case("placeholder") {
+    if view
+        .selected_provider
+        .trim()
+        .eq_ignore_ascii_case("placeholder")
+    {
         let _ = app.emit(
             "pulse:tick",
             PulseTickEvent {
@@ -45,18 +49,13 @@ async fn run_pulse_tick(app: &AppHandle, state: &NovaState) {
                 at,
                 conversation_id: None,
                 summary: None,
-                error: Some(
-                    "Configure a live provider in Settings before using Pulse.".into(),
-                ),
+                error: Some("Configure a live provider in Settings before using Pulse.".into()),
             },
         );
         return;
     }
 
-    let Some(cid) = view
-        .pulse_conversation_id
-        .filter(|s| !s.trim().is_empty())
-    else {
+    let Some(cid) = view.pulse_conversation_id.filter(|s| !s.trim().is_empty()) else {
         let _ = app.emit(
             "pulse:tick",
             PulseTickEvent {
@@ -122,11 +121,10 @@ pub fn spawn_pulse_loop(app_handle: AppHandle) {
             let sleep_secs = match app_handle.try_state::<NovaState>() {
                 None => 60u64,
                 Some(state) => match state.settings.view() {
-                    Ok(v) if v.pulse_enabled => {
-                        (v.pulse_interval_minutes.max(1).min(24 * 60) as u64)
-                            .saturating_mul(60)
-                            .max(60)
-                    }
+                    Ok(v) if v.pulse_enabled => (v.pulse_interval_minutes.max(1).min(24 * 60)
+                        as u64)
+                        .saturating_mul(60)
+                        .max(60),
                     Ok(_) => 30,
                     Err(_) => 60,
                 },
@@ -139,7 +137,10 @@ pub fn spawn_pulse_loop(app_handle: AppHandle) {
                     if !v.pulse_enabled {
                         continue;
                     }
-                    if v.selected_provider.trim().eq_ignore_ascii_case("placeholder") {
+                    if v.selected_provider
+                        .trim()
+                        .eq_ignore_ascii_case("placeholder")
+                    {
                         continue;
                     }
                     run_pulse_tick(&app_handle, &state).await;

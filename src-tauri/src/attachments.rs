@@ -1,4 +1,4 @@
-//! Chat image attachments: on-disk storage under the Nova data directory and vision API payloads.
+//! Chat image attachments: on-disk storage under the Persistent Sage data directory and vision API payloads.
 
 use std::path::{Path, PathBuf};
 
@@ -143,7 +143,12 @@ pub fn absolute_attachment_path(data_dir: &Path, rel_path: &str) -> PathBuf {
     data_dir.join(rel_path.trim().trim_start_matches('/'))
 }
 
-fn build_openai_user_message(text: &str, data_dir: &Path, rel_path: &str, mime: &str) -> Result<Value, String> {
+fn build_openai_user_message(
+    text: &str,
+    data_dir: &Path,
+    rel_path: &str,
+    mime: &str,
+) -> Result<Value, String> {
     let b64 = read_image_bytes(data_dir, rel_path)?;
     let encoded = base64::engine::general_purpose::STANDARD.encode(&b64);
     let data_url = format!("data:{mime};base64,{encoded}");
@@ -165,7 +170,12 @@ fn build_openai_user_message(text: &str, data_dir: &Path, rel_path: &str, mime: 
     }))
 }
 
-fn build_anthropic_user_message(text: &str, data_dir: &Path, rel_path: &str, mime: &str) -> Result<Value, String> {
+fn build_anthropic_user_message(
+    text: &str,
+    data_dir: &Path,
+    rel_path: &str,
+    mime: &str,
+) -> Result<Value, String> {
     let b64 = read_image_bytes(data_dir, rel_path)?;
     let encoded = base64::engine::general_purpose::STANDARD.encode(&b64);
 
@@ -190,7 +200,12 @@ fn build_anthropic_user_message(text: &str, data_dir: &Path, rel_path: &str, mim
     }))
 }
 
-fn build_ollama_user_message(text: &str, data_dir: &Path, rel_path: &str, _mime: &str) -> Result<Value, String> {
+fn build_ollama_user_message(
+    text: &str,
+    data_dir: &Path,
+    rel_path: &str,
+    _mime: &str,
+) -> Result<Value, String> {
     let b64 = read_image_bytes(data_dir, rel_path)?;
     let encoded = base64::engine::general_purpose::STANDARD.encode(&b64);
     let content = if text.trim().is_empty() {
@@ -218,9 +233,9 @@ pub fn chat_turn_includes_image(turn: &ChatTurn) -> bool {
     }
     if let Some(v) = &turn.openai_message {
         if let Some(parts) = v.get("content").and_then(|c| c.as_array()) {
-            return parts.iter().any(|p| {
-                p.get("type").and_then(|t| t.as_str()) == Some("image_url")
-            });
+            return parts
+                .iter()
+                .any(|p| p.get("type").and_then(|t| t.as_str()) == Some("image_url"));
         }
     }
     if let Some(v) = &turn.anthropic_message {
@@ -291,7 +306,9 @@ pub fn chat_turn_from_stored_with_image_policy(
         "anthropic" => (
             None,
             None,
-            Some(build_anthropic_user_message(&m.content, data_dir, rel, mime)?),
+            Some(build_anthropic_user_message(
+                &m.content, data_dir, rel, mime,
+            )?),
         ),
         "ollama" | "ollama_cloud" => (
             None,

@@ -26,7 +26,7 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
     vec![ToolDefinition {
         name: "memory_search".into(),
         description: Some(
-            "Search Nova's long-term Memory Anchor database (facts, preferences, past threads). \
+            "Search Persistent Sage's long-term Memory Anchor database (facts, preferences, past threads). \
              Use when the user asks about something you should remember from earlier chats, \
              their preferences, health, projects, or prior context. Returns matching anchors \
              and related past messages."
@@ -95,7 +95,10 @@ pub fn format_recall_for_prompt(bundle: &MemoryRecallBundle, max_chars: usize) -
         return "No matching memories found.".into();
     }
     if out.chars().count() > max_chars {
-        out.chars().take(max_chars.saturating_sub(1)).collect::<String>() + "…"
+        out.chars()
+            .take(max_chars.saturating_sub(1))
+            .collect::<String>()
+            + "…"
     } else {
         out
     }
@@ -109,7 +112,9 @@ pub async fn run_memory_search(
 ) -> Result<String, MemoryToolError> {
     let query = args["query"].as_str().unwrap_or("").trim();
     if query.is_empty() {
-        return Err(MemoryToolError::Msg("memory_search requires a non-empty query".into()));
+        return Err(MemoryToolError::Msg(
+            "memory_search requires a non-empty query".into(),
+        ));
     }
     let scope = args["conversation_id"]
         .as_str()
@@ -130,25 +135,22 @@ pub async fn run_memory_search(
         match embedding::resolve_embedding_spec(settings) {
             Ok(spec) => {
                 const EMBED_TIMEOUT: Duration = Duration::from_secs(12);
-                match tokio::time::timeout(
-                    EMBED_TIMEOUT,
-                    embedding::embed_one(http, &spec, query),
-                )
-                .await
+                match tokio::time::timeout(EMBED_TIMEOUT, embedding::embed_one(http, &spec, query))
+                    .await
                 {
                     Ok(Ok(v)) => Some(v),
                     Ok(Err(e)) => {
-                        eprintln!("nova: memory_search embed failed: {e}");
+                        eprintln!("persistent-sage: memory_search embed failed: {e}");
                         None
                     }
                     Err(_) => {
-                        eprintln!("nova: memory_search embed timed out after {EMBED_TIMEOUT:?}");
+                        eprintln!("persistent-sage: memory_search embed timed out after {EMBED_TIMEOUT:?}");
                         None
                     }
                 }
             }
             Err(e) => {
-                eprintln!("nova: memory_search embed skipped: {e}");
+                eprintln!("persistent-sage: memory_search embed skipped: {e}");
                 None
             }
         }
@@ -157,7 +159,13 @@ pub async fn run_memory_search(
     };
 
     let bundle = memory
-        .memory_recall(query, scope, anchor_limit, message_limit, query_emb.as_deref())
+        .memory_recall(
+            query,
+            scope,
+            anchor_limit,
+            message_limit,
+            query_emb.as_deref(),
+        )
         .map_err(|e| MemoryToolError::Msg(e.to_string()))?;
 
     Ok(format_recall_for_prompt(&bundle, 6_000))

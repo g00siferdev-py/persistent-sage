@@ -28,13 +28,19 @@ pub fn spawn_post_message_memory(
     conversation_id: String,
     user_text: String,
 ) {
-    if user_text.trim().is_empty() || settings.selected_provider() == "placeholder" {
+    if user_text.trim().is_empty() {
         return;
     }
     tokio::spawn(async move {
         let _guard = memory_pipeline_lock().lock().await;
-        process_user_memory_turn(&http, &settings, memory.as_ref(), &conversation_id, &user_text)
-            .await;
+        process_user_memory_turn(
+            &http,
+            &settings,
+            memory.as_ref(),
+            &conversation_id,
+            &user_text,
+        )
+        .await;
     });
 }
 
@@ -107,21 +113,29 @@ pub async fn process_user_memory_turn(
     user_text: &str,
 ) {
     let provider = settings.selected_provider();
-    if provider == "placeholder" {
-        return;
+
+    match memory.ingest_user_message_anchors(conversation_id, user_text) {
+        Ok(ids) if !ids.is_empty() => {
+            eprintln!(
+                "persistent-sage: deterministic memory ingest stored {} raw anchor(s)",
+                ids.len()
+            );
+        }
+        Ok(_) => {}
+        Err(e) => eprintln!("persistent-sage: deterministic memory ingest failed: {e}"),
     }
 
-    if settings.memory_llm_extraction_enabled() {
+    if provider != "placeholder" && settings.memory_llm_extraction_enabled() {
         match extract_and_store(http, settings, memory, conversation_id, user_text).await {
-            Ok(n) if n > 0 => eprintln!("nova: LLM memory extract stored {n} anchor(s)"),
+            Ok(n) if n > 0 => eprintln!("persistent-sage: LLM memory extract stored {n} anchor(s)"),
             Ok(_) => {}
-            Err(e) => eprintln!("nova: LLM memory extract failed: {e}"),
+            Err(e) => eprintln!("persistent-sage: LLM memory extract failed: {e}"),
         }
     }
 
-    if settings.memory_semantic_enabled() {
+    if provider != "placeholder" && settings.memory_semantic_enabled() {
         if let Err(e) = embed_pending_anchors(http, settings, memory, EMBED_MAX_PER_RUN).await {
-            eprintln!("nova: embedding anchors failed: {e}");
+            eprintln!("persistent-sage: embedding anchors failed: {e}");
         }
     }
 }
@@ -147,9 +161,8 @@ async fn extract_and_store(
         context.push_str(&format!("User: {snip}\n"));
     }
 
-    let user_block = format!(
-        "Recent thread context:\n{context}\nLatest user message:\n{user_text}"
-    );
+    let user_block =
+        format!("Recent thread context:\n{context}\nLatest user message:\n{user_text}");
 
     let req = CompletionRequest {
         messages: vec![
@@ -159,12 +172,10 @@ async fn extract_and_store(
         tools: None,
         max_tokens: Some(600),
         temperature: Some(0.1),
+        thinking_effort: None,
     };
 
-    let resp = engine
-        .complete(&req)
-        .await
-        .map_err(|e| e.to_string())?;
+    let resp = engine.complete(&req).await.map_err(|e| e.to_string())?;
 
     let json_str = strip_json_fence(&resp.content);
     let parsed: ExtractResponse = serde_json::from_str(json_str).map_err(|e| {
@@ -192,9 +203,12 @@ async fn extract_and_store(
         match memory.upsert_memory_anchor(conv_scope, ty, content, importance) {
             Ok(id) => {
                 stored += 1;
-                eprintln!("nova: memory extract anchor {id} ({importance}): {}", content.chars().take(80).collect::<String>());
+                eprintln!(
+                    "persistent-sage: memory extract anchor {id} ({importance}): {}",
+                    content.chars().take(80).collect::<String>()
+                );
             }
-            Err(e) => eprintln!("nova: upsert memory anchor: {e}"),
+            Err(e) => eprintln!("persistent-sage: upsert memory anchor: {e}"),
         }
     }
     Ok(stored)
@@ -229,7 +243,7 @@ async fn embed_pending_anchors(
         }
     }
     eprintln!(
-        "nova: embedded {embedded_total} anchor(s) with model {} (batch size {EMBED_BATCH_SIZE})",
+        "persistent-sage: embedded {embedded_total} anchor(s) with model {} (batch size {EMBED_BATCH_SIZE})",
         spec.model
     );
     Ok(())
@@ -241,9 +255,7 @@ pub async fn reindex_all_embeddings(
     settings: &SettingsManager,
     memory: &dyn ConversationMemory,
 ) -> Result<u32, String> {
-    memory
-        .clear_all_embeddings()
-        .map_err(|e| e.to_string())?;
+    memory.clear_all_embeddings().map_err(|e| e.to_string())?;
     loop {
         embed_pending_anchors(http, settings, memory, 32).await?;
         if memory

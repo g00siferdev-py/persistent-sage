@@ -29,11 +29,11 @@ type PersonalityGetResponse = {
 };
 
 function companionDisplayName(file: PersonalityFile | null, profileId: string): string {
-  if (!file?.profiles?.length) return "Nova";
+  if (!file?.profiles?.length) return "Sage";
   const p = file.profiles.find((x) => x.id === profileId);
-  if (!p) return "Nova";
+  if (!p) return "Sage";
   const n = p.companionName.trim();
-  return n.length > 0 ? n : "Nova";
+  return n.length > 0 ? n : "Sage";
 }
 
 type ChatStreamStart = { conversationId: string };
@@ -254,7 +254,7 @@ export function useChat() {
       const id = personalityId.trim() || "default";
       setThreadListHiddenFromSidebar(false);
       try {
-        console.info("[nova-chat] applyActivePersonality: awaiting memory_set_active_personality", {
+        console.info("[persistent-sage-chat] applyActivePersonality: awaiting memory_set_active_personality", {
           personalityId: id,
         });
         await memorySetActivePersonality(id);
@@ -272,7 +272,7 @@ export function useChat() {
         return list[0]?.id ?? null;
       });
       await refreshPersonalityFile();
-      console.info("[nova-chat] applyActivePersonality: memory + UI active personality_id", {
+      console.info("[persistent-sage-chat] applyActivePersonality: memory + UI active personality_id", {
         personalityId: id,
       });
       return list;
@@ -291,7 +291,7 @@ export function useChat() {
         setPersonalityFile(snap.file);
         const pid = snap.file.activeProfileId.trim() || "default";
         try {
-          console.info("[nova-chat] bootstrap: awaiting memory_set_active_personality", {
+          console.info("[persistent-sage-chat] bootstrap: awaiting memory_set_active_personality", {
             personalityId: pid,
           });
           await memorySetActivePersonality(pid);
@@ -378,7 +378,7 @@ export function useChat() {
     setThreadListHiddenFromSidebar(false);
     const pid = activePersonalityIdRef.current.trim() || activePersonalityId.trim() || "default";
     try {
-      console.info("[nova-chat] startNewConversation: awaiting memory_set_active_personality before create", {
+      console.info("[persistent-sage-chat] startNewConversation: awaiting memory_set_active_personality before create", {
         personalityId: pid,
       });
       await memorySetActivePersonality(pid);
@@ -386,7 +386,7 @@ export function useChat() {
       setActivePersonalityId(pid);
       const label = companionDisplayName(personalityFile, pid);
       const title = `New Chat with ${label}`;
-      console.info("[nova-chat] startNewConversation: creating conversation", { personalityId: pid, title });
+      console.info("[persistent-sage-chat] startNewConversation: creating conversation", { personalityId: pid, title });
       const id = await memoryCreateConversation(title);
       await refreshConversations();
       setActiveConversationId(id);
@@ -401,7 +401,7 @@ export function useChat() {
     const base =
       personalityFile?.profiles?.map((p) => ({
         id: p.id,
-        companionName: (p.companionName || "").trim() || "Nova",
+        companionName: (p.companionName || "").trim() || "Sage",
         profileName: (p.profileName || "").trim() || p.id,
       })) ?? [];
     if (base.length === 0) {
@@ -535,7 +535,7 @@ export function useChat() {
 
         const personalityIdForSend =
           activePersonalityIdRef.current.trim() || activePersonalityId.trim() || "default";
-        console.info("[nova-chat] chat_send_message invoke", {
+        console.info("[persistent-sage-chat] chat_send_message invoke", {
           personalityId: personalityIdForSend,
           conversationId: convId,
           hasImage: Boolean(image),

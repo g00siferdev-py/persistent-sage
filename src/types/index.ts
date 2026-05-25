@@ -1,4 +1,4 @@
-/** Shared frontend types for Nova. */
+/** Shared frontend types for Persistent Sage. */
 
 export type {
   ChatMessage,
@@ -10,9 +10,9 @@ export type {
 } from "./chat";
 export { storedToChatMessage } from "./chat";
 
-export type NovaPlatform = "desktop";
+export type AppPlatform = "desktop";
 
-export interface NovaAppMeta {
-  name: "Nova";
-  platform: NovaPlatform;
+export interface AppMeta {
+  name: "Persistent Sage";
+  platform: AppPlatform;
 }

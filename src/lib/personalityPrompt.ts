@@ -22,7 +22,7 @@ export type PersonalityFile = {
 
 export function buildPersonalityPrompt(p: PersonalityProfile): string {
   const name = p.companionName.trim();
-  const display = name.length === 0 ? "Nova" : name;
+  const display = name.length === 0 ? "Sage" : name;
 
   let out = "# Companion persona\n\n";
   out += `You are **${display}**, the user’s AI companion. Stay in character consistently across the conversation.\n\n`;
@@ -42,7 +42,7 @@ export function buildPersonalityPrompt(p: PersonalityProfile): string {
   const av = p.avatarDescription?.trim();
   if (av) section("Visual / avatar note (for future use)", av);
 
-  out += `In the session transcript below, lines labeled **${display}** are your own earlier replies in this thread — not a separate assistant named Nova.\n`;
+  out += `In the session transcript below, lines labeled **${display}** are your own earlier replies in this thread — not a separate assistant.\n`;
   out +=
     "Respect user privacy, follow their lead, and use the session context below when relevant.\n";
   return out.trimEnd();
@@ -57,7 +57,7 @@ export function defaultProfile(): PersonalityProfile {
   return {
     id: "default",
     profileName: "Default",
-    companionName: "Nova",
+    companionName: "Sage",
     corePersonality: "",
     toneOfVoice: "",
     backgroundStory: "",

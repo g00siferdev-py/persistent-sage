@@ -10,7 +10,7 @@
         "sidebarImage": "../packaging/windows/nsis-sidebar.bmp",
         "installerIcon": "icons/icon.ico",
         "installMode": "currentUser",
-        "startMenuFolder": "Nova",
+        "startMenuFolder": "Persistent Sage",
         "installerHooks": "../packaging/windows/installer-hooks.nsi"
       }
     }

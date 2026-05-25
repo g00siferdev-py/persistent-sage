@@ -1,8 +1,8 @@
 export type Theme = "light" | "dark";
 
-const STORAGE_KEY = "nova-theme";
+const STORAGE_KEY = "persistent-sage-theme";
 
-/** Read persisted theme; defaults to dark to match Nova's original look. */
+/** Read persisted theme; defaults to dark to match Persistent Sage's original look. */
 export function getStoredTheme(): Theme {
   try {
     const v = localStorage.getItem(STORAGE_KEY);

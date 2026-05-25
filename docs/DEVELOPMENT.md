@@ -7,7 +7,7 @@ Instructions for contributors working on [g00siferdev-py/project-nova](https://g
 ## Repository layout
 
 ```text
-Nova/
+Persistent Sage/
 ├── src/                    # React frontend
 │   ├── components/
 │   ├── hooks/
@@ -111,4 +111,4 @@ Artifacts: `src-tauri/target/release/bundle/`
 
 - [INSTALL.md](./INSTALL.md)
 - [ARCHITECTURE.md](./ARCHITECTURE.md)
-- [../NOVA-STATUS.md](../NOVA-STATUS.md) — Backlog and shipped features
+- [../PERSISTENT-SAGE-STATUS.md](../PERSISTENT-SAGE-STATUS.md) — Backlog and shipped features

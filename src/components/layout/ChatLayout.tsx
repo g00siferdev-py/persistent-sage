@@ -18,6 +18,9 @@ type SettingsForHint = {
   hasOpenaiApiKey: boolean;
   hasAnthropicApiKey: boolean;
   hasOllamaApiKey: boolean;
+  hasGeminiApiKey: boolean;
+  hasXaiApiKey: boolean;
+  thinkingEffort: "low" | "medium" | "high";
   onboardingCompleted: boolean;
 };
 
@@ -32,6 +35,7 @@ export function ChatLayout() {
     loadSettingsLayoutMode(),
   );
   const [backendHint, setBackendHint] = useState<string | null>(null);
+  const [thinkingEffort, setThinkingEffort] = useState<"low" | "medium" | "high">("medium");
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const prevSettingsLayoutMode = useRef<SettingsLayoutMode>(settingsLayoutMode);
@@ -48,10 +52,11 @@ export function ChatLayout() {
   const loadBackendHint = useCallback(async () => {
     try {
       const s = await invoke<SettingsForHint>("settings_get");
+      setThinkingEffort(s.thinkingEffort ?? "medium");
       const p = (s.selectedProvider ?? "placeholder").trim().toLowerCase();
       if (p === "placeholder") {
         setBackendHint(
-          "This install is using the offline placeholder model — nothing is sent to OpenAI, Anthropic, or Ollama. Open Settings → Provider and pick a live backend (and API key if required). Settings live in your Nova data folder, not the git repo, so each computer starts with its own copy.",
+          "This install is using the offline placeholder model — nothing is sent to OpenAI, Anthropic, Google, xAI, or Ollama. Open Settings → Provider and pick a live backend (and API key if required). Settings live in your Persistent Sage data folder, not the git repo, so each computer starts with its own copy.",
         );
         return;
       }
@@ -73,6 +78,18 @@ export function ChatLayout() {
         );
         return;
       }
+      if (p === "gemini" && !s.hasGeminiApiKey) {
+        setBackendHint(
+          "Google Gemini is selected but no API key is stored on this machine. Add a key under Settings → Provider → Google Gemini.",
+        );
+        return;
+      }
+      if (p === "xai" && !s.hasXaiApiKey) {
+        setBackendHint(
+          "xAI Grok is selected but no API key is stored on this machine. Add a key under Settings → Provider → xAI.",
+        );
+        return;
+      }
       setBackendHint(null);
     } catch {
       setBackendHint(null);
@@ -87,6 +104,7 @@ export function ChatLayout() {
     void (async () => {
       try {
         const s = await invoke<SettingsForHint>("settings_get");
+        setThinkingEffort(s.thinkingEffort ?? "medium");
         setShowOnboarding(!s.onboardingCompleted);
       } catch {
         setShowOnboarding(false);
@@ -135,7 +153,7 @@ export function ChatLayout() {
   }, [settingsLayoutMode, loadBackendHint, refreshVisionSupported]);
 
   const title = useMemo(() => {
-    if (!activeConversationId) return "Nova";
+    if (!activeConversationId) return "Sage";
     return (
       conversationsForTitle.find((c) => c.id === activeConversationId)?.title ?? "Chat"
     );
@@ -144,6 +162,17 @@ export function ChatLayout() {
   const subtitle = threadLoading
     ? "Loading context from MemoryAnchor…"
     : truncate(briefing, 120) || "Local SQLite · private by default";
+
+  const updateThinkingEffort = useCallback(async (effort: "low" | "medium" | "high") => {
+    setThinkingEffort(effort);
+    try {
+      await invoke<SettingsForHint>("settings_update", {
+        patch: { thinkingEffort: effort },
+      });
+    } catch {
+      void loadBackendHint();
+    }
+  }, [loadBackendHint]);
 
   return (
     <div className="relative flex h-full w-full overflow-hidden">
@@ -203,6 +232,8 @@ export function ChatLayout() {
           activeCompanionProfileId={activePersonalityId}
           activeCompanionLabel={activeCompanionLabel}
           companionOptions={companionOptions}
+          thinkingEffort={thinkingEffort}
+          onThinkingEffortChange={updateThinkingEffort}
           onCompanionChange={async (profileId) => {
             await applyActivePersonality(profileId);
           }}

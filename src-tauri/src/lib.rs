@@ -1,27 +1,27 @@
-//! Nova — portable, privacy-first AI companion (Rust + Tauri).
+//! Persistent Sage — portable, privacy-first AI companion (Rust + Tauri).
 //!
 //! **Local-first**: conversation memory defaults to SQLite on disk; model
 //! traffic goes only through pluggable [`provider::LLMProviderEngine`] backends
 //! the user configures (no cloud storage in core). **Portable runs**: set
-//! `NOVA_DATA_DIR` or `NOVA_PORTABLE=1` so data stays with the app (e.g. USB).
+//! `PERSISTENT_SAGE_DATA_DIR` or `PERSISTENT_SAGE_PORTABLE=1` so data stays with the app (e.g. USB).
 //!
 //! Application entry for mobile builds is [`run`]. Desktop [`main`] in
 //! `main.rs` delegates here so the same setup runs everywhere.
 
 mod agent_tools;
-mod browser_fetch;
 mod attachments;
+mod browser_fetch;
 mod chat;
 mod database_query;
 mod embedding;
 mod memory;
 mod memory_extract;
 mod memory_tools;
-mod pulse;
 mod personality;
 mod personality_tools;
-mod settings;
 mod provider;
+mod pulse;
+mod settings;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -30,14 +30,15 @@ use memory::{
     AnchorType, ConversationMemory, MemoryAnchor, MemoryRecallBundle, MessageRole, SqliteProfile,
     StoredAnchor, StoredConversation, StoredMessage, StoredProject, DEFAULT_PERSONALITY_ID,
 };
-use provider::{
-    build_engine, fetch_anthropic_model_ids, fetch_ollama_cloud_model_tags,
-    fetch_ollama_local_model_tags, fetch_openai_model_ids, list_provider_descriptors,
-    LLMProviderEngine, PlaceholderEngine, ProviderDescriptor, ProviderError,
-};
 use personality::{PersonalityFile, PersonalityManager, PersonalitySnapshot};
-use settings::{SettingsManager, SettingsUpdatePayload, SettingsView};
+use provider::{
+    build_engine, fetch_anthropic_model_ids, fetch_gemini_model_ids, fetch_ollama_cloud_model_tags,
+    fetch_ollama_local_model_tags, fetch_openai_model_ids, fetch_xai_model_ids,
+    list_provider_descriptors, LLMProviderEngine, PlaceholderEngine, ProviderDescriptor,
+    ProviderError,
+};
 use serde::Serialize;
+use settings::{SettingsManager, SettingsUpdatePayload, SettingsView};
 use std::time::Duration;
 use tauri::{Manager, State};
 
@@ -51,7 +52,7 @@ pub struct NovaState {
     pub(crate) personality: Arc<PersonalityManager>,
     /// Canonical agent workspace (`{data_dir}/workspace`). Created at startup; tools only touch paths inside it.
     pub(crate) workspace_root: PathBuf,
-    /// Canonical Nova data directory (same resolution as MemoryAnchor: `NOVA_DATA_DIR`, portable `data/`, or OS app data).
+    /// Canonical Persistent Sage data directory (same resolution as MemoryAnchor: `PERSISTENT_SAGE_DATA_DIR`, portable `data/`, or OS app data).
     pub(crate) data_directory: PathBuf,
 }
 
@@ -65,14 +66,14 @@ impl NovaState {
         data_directory: PathBuf,
     ) -> Self {
         let http = reqwest::Client::builder()
-            .user_agent(format!("Nova/{}", env!("CARGO_PKG_VERSION")))
+            .user_agent(format!("PersistentSage/{}", env!("CARGO_PKG_VERSION")))
             .build()
             .expect("reqwest Client");
 
         let llm: Arc<dyn LLMProviderEngine + Send + Sync> = match build_engine(&http, &settings) {
             Ok(e) => e,
             Err(e) => {
-                eprintln!("nova: provider init failed ({e}), using placeholder");
+                eprintln!("persistent-sage: provider init failed ({e}), using placeholder");
                 Arc::new(PlaceholderEngine::new())
             }
         };
@@ -116,10 +117,24 @@ pub struct AppDataPaths {
     pub database_file: String,
     /// Agent read/write sandbox (`{dataDirectory}/workspace`).
     pub workspace_directory: String,
-    /// `desktop` (WAL) vs `portable` (from `NOVA_DATA_DIR` / `NOVA_PORTABLE`).
+    /// `desktop` (WAL) vs `portable` (from Persistent Sage env overrides or legacy `NOVA_*`).
     pub sqlite_profile: String,
     pub nova_data_dir_env: bool,
     pub nova_portable_env: bool,
+}
+
+fn ensure_workspace_guide(workspace_root: &std::path::Path) {
+    const GUIDE: &str = include_str!("../../docs/SAGE-GUIDE.md");
+    let path = workspace_root.join("guide.md");
+    if path.exists() {
+        return;
+    }
+    if let Err(e) = std::fs::write(&path, GUIDE) {
+        eprintln!(
+            "persistent-sage: warning: could not write workspace guide {}: {e}",
+            path.display()
+        );
+    }
 }
 
 #[tauri::command]
@@ -130,10 +145,12 @@ fn app_data_paths() -> Result<AppDataPaths, String> {
         SqliteProfile::Desktop => "desktop",
         SqliteProfile::Portable => "portable",
     };
-    let nova_data_dir_env = std::env::var("NOVA_DATA_DIR")
+    let nova_data_dir_env = std::env::var("PERSISTENT_SAGE_DATA_DIR")
+        .or_else(|_| std::env::var("NOVA_DATA_DIR"))
         .map(|s| !s.trim().is_empty())
         .unwrap_or(false);
-    let nova_portable_env = std::env::var("NOVA_PORTABLE")
+    let nova_portable_env = std::env::var("PERSISTENT_SAGE_PORTABLE")
+        .or_else(|_| std::env::var("NOVA_PORTABLE"))
         .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
     let workspace_directory = data_directory.join("workspace");
@@ -202,6 +219,20 @@ async fn anthropic_list_models(state: State<'_, NovaState>) -> Result<Vec<String
 }
 
 #[tauri::command]
+async fn gemini_list_models(state: State<'_, NovaState>) -> Result<Vec<String>, String> {
+    fetch_gemini_model_ids(&state.http, &state.settings)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn xai_list_models(state: State<'_, NovaState>) -> Result<Vec<String>, String> {
+    fetch_xai_model_ids(&state.http, &state.settings)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn provider_switch(state: State<'_, NovaState>, provider_id: String) -> Result<(), String> {
     let id = provider_id.trim().to_lowercase();
     state
@@ -212,7 +243,8 @@ async fn provider_switch(state: State<'_, NovaState>, provider_id: String) -> Re
         })
         .map_err(|e| e.to_string())?;
 
-    let engine = build_engine(&state.http, &state.settings).map_err(|e: ProviderError| e.to_string())?;
+    let engine =
+        build_engine(&state.http, &state.settings).map_err(|e: ProviderError| e.to_string())?;
     *state.llm.write().await = engine;
     Ok(())
 }
@@ -227,11 +259,16 @@ async fn settings_update(
     state: State<'_, NovaState>,
     patch: SettingsUpdatePayload,
 ) -> Result<SettingsView, String> {
-    state.settings.apply_update(patch).map_err(|e| e.to_string())?;
+    state
+        .settings
+        .apply_update(patch)
+        .map_err(|e| e.to_string())?;
     match build_engine(&state.http, &state.settings) {
         Ok(engine) => *state.llm.write().await = engine,
         Err(e) => {
-            eprintln!("nova: rebuild LLM after settings failed ({e}), keeping placeholder");
+            eprintln!(
+                "persistent-sage: rebuild LLM after settings failed ({e}), keeping placeholder"
+            );
             *state.llm.write().await = Arc::new(PlaceholderEngine::new());
         }
     }
@@ -244,7 +281,10 @@ fn personality_get(state: State<NovaState>) -> Result<PersonalitySnapshot, Strin
 }
 
 #[tauri::command]
-fn personality_save(state: State<NovaState>, file: PersonalityFile) -> Result<PersonalitySnapshot, String> {
+fn personality_save(
+    state: State<NovaState>,
+    file: PersonalityFile,
+) -> Result<PersonalitySnapshot, String> {
     state
         .personality
         .replace_all(file)
@@ -265,7 +305,7 @@ async fn settings_save_api_key(
     match build_engine(&state.http, &state.settings) {
         Ok(engine) => *state.llm.write().await = engine,
         Err(e) => {
-            eprintln!("nova: rebuild LLM after API key save failed ({e})");
+            eprintln!("persistent-sage: rebuild LLM after API key save failed ({e})");
         }
     }
     Ok(())
@@ -275,7 +315,7 @@ async fn settings_save_api_key(
 /// Does not modify `settings.json`, API keys, or `personality.json`.
 #[tauri::command]
 async fn database_wipe_memories(state: State<'_, NovaState>) -> Result<(), String> {
-    eprintln!("nova: ipc database_wipe_memories — SQLite user tables only");
+    eprintln!("persistent-sage: ipc database_wipe_memories — SQLite user tables only");
     state
         .memory
         .wipe_all_user_data()
@@ -286,7 +326,7 @@ async fn database_wipe_memories(state: State<'_, NovaState>) -> Result<(), Strin
 /// Permanently clears SQLite memory data and resets `settings.json` / `personality.json` to defaults.
 #[tauri::command]
 async fn database_wipe_all(state: State<'_, NovaState>) -> Result<(), String> {
-    eprintln!("nova: ipc database_wipe_all — SQLite + settings + personality");
+    eprintln!("persistent-sage: ipc database_wipe_all — SQLite + settings + personality");
     state
         .memory
         .wipe_all_user_data()
@@ -303,7 +343,9 @@ async fn database_wipe_all(state: State<'_, NovaState>) -> Result<(), String> {
     match build_engine(&state.http, &state.settings) {
         Ok(engine) => *state.llm.write().await = engine,
         Err(e) => {
-            eprintln!("nova: database_wipe_all rebuild LLM failed ({e}), using placeholder");
+            eprintln!(
+                "persistent-sage: database_wipe_all rebuild LLM failed ({e}), using placeholder"
+            );
             *state.llm.write().await = Arc::new(PlaceholderEngine::new());
         }
     }
@@ -311,12 +353,15 @@ async fn database_wipe_all(state: State<'_, NovaState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn memory_set_active_personality(state: State<NovaState>, personality_id: String) -> Result<(), String> {
+fn memory_set_active_personality(
+    state: State<NovaState>,
+    personality_id: String,
+) -> Result<(), String> {
     let mut tid = personality_id.trim().to_string();
     if tid.is_empty() {
         tid = DEFAULT_PERSONALITY_ID.to_string();
     }
-    eprintln!("nova: ipc memory_set_active_personality personality_id={tid} (sync persona + memory)");
+    eprintln!("persistent-sage: ipc memory_set_active_personality personality_id={tid} (sync persona + memory)");
     state
         .personality
         .set_active_profile_id(&tid)
@@ -326,9 +371,7 @@ fn memory_set_active_personality(state: State<NovaState>, personality_id: String
 }
 
 #[tauri::command]
-fn memory_list_conversations(
-    state: State<NovaState>,
-) -> Result<Vec<StoredConversation>, String> {
+fn memory_list_conversations(state: State<NovaState>) -> Result<Vec<StoredConversation>, String> {
     state.memory.list_conversations().map_err(|e| e.to_string())
 }
 
@@ -490,7 +533,8 @@ fn memory_recall(
 /// Clear anchor embeddings and re-embed all anchors for the active companion profile.
 #[tauri::command]
 async fn memory_reindex_embeddings(state: State<'_, NovaState>) -> Result<u32, String> {
-    memory_extract::reindex_all_embeddings(&state.http, &state.settings, state.memory.as_ref()).await
+    memory_extract::reindex_all_embeddings(&state.http, &state.settings, state.memory.as_ref())
+        .await
 }
 
 /// Anchors for this thread plus global (`conversation_id` NULL).
@@ -507,7 +551,10 @@ fn memory_list_anchors(
 }
 
 #[tauri::command]
-fn memory_list_projects(state: State<NovaState>, limit: usize) -> Result<Vec<StoredProject>, String> {
+fn memory_list_projects(
+    state: State<NovaState>,
+    limit: usize,
+) -> Result<Vec<StoredProject>, String> {
     state
         .memory
         .list_projects(limit.max(1).min(100))
@@ -536,11 +583,9 @@ fn read_text_files(paths: Vec<String>) -> Result<Vec<TextFilePayload>, String> {
             .and_then(|n| n.to_str())
             .unwrap_or("file.md")
             .to_string();
-        let text = std::fs::read_to_string(pb).map_err(|e| format!("Could not read {file_name}: {e}"))?;
-        out.push(TextFilePayload {
-            file_name,
-            text,
-        });
+        let text =
+            std::fs::read_to_string(pb).map_err(|e| format!("Could not read {file_name}: {e}"))?;
+        out.push(TextFilePayload { file_name, text });
     }
     if out.is_empty() {
         return Err("No files were read.".into());
@@ -553,51 +598,60 @@ fn read_text_files(paths: Vec<String>) -> Result<Vec<TextFilePayload>, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     if let Ok(dir) = memory::default_data_dir() {
-        eprintln!("nova: data directory {}", dir.display());
+        eprintln!("persistent-sage: data directory {}", dir.display());
     }
     if let Ok(db) = memory::default_db_path() {
-        eprintln!("nova: sqlite database {}", db.display());
+        eprintln!("persistent-sage: sqlite database {}", db.display());
     }
     eprintln!(
-        "nova: sqlite profile {:?} (NOVA_DATA_DIR set: {}, NOVA_PORTABLE set: {})",
+        "persistent-sage: sqlite profile {:?} (custom data dir set: {}, portable set: {})",
         memory::sqlite_profile_from_env(),
-        std::env::var("NOVA_DATA_DIR")
+        std::env::var("PERSISTENT_SAGE_DATA_DIR")
+            .or_else(|_| std::env::var("NOVA_DATA_DIR"))
             .map(|s| !s.trim().is_empty())
             .unwrap_or(false),
-        std::env::var("NOVA_PORTABLE")
+        std::env::var("PERSISTENT_SAGE_PORTABLE")
+            .or_else(|_| std::env::var("NOVA_PORTABLE"))
             .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
             .unwrap_or(false),
     );
 
-    let memory: Arc<dyn ConversationMemory + Send + Sync> =
-        Arc::new(MemoryAnchor::open_default().expect("failed to open Nova memory database"));
+    let memory: Arc<dyn ConversationMemory + Send + Sync> = Arc::new(
+        MemoryAnchor::open_default().expect("failed to open Persistent Sage memory database"),
+    );
 
     let data_dir =
-        memory::default_data_dir().expect("failed to resolve Nova data directory");
+        memory::default_data_dir().expect("failed to resolve Persistent Sage data directory");
     let settings = Arc::new(
         SettingsManager::load(data_dir.clone(), memory.clone()).expect("failed to load settings"),
     );
-    let personality = Arc::new(
-        PersonalityManager::load(&data_dir).expect("failed to load personality store"),
-    );
+    let personality =
+        Arc::new(PersonalityManager::load(&data_dir).expect("failed to load personality store"));
 
     let mut data_directory = data_dir.clone();
     if let Ok(c) = std::fs::canonicalize(&data_directory) {
         data_directory = c;
     }
-    eprintln!("nova: resolved data directory {}", data_directory.display());
+    eprintln!(
+        "persistent-sage: resolved data directory {}",
+        data_directory.display()
+    );
 
     browser_fetch::ensure_browser_directories(&data_directory);
 
     let mut workspace_root = data_dir.join("workspace");
     if let Err(e) = std::fs::create_dir_all(&workspace_root) {
         eprintln!(
-            "nova: warning: could not create agent workspace directory {}: {e}",
+            "persistent-sage: warning: could not create agent workspace directory {}: {e}",
             workspace_root.display()
         );
     }
     workspace_root = std::fs::canonicalize(&workspace_root).unwrap_or(workspace_root);
-    eprintln!("nova: agent workspace directory {}", workspace_root.display());
+    ensure_workspace_guide(&workspace_root);
+    eprintln!(
+        "persistent-sage: agent workspace directory {}",
+        workspace_root.display()
+    );
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -635,6 +689,8 @@ pub fn run() {
             openai_list_models,
             ollama_list_local_models,
             anthropic_list_models,
+            gemini_list_models,
+            xai_list_models,
             provider_switch,
             settings_get,
             settings_update,
@@ -664,5 +720,5 @@ pub fn run() {
             memory_list_projects,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Nova (Tauri application)");
+        .expect("error while running Persistent Sage (Tauri application)");
 }

@@ -1,7 +1,7 @@
 [package]
-name = "nova"
-version = "0.2.0-beta.3"
-description = "Nova — portable AI companion platform (Tauri shell)"
+name = "persistent-sage"
+version = "0.2.0-beta.4"
+description = "Persistent Sage — local-first AI companion (Tauri shell)"
 authors = ["g00siferdev-py"]
 edition = "2021"
 rust-version = "1.77"

@@ -1,4 +1,4 @@
-//! Desktop binary entry point for Nova.
+//! Desktop binary entry point for Persistent Sage.
 //!
 //! Tauri command registration and `Builder` setup live in `nova_lib::run` so
 //! the same initialization can be reused from the library crate (including

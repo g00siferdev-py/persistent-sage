@@ -57,6 +57,7 @@ pub struct CompletionRequest {
     pub tools: Option<Vec<ToolDefinition>>,
     pub max_tokens: Option<u32>,
     pub temperature: Option<f32>,
+    pub thinking_effort: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

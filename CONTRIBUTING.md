@@ -1,8 +1,8 @@
-# Contributing to Nova
+# Contributing to Persistent Sage
 
-Thank you for helping test and improve Nova. The project is maintained by **[g00siferdev-py](https://github.com/g00siferdev-py)** on [github.com/g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova).
+Thank you for helping test and improve Persistent Sage. The project is maintained by **[g00siferdev-py](https://github.com/g00siferdev-py)** on [github.com/g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova).
 
-Nova **0.2.0-beta.1** is in **open beta**: core flows work, but APIs, settings, and UX may still change. Your reports and patches are especially valuable right now.
+Persistent Sage **0.2.0-beta.4** is in **open beta**: core flows work, but APIs, settings, and UX may still change. Your reports and patches are especially valuable right now.
 
 ---
 
@@ -12,7 +12,7 @@ Nova **0.2.0-beta.1** is in **open beta**: core flows work, but APIs, settings, 
 2. Exercise chat, **Settings** (Companion, Provider, Tools, General), optional **Pulse**, image attach, and agent tools if you use them.
 3. If you migrate from **OpenClaw**, try the workflow in **[docs/USER-GUIDE.md § Migrating from OpenClaw](./docs/USER-GUIDE.md#11-migrating-from-openclaw)** and note what worked or failed.
 4. Open a **[GitHub issue](https://github.com/g00siferdev-py/project-nova/issues)** with:
-   - OS and Nova version (`0.2.0-beta.1` or git commit)
+   - OS and Persistent Sage version (`0.2.0-beta.4` or git commit)
    - Provider and model
    - Steps to reproduce
    - Terminal or in-app error text (redact API keys)

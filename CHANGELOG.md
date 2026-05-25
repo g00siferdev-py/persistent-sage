@@ -10,6 +10,24 @@ _Nothing yet._
 
 ---
 
+## [0.2.0-beta.4] — 2026-05-19
+
+Rebrand from codename **Nova** to **Persistent Sage** (UI, docs, installer, icons, splash).
+
+### Added
+
+- **Persistent Sage branding** — splash (`persistent-sage-splash.png`), sidebar plate (`persistent-sage-plate.png`), app icons from Sage artwork.
+- **docs/REBRAND.md** — migration notes, repo rename guidance, data path changes.
+
+### Changed
+
+- **Product name** — `Persistent Sage`; Tauri identifier `app.persistentsage.desktop`; new default data directory layout.
+- **Portable launcher** — `Start-Persistent-Sage-Portable.bat` (legacy `NOVA_PORTABLE` still supported).
+- **Default companion display name** — `Sage` (was `Nova`).
+- **Documentation** — user-facing “Nova” → “Persistent Sage” across README and `docs/`.
+
+---
+
 ## [0.2.0-beta.3] — 2026-05-19
 
 Windows installer, portable packaging, first-run onboarding, and branding.
@@ -17,14 +35,14 @@ Windows installer, portable packaging, first-run onboarding, and branding.
 ### Added
 
 - **First-run onboarding** — Setup wizard (install type, provider, memory); **Settings → General → Run setup wizard again**.
-- **Windows NSIS installer** — Branded installer with WebView2 bootstrapper, Start Menu shortcuts, optional **Nova (Portable)** shortcut; see **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)**.
-- **Portable packaging** — `npm run package:portable` → `dist/NovaPortable/`; `NOVA_PORTABLE=1` via `Start-Nova-Portable.bat`.
+- **Windows NSIS installer** — Branded installer with WebView2 bootstrapper, Start Menu shortcuts, optional **Persistent Sage (Portable)** shortcut; see **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)**.
+- **Portable packaging** — `npm run package:portable` → `dist/NovaPortable/`; `NOVA_PORTABLE=1` via `Start-Nova-Portable.bat` (legacy beta.3 names).
 - **Splash screen** — Branded splash (~3.5s) on app start; logo in sidebar.
 - **Branding scripts** — `npm run branding:icons`, `npm run branding:nsis`; assets under `packaging/branding/`.
 
 ### Changed
 
-- **Tauri icons** — Regenerated from Nova logo for installer and taskbar.
+- **Tauri icons** — Regenerated from Persistent Sage logo for installer and taskbar.
 
 ---
 
@@ -35,7 +53,7 @@ Post-beta polish: semantic memory, UI theme, settings clarity, and anchor extrac
 ### Added
 
 - **Semantic memory** — LLM JSON extraction after user messages; hybrid FTS/keyword + cosine recall; `memory_search` agent tool; background embedding (OpenAI, Ollama, Ollama Cloud); **Re-index memory embeddings** in Settings → General → Memory.
-- **Light theme** — Settings → General → Appearance → **Dark mode** toggle; preference stored in `localStorage` (`nova-theme`).
+- **Light theme** — Settings → General → Appearance → **Dark mode** toggle; preference stored in `localStorage` (`persistent-sage-theme`).
 - **Friendly tool labels** — Settings and agent prompts show names like “Web Search” while internal ids stay unchanged (`toolDisplayNames.ts`).
 
 ### Changed
@@ -54,20 +72,20 @@ Post-beta polish: semantic memory, UI theme, settings clarity, and anchor extrac
 
 ## [0.2.0-beta.1] — 2026-05-19
 
-**Nova is ready for beta testing.** See [README.md](./README.md#beta-testing) for how to install from source, report issues, and contribute.
+**Persistent Sage is ready for beta testing.** See [README.md](./README.md#beta-testing) for how to install from source, report issues, and contribute.
 
 ### Migrating from OpenClaw (recommended workflow)
 
-Settings → Companion includes **Import OpenClaw markdown…**, which maps `SOUL.md`, `IDENTITY.md`, and related files into a new Nova profile preview. **Today, the most effective way to carry an OpenClaw agent’s full personality into Nova is still a three-step workspace workflow:**
+Settings → Companion includes **Import OpenClaw markdown…**, which maps `SOUL.md`, `IDENTITY.md`, and related files into a new Persistent Sage profile preview. **Today, the most effective way to carry an OpenClaw agent’s full personality into Persistent Sage is still a three-step workspace workflow:**
 
-1. **Copy** — Place `IDENTITY.md`, `SOUL.md`, `JOURNAL.md`, `USER.md`, and `MEMORY.md` into Nova’s agent workspace (`{data_dir}/workspace/`). Enable **Settings → Tools → Workspace tools** so the companion can read them.
-2. **Prompt** — Ask your Nova companion (with **Allow personality self-edit** enabled under **Settings → Tools**):
+1. **Copy** — Place `IDENTITY.md`, `SOUL.md`, `JOURNAL.md`, `USER.md`, and `MEMORY.md` into Persistent Sage’s agent workspace (`{data_dir}/workspace/`). Enable **Settings → Tools → Workspace tools** so the companion can read them.
+2. **Prompt** — Ask your Persistent Sage companion (with **Allow personality self-edit** enabled under **Settings → Tools**):
 
    > Please thoroughly read the following files located in your /workspace/ directory: IDENTITY.md, SOUL.md, JOURNAL.md, USER.md, MEMORY.md. Based on the contents of those files, edit your personality.json file using as much information as possible from those files. Remove any mention of running on the OpenClaw platform, or being dependent on markdown files to assemble your personality. Your personality from now on will be completely dependent on personality.json.
 
 3. **Remove** — After you review the updated profile in **Settings → Companion**, delete the `.md` files from `workspace/` so the companion does not keep referring to them.
 
-We are **still working on** a more efficient, streamlined OpenClaw → Nova migration (better field mapping, one-click import, and less manual prompting). Until then, treat the UI import as a starting point and the workflow above as the gold standard for fidelity.
+We are **still working on** a more efficient, streamlined OpenClaw → Persistent Sage migration (better field mapping, one-click import, and less manual prompting). Until then, treat the UI import as a starting point and the workflow above as the gold standard for fidelity.
 
 Full detail: [docs/USER-GUIDE.md § Migrating from OpenClaw](./docs/USER-GUIDE.md#11-migrating-from-openclaw).
 
@@ -76,14 +94,14 @@ Full detail: [docs/USER-GUIDE.md § Migrating from OpenClaw](./docs/USER-GUIDE.m
 #### OpenClaw and companion personality
 
 - **Import OpenClaw markdown…** — Settings → Companion: pick `SOUL.md`, `IDENTITY.md`, `USER.md`, `JOURNAL.md`, `MEMORY.md`, `TOOLS.md` (any subset); preview mapped fields before adding a profile.
-- **Import Nova JSON** — Full `personality.json`, `profiles` array, or single profile object.
+- **Import Persistent Sage JSON** — Full `personality.json`, `profiles` array, or single profile object.
 - **Native file dialog** — Tauri dialog for multi-file OpenClaw import on supported platforms.
 - **Agent tools `personality_get` / `personality_update`** — Opt-in (**Settings → Tools → Allow personality self-edit**); companion can read and persist the active profile to `personality.json`.
 - **Live system prompt preview** — Companion tab reflects generated persona text.
 
 #### Agent tools (web and browser)
 
-- **`fetch_browser`** — Headless Chrome/Chromium/Edge fetch for JS-heavy sites; opt-in under **Settings → Tools** (requires web tools + system browser or `NOVA_CHROME_PATH`).
+- **`fetch_browser`** — Headless Chrome/Chromium/Edge fetch for JS-heavy sites; opt-in under **Settings → Tools** (requires web tools + system browser or `PERSISTENT_SAGE_CHROME_PATH`).
 - **Robots.txt** — Optional ignore for `fetch_browser` (personal automation; off by default).
 - **`read_text_files`** IPC — UTF-8 reads for OpenClaw import paths from the native picker.
 

@@ -40,7 +40,10 @@ impl OllamaProvider {
     }
 
     /// Remote Ollama host at `https://ollama.com` with API key from encrypted settings (`ollama` slot).
-    pub fn from_cloud_settings(settings: &SettingsManager, http: &reqwest::Client) -> Result<Self, ProviderError> {
+    pub fn from_cloud_settings(
+        settings: &SettingsManager,
+        http: &reqwest::Client,
+    ) -> Result<Self, ProviderError> {
         let token = settings
             .decrypt_api_key("ollama")?
             .filter(|s| !s.trim().is_empty())
@@ -136,7 +139,9 @@ impl OllamaProvider {
     fn build_options(request: &CompletionRequest) -> Value {
         let mut o = json!({});
         if let Some(t) = request.temperature {
-            o.as_object_mut().unwrap().insert("temperature".into(), json!(t));
+            o.as_object_mut()
+                .unwrap()
+                .insert("temperature".into(), json!(t));
         }
         if let Some(mt) = request.max_tokens {
             let capped = mt.min(OLLAMA_NUM_PREDICT_CAP).max(1);
@@ -166,7 +171,10 @@ impl LLMProviderEngine for OllamaProvider {
         }
     }
 
-    async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse, ProviderError> {
+    async fn complete(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<CompletionResponse, ProviderError> {
         let mut body = json!({
             "model": self.model,
             "messages": Self::build_messages(request),
@@ -211,7 +219,9 @@ impl LLMProviderEngine for OllamaProvider {
         Ok(CompletionResponse {
             content,
             tool_calls,
-            finish_reason: v["done"].as_bool().and_then(|d| d.then_some("stop".to_string())),
+            finish_reason: v["done"]
+                .as_bool()
+                .and_then(|d| d.then_some("stop".to_string())),
             usage: None,
         })
     }

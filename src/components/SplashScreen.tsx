@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-/** Brief branded window shown while the main Nova UI loads (see `nova_lib::run` splash timing). */
+/** Branded splash while the main UI loads (see `nova_lib::run` splash timing). */
 export function SplashScreen() {
   const [visible, setVisible] = useState(false);
 
@@ -12,20 +12,14 @@ export function SplashScreen() {
   return (
     <div className="flex h-full min-h-screen flex-col items-center justify-center bg-[#050a14]">
       <div
-        className={`flex max-w-[min(100%,20rem)] flex-col items-center px-6 transition-opacity duration-500 ${
+        className={`flex max-w-[min(100%,28rem)] flex-col items-center px-4 transition-opacity duration-500 ${
           visible ? "opacity-100" : "opacity-0"
         }`}
       >
         <img
-          src="/nova-splash.png"
-          alt="Nova — AI companion"
+          src="/persistent-sage-splash.png"
+          alt="Persistent Sage — AI companion"
           className="w-full object-contain drop-shadow-[0_0_24px_rgba(34,211,238,0.25)]"
-          onError={(e) => {
-            const img = e.currentTarget;
-            if (img.dataset.fallback === "1") return;
-            img.dataset.fallback = "1";
-            img.src = "/nova-logo.png";
-          }}
         />
       </div>
     </div>

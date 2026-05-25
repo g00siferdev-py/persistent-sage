@@ -7,7 +7,7 @@ function tauriPlatform(): string | undefined {
     ?.TAURI_ENV_PLATFORM;
 }
 
-/** True when running inside the Nova Tauri shell (not `npm run dev` in a browser). */
+/** True when running inside the Persistent Sage Tauri shell (not `npm run dev` in a browser). */
 export function isNovaDesktop(): boolean {
   return typeof tauriPlatform() === "string" && tauriPlatform()!.length > 0;
 }

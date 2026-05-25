@@ -13,6 +13,8 @@ type SettingsView = {
   hasOpenaiApiKey: boolean;
   hasAnthropicApiKey: boolean;
   hasOllamaApiKey: boolean;
+  hasGeminiApiKey: boolean;
+  hasXaiApiKey: boolean;
   onboardingCompleted: boolean;
 };
 
@@ -35,6 +37,8 @@ function hasKeyForProvider(settings: SettingsView | null, providerId: string): b
   if (providerId === "openai") return settings.hasOpenaiApiKey;
   if (providerId === "anthropic") return settings.hasAnthropicApiKey;
   if (providerId === "ollama_cloud") return settings.hasOllamaApiKey;
+  if (providerId === "gemini") return settings.hasGeminiApiKey;
+  if (providerId === "xai") return settings.hasXaiApiKey;
   return true;
 }
 
@@ -114,19 +118,23 @@ export function OnboardingWizard({ onComplete }: Props) {
       setError("Paste an API key or choose Offline placeholder / Local Ollama.");
       return;
     }
-    const slot =
+    const provider =
       providerId === "openai"
         ? "openai"
         : providerId === "anthropic"
           ? "anthropic"
           : providerId === "ollama_cloud"
             ? "ollama"
-            : null;
-    if (!slot) return;
+            : providerId === "gemini"
+              ? "gemini"
+              : providerId === "xai"
+                ? "xai"
+                : null;
+    if (!provider) return;
     setBusy(true);
     setError(null);
     try {
-      await invoke("settings_save_api_key", { slot, key });
+      await invoke("settings_save_api_key", { provider, apiKey: key });
       const s = await invoke<SettingsView>("settings_get");
       setSettings(s);
       setApiKeyInput("");
@@ -175,18 +183,15 @@ export function OnboardingWizard({ onComplete }: Props) {
 
         <div className="flex-1 overflow-y-auto px-6 py-5">
           <img
-            src="/nova-splash.png"
-            alt=""
+            src="/persistent-sage-splash.png"
+            alt="Persistent Sage"
             className="mx-auto mb-4 h-24 w-auto object-contain"
-            onError={(e) => {
-              e.currentTarget.src = "/nova-logo.png";
-            }}
           />
 
           {step === "welcome" ? (
             <>
               <h2 id="onboarding-title" className="text-center text-xl font-semibold text-slate-900 dark:text-white">
-                Welcome to Nova
+                Welcome to Persistent Sage
               </h2>
               <p className="mt-2 text-center text-sm leading-relaxed text-slate-600 dark:text-slate-400">
                 Local-first AI companion. Chats and memory stay on your machine. This short setup
@@ -199,7 +204,7 @@ export function OnboardingWizard({ onComplete }: Props) {
             <>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Where should data live?</h2>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                Pick the option that matches how you installed Nova.
+                Pick the option that matches how you installed Persistent Sage.
               </p>
               <ul className="mt-4 space-y-2">
                 {(
@@ -208,13 +213,13 @@ export function OnboardingWizard({ onComplete }: Props) {
                       id: "desktop" as const,
                       icon: HardDrive,
                       title: "This PC (installer / Start Menu)",
-                      body: "Use the normal Nova shortcut. Data goes to your Windows profile (AppData).",
+                      body: "Use the normal Start Menu shortcut. Data goes to your Windows profile (AppData).",
                     },
                     {
                       id: "portable" as const,
                       icon: Usb,
                       title: "USB or portable folder",
-                      body: "Always launch with Start Nova (Portable).bat so data stays beside nova.exe.",
+                      body: "Always launch with Start Persistent Sage (Portable).bat so data stays beside the app.",
                     },
                     {
                       id: "unsure" as const,
@@ -301,7 +306,11 @@ export function OnboardingWizard({ onComplete }: Props) {
                     ? "sk-…"
                     : providerId === "anthropic"
                       ? "sk-ant-…"
-                      : "Ollama Cloud API key"
+                      : providerId === "gemini"
+                        ? "Google AI Studio API key"
+                        : providerId === "xai"
+                          ? "xAI API key"
+                          : "Ollama Cloud API key"
                 }
                 value={apiKeyInput}
                 disabled={busy}
@@ -329,7 +338,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                 <li>Click <strong className="text-slate-800 dark:text-slate-200">New chat</strong> in the sidebar.</li>
                 <li>Open <strong className="text-slate-800 dark:text-slate-200">Settings</strong> for tools, memory, and Pulse.</li>
                 {storageChoice === "portable" ? (
-                  <li>Use <strong className="text-slate-800 dark:text-slate-200">Start Nova (Portable).bat</strong> on USB installs.</li>
+                  <li>Use <strong className="text-slate-800 dark:text-slate-200">Start Persistent Sage (Portable).bat</strong> on USB installs.</li>
                 ) : null}
               </ul>
               <button
@@ -377,7 +386,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               onClick={() => void finish()}
               className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
             >
-              Open Nova
+              Open Persistent Sage
             </button>
           )}
         </div>

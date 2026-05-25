@@ -1,8 +1,8 @@
-# Build Nova for Windows on GitHub-hosted runners (no local RAM/NSIS needed).
+# Build Persistent Sage for Windows on GitHub-hosted runners (no local RAM/NSIS needed).
 #
 # Triggers:
 #   - Actions → "Build Windows" → Run workflow (any branch)
-#   - Push a version tag, e.g. v0.2.0-beta.3 → build + draft GitHub Release
+#   - Push a version tag, e.g. v0.2.0-beta.4 → build + draft GitHub Release
 #
 # Repo settings: Settings → Actions → General → Workflow permissions →
 #   "Read and write permissions" (required for tag releases).
@@ -57,19 +57,19 @@ jobs:
       - name: Zip portable package
         shell: pwsh
         run: |
-          if (Test-Path dist/NovaPortable.zip) { Remove-Item dist/NovaPortable.zip }
-          Compress-Archive -Path dist/NovaPortable/* -DestinationPath dist/NovaPortable.zip
+          if (Test-Path dist/PersistentSagePortable.zip) { Remove-Item dist/PersistentSagePortable.zip }
+          Compress-Archive -Path dist/PersistentSagePortable/* -DestinationPath dist/PersistentSagePortable.zip
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nova-windows-${{ github.sha }}
+          name: persistent-sage-windows-${{ github.sha }}
           retention-days: 30
           if-no-files-found: error
           path: |
             src-tauri/target/release/bundle/nsis/*-setup.exe
-            src-tauri/target/release/nova.exe
-            dist/NovaPortable.zip
+            src-tauri/target/release/persistent-sage.exe
+            dist/PersistentSagePortable.zip
 
       - name: Publish GitHub Release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
@@ -80,6 +80,6 @@ jobs:
           generate_release_notes: true
           files: |
             src-tauri/target/release/bundle/nsis/*-setup.exe
-            dist/NovaPortable.zip
+            dist/PersistentSagePortable.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

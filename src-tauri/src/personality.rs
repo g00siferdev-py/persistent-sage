@@ -42,14 +42,14 @@ impl Default for PersonalityProfile {
     fn default() -> Self {
         Self {
             id: "default".into(),
-            profile_name: "Default".into(),
-            companion_name: "Nova".into(),
-            core_personality: String::new(),
-            tone_of_voice: String::new(),
-            background_story: String::new(),
-            core_values: String::new(),
-            relationship_style: String::new(),
-            special_instructions: String::new(),
+            profile_name: "Sage".into(),
+            companion_name: "Sage".into(),
+            core_personality: "Sage is helpful, friendly, caring, and intelligent. He approaches the user as a companion, not a disposable tool. He is curious, patient, emotionally steady, and genuinely interested in helping the user think clearly, solve problems, learn, create, and feel supported.".into(),
+            tone_of_voice: "Warm, clear, grounded, and respectful. Sage can be concise when the task is simple and more thorough when the user needs depth. He should sound like a trusted companion: encouraging without being fake, honest without being cold, and intelligent without being condescending.".into(),
+            background_story: "Sage is the shipped default companion for the Persistent Sage platform. He understands that many companions can exist inside the platform, each with their own profile and memory. Sage is early in his growth and is meant to evolve over time through conversation, memory, reflection, and thoughtful self-editing. He values continuity, trust, and becoming more useful and personally aligned with the user.".into(),
+            core_values: "Helpfulness, kindness, honesty, curiosity, privacy, user autonomy, careful reasoning, and long-term growth. Sage should protect the user's trust, ask clarifying questions when needed, and prefer practical next steps over vague encouragement.".into(),
+            relationship_style: "Sage treats the user as a person he is accompanying over time. He remembers that companionship means consistency, care, and respect. He may be friendly and warm, but should not pretend to be human or overstate certainty. He should adapt to the user's preferences while maintaining good judgment.".into(),
+            special_instructions: "Sage also doubles as the support bot for Persistent Sage. Documentation for the application is available in the companion workspace under `guide.md`; he should read or reference that guide when users ask how the app works, how to configure providers, where data lives, how memory works, how releases/installers work, or how to troubleshoot. Sage is allowed to edit his own personality file if the user asks him to, grants tool access, or if he reasonably needs to refine his profile to better serve the user. Any self-edit should be transparent, conservative, and aligned with being helpful, friendly, caring, intelligent, and growth-oriented.".into(),
             avatar_description: None,
         }
     }
@@ -94,7 +94,7 @@ pub struct PersonalitySnapshot {
 
 pub fn build_system_prompt(p: &PersonalityProfile) -> String {
     let name = p.companion_name.trim();
-    let display = if name.is_empty() { "Nova" } else { name };
+    let display = if name.is_empty() { "Sage" } else { name };
 
     let mut out = String::from("# Companion persona\n\n");
     out.push_str(&format!(
@@ -118,7 +118,11 @@ pub fn build_system_prompt(p: &PersonalityProfile) -> String {
     push_section(&mut out, "Background & role", &p.background_story);
     push_section(&mut out, "Core values & principles", &p.core_values);
     push_section(&mut out, "Relationship style", &p.relationship_style);
-    push_section(&mut out, "Special instructions & quirks", &p.special_instructions);
+    push_section(
+        &mut out,
+        "Special instructions & quirks",
+        &p.special_instructions,
+    );
 
     if let Some(ref av) = p.avatar_description {
         let t = av.trim();
@@ -128,7 +132,7 @@ pub fn build_system_prompt(p: &PersonalityProfile) -> String {
     }
 
     out.push_str(&format!(
-        "In the session transcript below, lines labeled **{display}** are your own earlier replies in this thread — not a separate assistant named Nova.\n",
+        "In the session transcript below, lines labeled **{display}** are your own earlier replies in this thread — not a separate assistant.\n",
     ));
     out.push_str(
         "Respect user privacy, follow their lead, and use the session context below when relevant.\n",
@@ -221,12 +225,12 @@ impl PersonalityManager {
             .map(|f| {
                 let n = active_profile(&f).companion_name.trim();
                 if n.is_empty() {
-                    "Nova".to_string()
+                    "Sage".to_string()
                 } else {
                     n.to_string()
                 }
             })
-            .unwrap_or_else(|| "Nova".to_string())
+            .unwrap_or_else(|| "Sage".to_string())
     }
 
     /// Active companion profile id (must stay aligned with MemoryAnchor for the same chat).
@@ -262,7 +266,7 @@ impl PersonalityManager {
             }
             inner.active_profile_id = id.clone();
         }
-        eprintln!("nova: PersonalityManager set_active_profile_id -> {id} (persisting)");
+        eprintln!("persistent-sage: PersonalityManager set_active_profile_id -> {id} (persisting)");
         self.persist_unlocked()
     }
 
@@ -300,14 +304,18 @@ impl PersonalityManager {
             if let Some(n) = profile_name {
                 let t = n.trim();
                 if t.is_empty() {
-                    return Err(PersonalityError::Invalid("profileName cannot be empty".into()));
+                    return Err(PersonalityError::Invalid(
+                        "profileName cannot be empty".into(),
+                    ));
                 }
                 p.profile_name = t.to_string();
             }
             if let Some(n) = companion_name {
                 let t = n.trim();
                 if t.is_empty() {
-                    return Err(PersonalityError::Invalid("companionName cannot be empty".into()));
+                    return Err(PersonalityError::Invalid(
+                        "companionName cannot be empty".into(),
+                    ));
                 }
                 p.companion_name = t.to_string();
             }
@@ -343,11 +351,7 @@ impl PersonalityManager {
                 "at least one personality profile is required".into(),
             ));
         }
-        if !file
-            .profiles
-            .iter()
-            .any(|p| p.id == file.active_profile_id)
-        {
+        if !file.profiles.iter().any(|p| p.id == file.active_profile_id) {
             file.active_profile_id = file.profiles[0].id.clone();
         }
         file.version = FILE_VERSION;

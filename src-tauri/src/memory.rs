@@ -1,4 +1,4 @@
-//! Persistent conversation memory for Nova.
+//! Persistent conversation memory for Persistent Sage.
 //!
 //! ## Memory Anchor model (raw + curated)
 //!
@@ -97,7 +97,7 @@ pub struct StoredMessage {
     pub role: MessageRole,
     pub content: String,
     pub created_at: String,
-    /// Relative path under the Nova data directory (`attachments/...`).
+    /// Relative path under the Persistent Sage data directory (`attachments/...`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_attachment: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -289,7 +289,10 @@ pub trait ConversationMemory: Send + Sync {
         model_label: &str,
     ) -> Result<(), MemoryError>;
 
-    fn list_anchors_without_embedding(&self, limit: usize) -> Result<Vec<StoredAnchor>, MemoryError>;
+    fn list_anchors_without_embedding(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<StoredAnchor>, MemoryError>;
 
     fn clear_all_embeddings(&self) -> Result<(), MemoryError>;
 
@@ -544,7 +547,9 @@ fn rebuild_anchors_fts_with_personality(conn: &Connection) -> Result<(), MemoryE
 }
 
 fn migrate_personality_isolation(conn: &Connection) -> Result<(), MemoryError> {
-    if table_exists(conn, "conversations")? && !column_exists(conn, "conversations", "personality_id")? {
+    if table_exists(conn, "conversations")?
+        && !column_exists(conn, "conversations", "personality_id")?
+    {
         conn.execute(
             "ALTER TABLE conversations ADD COLUMN personality_id TEXT NOT NULL DEFAULT 'default'",
             [],
@@ -765,10 +770,12 @@ pub enum SqliteProfile {
 }
 
 pub fn sqlite_profile_from_env() -> SqliteProfile {
-    let data_dir_set = std::env::var("NOVA_DATA_DIR")
+    let data_dir_set = std::env::var("PERSISTENT_SAGE_DATA_DIR")
+        .or_else(|_| std::env::var("NOVA_DATA_DIR"))
         .map(|s| !s.trim().is_empty())
         .unwrap_or(false);
-    let portable_flag = std::env::var("NOVA_PORTABLE")
+    let portable_flag = std::env::var("PERSISTENT_SAGE_PORTABLE")
+        .or_else(|_| std::env::var("NOVA_PORTABLE"))
         .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
 
@@ -779,7 +786,10 @@ pub fn sqlite_profile_from_env() -> SqliteProfile {
     }
 }
 
-pub fn apply_profile_pragmas(conn: &Connection, profile: SqliteProfile) -> Result<(), rusqlite::Error> {
+pub fn apply_profile_pragmas(
+    conn: &Connection,
+    profile: SqliteProfile,
+) -> Result<(), rusqlite::Error> {
     conn.pragma_update(None, "foreign_keys", "ON")?;
     // Avoid indefinite hangs when chat + background memory jobs contend on the same file.
     conn.pragma_update(None, "busy_timeout", 10_000)?;
@@ -958,10 +968,7 @@ impl MemoryAnchor {
         } else {
             for p in &active_projects {
                 let desc: String = p.description.chars().take(200).collect();
-                out.push_str(&format!(
-                    "- **{}** [{}]: {}\n",
-                    p.title, p.status, desc
-                ));
+                out.push_str(&format!("- **{}** [{}]: {}\n", p.title, p.status, desc));
             }
             out.push('\n');
         }
@@ -985,11 +992,14 @@ impl MemoryAnchor {
     ) -> Result<Vec<(String, String)>, MemoryError> {
         let conn = self.conn()?;
         let lim: i64 = limit.try_into().unwrap_or(i64::MAX);
-        let mut stmt = conn.prepare(
-            "SELECT key, value FROM preferences ORDER BY key ASC LIMIT ?1",
-        )?;
-        let rows = stmt.query_map([lim], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?;
-        let rows: Vec<(String, String)> = rows.collect::<Result<Vec<_>, _>>().map_err(MemoryError::from)?;
+        let mut stmt =
+            conn.prepare("SELECT key, value FROM preferences ORDER BY key ASC LIMIT ?1")?;
+        let rows = stmt.query_map([lim], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        let rows: Vec<(String, String)> = rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(MemoryError::from)?;
         Ok(rows
             .into_iter()
             .filter(|(k, _)| !k.contains("api_key") && !k.contains("secret"))
@@ -999,14 +1009,81 @@ impl MemoryAnchor {
     fn is_stop_token(t: &str) -> bool {
         matches!(
             t,
-            "a" | "an" | "the" | "and" | "or" | "but" | "in" | "on" | "at" | "to" | "for" | "of"
-                | "is" | "are" | "was" | "were" | "be" | "been" | "being" | "do" | "does" | "did"
-                | "has" | "have" | "had" | "what" | "when" | "where" | "who" | "whom" | "which"
-                | "why" | "how" | "my" | "your" | "our" | "their" | "its" | "i" | "you" | "we"
-                | "they" | "me" | "him" | "her" | "us" | "them" | "this" | "that" | "these" | "those"
-                | "it" | "there" | "here" | "from" | "with" | "as" | "by" | "not" | "no" | "yes"
-                | "so" | "if" | "than" | "then" | "into" | "about" | "over" | "can" | "could"
-                | "would" | "should" | "will" | "just" | "tell" | "please"
+            "a" | "an"
+                | "the"
+                | "and"
+                | "or"
+                | "but"
+                | "in"
+                | "on"
+                | "at"
+                | "to"
+                | "for"
+                | "of"
+                | "is"
+                | "are"
+                | "was"
+                | "were"
+                | "be"
+                | "been"
+                | "being"
+                | "do"
+                | "does"
+                | "did"
+                | "has"
+                | "have"
+                | "had"
+                | "what"
+                | "when"
+                | "where"
+                | "who"
+                | "whom"
+                | "which"
+                | "why"
+                | "how"
+                | "my"
+                | "your"
+                | "our"
+                | "their"
+                | "its"
+                | "i"
+                | "you"
+                | "we"
+                | "they"
+                | "me"
+                | "him"
+                | "her"
+                | "us"
+                | "them"
+                | "this"
+                | "that"
+                | "these"
+                | "those"
+                | "it"
+                | "there"
+                | "here"
+                | "from"
+                | "with"
+                | "as"
+                | "by"
+                | "not"
+                | "no"
+                | "yes"
+                | "so"
+                | "if"
+                | "than"
+                | "then"
+                | "into"
+                | "about"
+                | "over"
+                | "can"
+                | "could"
+                | "would"
+                | "should"
+                | "will"
+                | "just"
+                | "tell"
+                | "please"
         )
     }
 
@@ -1061,18 +1138,48 @@ impl MemoryAnchor {
                 "pet", "pets", "cat", "cats", "dog", "dogs", "kid", "kids", "live", "living",
             ],
             "vision" | "sight" | "seeing" | "eyesight" | "eye" | "eyes" | "visual" => &[
-                "colorblind", "colourblind", "color", "colour", "blind", "blindness", "see",
-                "sight", "protanopia", "deuteranopia", "tritanopia", "daltonism",
+                "colorblind",
+                "colourblind",
+                "color",
+                "colour",
+                "blind",
+                "blindness",
+                "see",
+                "sight",
+                "protanopia",
+                "deuteranopia",
+                "tritanopia",
+                "daltonism",
             ],
             "colorblind" | "colourblind" | "colorblindness" | "colourblindness" => &[
-                "vision", "sight", "color", "colour", "blind", "eyes", "visual", "protanopia",
-                "deuteranopia", "tritanopia",
+                "vision",
+                "sight",
+                "color",
+                "colour",
+                "blind",
+                "eyes",
+                "visual",
+                "protanopia",
+                "deuteranopia",
+                "tritanopia",
             ],
             "color" | "colour" | "colors" | "colours" => &[
-                "colorblind", "colourblind", "vision", "blind", "sight", "hue", "red", "green",
+                "colorblind",
+                "colourblind",
+                "vision",
+                "blind",
+                "sight",
+                "hue",
+                "red",
+                "green",
             ],
             "blind" | "blindness" => &[
-                "colorblind", "colourblind", "vision", "sight", "visual", "see",
+                "colorblind",
+                "colourblind",
+                "vision",
+                "sight",
+                "visual",
+                "see",
             ],
             _ => &[],
         }
@@ -1343,9 +1450,10 @@ impl MemoryAnchor {
                      ORDER BY r ASC
                      LIMIT ?3",
                 )?;
-                let rows = stmt.query_map(params![match_expr, cid, take, personality_id], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
-                })?;
+                let rows = stmt
+                    .query_map(params![match_expr, cid, take, personality_id], |row| {
+                        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+                    })?;
                 rows.collect::<Result<Vec<_>, _>>()?
             }
             None => {
@@ -1399,7 +1507,10 @@ impl MemoryAnchor {
                      ORDER BY importance DESC, datetime(created_at) DESC
                      LIMIT ?2",
                 )?;
-                let rows = stmt.query_map(params![pat, take, personality_id], MemoryAnchor::row_to_anchor)?;
+                let rows = stmt.query_map(
+                    params![pat, take, personality_id],
+                    MemoryAnchor::row_to_anchor,
+                )?;
                 rows.collect::<Result<Vec<_>, _>>()?
             }
         };
@@ -1450,13 +1561,14 @@ impl MemoryAnchor {
         let mut seen = HashSet::new();
         let mut out: Vec<StoredMessage> = Vec::new();
 
-        let push_batch = |batch: Vec<StoredMessage>, seen: &mut HashSet<i64>, out: &mut Vec<StoredMessage>| {
-            for m in batch {
-                if seen.insert(m.id) {
-                    out.push(m);
+        let push_batch =
+            |batch: Vec<StoredMessage>, seen: &mut HashSet<i64>, out: &mut Vec<StoredMessage>| {
+                for m in batch {
+                    if seen.insert(m.id) {
+                        out.push(m);
+                    }
                 }
-            }
-        };
+            };
 
         let full_needle: String = query.trim().chars().take(120).collect();
         if full_needle.chars().count() >= 3 {
@@ -1538,7 +1650,7 @@ impl MemoryAnchor {
 
         let exp = Self::prepare_recall_query(q);
         eprintln!(
-            "nova: hybrid_recall expansion primary={:?} expanded={:?} fts_term_count={} message_terms={:?}",
+            "persistent-sage: hybrid_recall expansion primary={:?} expanded={:?} fts_term_count={} message_terms={:?}",
             exp.primary,
             exp.expanded,
             exp.fts_terms.len(),
@@ -1551,7 +1663,7 @@ impl MemoryAnchor {
         let mlim: i64 = message_limit.max(0).min(24) as i64;
 
         eprintln!(
-            "nova: hybrid_recall start — query_len={} scope={:?} personality_id={} anchor_limit={} message_limit={}",
+            "persistent-sage: hybrid_recall start — query_len={} scope={:?} personality_id={} anchor_limit={} message_limit={}",
             q.len(),
             scope,
             personality_id,
@@ -1565,13 +1677,16 @@ impl MemoryAnchor {
         let mut scores: HashMap<String, f64> = HashMap::new();
 
         if fts_table {
-            let mexpr_opt =
-                Self::fts_match_expr_from_terms(&exp.fts_terms).or_else(|| Self::fts_fallback_token_cells(q));
+            let mexpr_opt = Self::fts_match_expr_from_terms(&exp.fts_terms)
+                .or_else(|| Self::fts_fallback_token_cells(q));
             if let Some(ref mexpr) = mexpr_opt {
-                eprintln!("nova: hybrid_recall FTS MATCH expr: {mexpr}");
+                eprintln!("persistent-sage: hybrid_recall FTS MATCH expr: {mexpr}");
                 match Self::fts_anchor_ids(&conn, mexpr, scope, alim, &personality_id) {
                     Ok(hits) => {
-                        eprintln!("nova: hybrid_recall FTS raw hits: {}", hits.len());
+                        eprintln!(
+                            "persistent-sage: hybrid_recall FTS raw hits: {}",
+                            hits.len()
+                        );
                         for (id, bm) in hits {
                             let base = -bm;
                             let bonus = scores.get(&id).copied().unwrap_or(0.0);
@@ -1579,14 +1694,14 @@ impl MemoryAnchor {
                         }
                     }
                     Err(e) => {
-                        eprintln!("nova: memory FTS recall skipped ({e})");
+                        eprintln!("persistent-sage: memory FTS recall skipped ({e})");
                     }
                 }
             } else {
-                eprintln!("nova: hybrid_recall FTS skipped (no tokenized query)");
+                eprintln!("persistent-sage: hybrid_recall FTS skipped (no tokenized query)");
             }
         } else {
-            eprintln!("nova: hybrid_recall FTS table missing; keyword/LIKE only");
+            eprintln!("persistent-sage: hybrid_recall FTS table missing; keyword/LIKE only");
         }
 
         let pat = format!("%{}%", escape_like(q));
@@ -1635,16 +1750,15 @@ impl MemoryAnchor {
         }
 
         if let Some(q_emb) = query_embedding {
-            let semantic_hits =
-                Self::semantic_anchor_scores(
-                    &conn,
-                    q_emb,
-                    scope,
-                    &personality_id,
-                    (alim as usize).saturating_mul(4),
-                )?;
+            let semantic_hits = Self::semantic_anchor_scores(
+                &conn,
+                q_emb,
+                scope,
+                &personality_id,
+                (alim as usize).saturating_mul(4),
+            )?;
             eprintln!(
-                "nova: hybrid_recall semantic hits: {} (query dim {})",
+                "persistent-sage: hybrid_recall semantic hits: {} (query dim {})",
                 semantic_hits.len(),
                 q_emb.len()
             );
@@ -1653,10 +1767,7 @@ impl MemoryAnchor {
                     continue;
                 }
                 let bump = (sim as f64) * 10.0 + 1.5;
-                scores
-                    .entry(id)
-                    .and_modify(|s| *s += bump)
-                    .or_insert(bump);
+                scores.entry(id).and_modify(|s| *s += bump).or_insert(bump);
             }
         }
 
@@ -1693,22 +1804,26 @@ impl MemoryAnchor {
                 format!("(score={sc:.2}) {}", snip.replace('\n', " "))
             })
             .collect();
-        eprintln!("nova: hybrid_recall retrieved_anchors_top={}", anchor_preview.join(" ;; "));
+        eprintln!(
+            "persistent-sage: hybrid_recall retrieved_anchors_top={}",
+            anchor_preview.join(" ;; ")
+        );
 
         let mut messages = Vec::new();
         if mlim > 0 {
             messages = if let Some(cid) = scope {
                 eprintln!(
-                    "nova: hybrid_recall thread message search ({cid}) full_query + {} expanded terms",
+                    "persistent-sage: hybrid_recall thread message search ({cid}) full_query + {} expanded terms",
                     exp.message_terms.len()
                 );
                 let mut seen_ids = HashSet::<i64>::new();
                 let mut merged: Vec<StoredMessage> = Vec::new();
-                let push_m = |m: StoredMessage, seen: &mut HashSet<i64>, acc: &mut Vec<StoredMessage>| {
-                    if seen.insert(m.id) {
-                        acc.push(m);
-                    }
-                };
+                let push_m =
+                    |m: StoredMessage, seen: &mut HashSet<i64>, acc: &mut Vec<StoredMessage>| {
+                        if seen.insert(m.id) {
+                            acc.push(m);
+                        }
+                    };
                 for m in Self::recall_messages_like(&conn, cid, &pat, mlim, &personality_id)? {
                     push_m(m, &mut seen_ids, &mut merged);
                 }
@@ -1724,7 +1839,7 @@ impl MemoryAnchor {
                 merged.reverse();
                 merged
             } else {
-                eprintln!("nova: hybrid_recall global message search (personality + expanded terms)");
+                eprintln!("persistent-sage: hybrid_recall global message search (personality + expanded terms)");
                 Self::recall_messages_global_with_terms(
                     &conn,
                     q,
@@ -1743,10 +1858,13 @@ impl MemoryAnchor {
                 format!("id={} {}", m.id, snip.replace('\n', " "))
             })
             .collect();
-        eprintln!("nova: hybrid_recall retrieved_messages_top={}", msg_preview.join(" ;; "));
+        eprintln!(
+            "persistent-sage: hybrid_recall retrieved_messages_top={}",
+            msg_preview.join(" ;; ")
+        );
 
         eprintln!(
-            "nova: hybrid_recall complete — scored_anchor_ids={}, returning anchors={}, messages={}",
+            "persistent-sage: hybrid_recall complete — scored_anchor_ids={}, returning anchors={}, messages={}",
             scores.len(),
             anchors.len(),
             messages.len()
@@ -1848,7 +1966,8 @@ impl ConversationMemory for MemoryAnchor {
              ORDER BY datetime(updated_at) DESC, id DESC",
         )?;
         let rows = stmt.query_map([pid], MemoryAnchor::row_to_conversation)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(MemoryError::from)
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(MemoryError::from)
     }
 
     fn get_conversation(&self, conversation_id: &str) -> Result<StoredConversation, MemoryError> {
@@ -1861,9 +1980,9 @@ impl ConversationMemory for MemoryAnchor {
         );
         match row {
             Ok(c) => Ok(c),
-            Err(rusqlite::Error::QueryReturnedNoRows) => {
-                Err(MemoryError::UnknownConversation(conversation_id.to_string()))
-            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Err(MemoryError::UnknownConversation(
+                conversation_id.to_string(),
+            )),
             Err(e) => Err(MemoryError::from(e)),
         }
     }
@@ -1872,7 +1991,7 @@ impl ConversationMemory for MemoryAnchor {
         let id = Uuid::new_v4().to_string();
         let pid = self.active_personality()?;
         eprintln!(
-            "nova: memory_create_conversation personality_id={pid} conversation_id={id} title_len={}",
+            "persistent-sage: memory_create_conversation personality_id={pid} conversation_id={id} title_len={}",
             title.len()
         );
         let conn = self.conn()?;
@@ -1892,7 +2011,9 @@ impl ConversationMemory for MemoryAnchor {
             params![conversation_id, title, pid],
         )?;
         if n == 0 {
-            return Err(MemoryError::UnknownConversation(conversation_id.to_string()));
+            return Err(MemoryError::UnknownConversation(
+                conversation_id.to_string(),
+            ));
         }
         Ok(())
     }
@@ -2009,7 +2130,7 @@ impl ConversationMemory for MemoryAnchor {
 
         if !ids.is_empty() {
             eprintln!(
-                "nova: auto-ingested {} thread anchor(s) from user message (global copies when new)",
+                "persistent-sage: auto-ingested {} thread anchor(s) from user message (global copies when new)",
                 ids.len()
             );
         }
@@ -2056,12 +2177,13 @@ impl ConversationMemory for MemoryAnchor {
         }
         let trimmed = content.trim();
         if trimmed.is_empty() {
-            return Err(MemoryError::InvalidAnchorType("anchor content is empty".into()));
+            return Err(MemoryError::InvalidAnchorType(
+                "anchor content is empty".into(),
+            ));
         }
         let pid = self.active_personality()?;
         let conn = self.conn()?;
-        if let Some(existing) =
-            Self::anchor_id_for_content(&conn, conversation_id, trimmed, &pid)?
+        if let Some(existing) = Self::anchor_id_for_content(&conn, conversation_id, trimmed, &pid)?
         {
             let imp = importance.clamp(1, 5);
             conn.execute(
@@ -2100,7 +2222,10 @@ impl ConversationMemory for MemoryAnchor {
         Ok(())
     }
 
-    fn list_anchors_without_embedding(&self, limit: usize) -> Result<Vec<StoredAnchor>, MemoryError> {
+    fn list_anchors_without_embedding(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<StoredAnchor>, MemoryError> {
         let pid = self.active_personality()?;
         let lim: i64 = limit.try_into().unwrap_or(i64::MAX);
         let conn = self.conn()?;
@@ -2112,7 +2237,8 @@ impl ConversationMemory for MemoryAnchor {
              LIMIT ?2",
         )?;
         let rows = stmt.query_map(params![pid, lim], MemoryAnchor::row_to_anchor)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(MemoryError::from)
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(MemoryError::from)
     }
 
     fn clear_all_embeddings(&self) -> Result<(), MemoryError> {
@@ -2153,8 +2279,12 @@ impl ConversationMemory for MemoryAnchor {
              ORDER BY importance DESC, datetime(created_at) DESC
              LIMIT ?3",
         )?;
-        let rows = stmt.query_map(params![pid, conversation_id, lim], MemoryAnchor::row_to_anchor)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(MemoryError::from)
+        let rows = stmt.query_map(
+            params![pid, conversation_id, lim],
+            MemoryAnchor::row_to_anchor,
+        )?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(MemoryError::from)
     }
 
     fn list_projects(&self, limit: usize) -> Result<Vec<StoredProject>, MemoryError> {
@@ -2165,7 +2295,8 @@ impl ConversationMemory for MemoryAnchor {
              ORDER BY datetime(created_at) DESC LIMIT ?1",
         )?;
         let rows = stmt.query_map([lim], MemoryAnchor::row_to_project)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(MemoryError::from)
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(MemoryError::from)
     }
 
     fn preference_get(&self, key: &str) -> Result<Option<String>, MemoryError> {
@@ -2205,7 +2336,7 @@ impl ConversationMemory for MemoryAnchor {
         if s.is_empty() {
             s = DEFAULT_PERSONALITY_ID.to_string();
         }
-        eprintln!("nova: MemoryAnchor active personality_id -> {s}");
+        eprintln!("persistent-sage: MemoryAnchor active personality_id -> {s}");
         if let Ok(mut g) = self.active_personality_id.lock() {
             *g = s;
         }
@@ -2213,7 +2344,7 @@ impl ConversationMemory for MemoryAnchor {
 
     fn wipe_all_user_data(&self) -> Result<(), MemoryError> {
         let conn = self.conn()?;
-        eprintln!("nova: wipe_all_user_data — clearing SQLite user tables");
+        eprintln!("persistent-sage: wipe_all_user_data — clearing SQLite user tables");
         conn.execute_batch(
             r"
             PRAGMA foreign_keys = OFF;
@@ -2227,7 +2358,7 @@ impl ConversationMemory for MemoryAnchor {
         )?;
         ensure_seed_conversation(&conn)?;
         if let Err(e) = conn.execute("VACUUM", []) {
-            eprintln!("nova: database_wipe_all VACUUM skipped: {e}");
+            eprintln!("persistent-sage: database_wipe_all VACUUM skipped: {e}");
         }
         Ok(())
     }
@@ -2244,7 +2375,9 @@ pub fn default_data_dir() -> Result<PathBuf, MemoryError> {
 }
 
 pub fn default_db_path() -> Result<PathBuf, MemoryError> {
-    if let Ok(raw) = std::env::var("NOVA_DATA_DIR") {
+    if let Ok(raw) =
+        std::env::var("PERSISTENT_SAGE_DATA_DIR").or_else(|_| std::env::var("NOVA_DATA_DIR"))
+    {
         let dir = PathBuf::from(raw.trim());
         if dir.as_os_str().is_empty() {
             return Err(MemoryError::NoDataDir);
@@ -2253,10 +2386,11 @@ pub fn default_db_path() -> Result<PathBuf, MemoryError> {
         return Ok(dir.join("nova_memory.sqlite"));
     }
 
-    if std::env::var("NOVA_PORTABLE")
+    let portable = std::env::var("PERSISTENT_SAGE_PORTABLE")
+        .or_else(|_| std::env::var("NOVA_PORTABLE"))
         .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
-    {
+        .unwrap_or(false);
+    if portable {
         let exe = std::env::current_exe()?;
         let base = exe.parent().ok_or(MemoryError::NoDataDir)?;
         let data = base.join("data");
@@ -2264,8 +2398,8 @@ pub fn default_db_path() -> Result<PathBuf, MemoryError> {
         return Ok(data.join("nova_memory.sqlite"));
     }
 
-    let dirs =
-        directories::ProjectDirs::from("app", "Nova", "Nova").ok_or(MemoryError::NoDataDir)?;
+    let dirs = directories::ProjectDirs::from("app", "Persistent Sage", "Persistent Sage")
+        .ok_or(MemoryError::NoDataDir)?;
     std::fs::create_dir_all(dirs.data_dir())?;
     Ok(dirs.data_dir().join("nova_memory.sqlite"))
 }
@@ -2317,12 +2451,13 @@ mod anchor_storage_tests {
         let dir = std::env::temp_dir().join(format!("nova_mem_anchor_test_{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dir).expect("mkdir");
         let path = dir.join("m.sqlite");
-        let mem =
-            MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
-        let conv_id = ConversationMemory::create_conversation(&mem, "anchor-len-test").expect("conv");
+        let mem = MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
+        let conv_id =
+            ConversationMemory::create_conversation(&mem, "anchor-len-test").expect("conv");
         let body = "η".repeat(4000);
-        let aid = ConversationMemory::create_anchor(&mem, Some(&conv_id), AnchorType::Fact, &body, 2)
-            .expect("insert anchor");
+        let aid =
+            ConversationMemory::create_anchor(&mem, Some(&conv_id), AnchorType::Fact, &body, 2)
+                .expect("insert anchor");
         let list = ConversationMemory::list_anchors_for_thread(&mem, &conv_id, 50).expect("list");
         let got = list.iter().find(|a| a.id == aid).expect("row");
         assert_eq!(got.content, body);
@@ -2345,8 +2480,7 @@ mod anchor_storage_tests {
         let dir = std::env::temp_dir().join(format!("nova_mem_extract_{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dir).expect("mkdir");
         let path = dir.join("m.sqlite");
-        let mem =
-            MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
+        let mem = MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
         let conv = ConversationMemory::create_conversation(&mem, "extract-test").expect("conv");
         ConversationMemory::store_message(
             &mem,
@@ -2370,8 +2504,7 @@ mod anchor_storage_tests {
         let dir = std::env::temp_dir().join(format!("nova_mem_ingest_{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dir).expect("mkdir");
         let path = dir.join("m.sqlite");
-        let mem =
-            MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
+        let mem = MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
         let conv = ConversationMemory::create_conversation(&mem, "t1").expect("conv");
         let ids = ConversationMemory::ingest_user_message_anchors(
             &mem,
@@ -2383,7 +2516,10 @@ mod anchor_storage_tests {
         let bundle =
             ConversationMemory::memory_recall(&mem, "vision", None, 8, 4, None).expect("recall");
         assert!(
-            bundle.anchors.iter().any(|a| a.content.to_lowercase().contains("colorblind"))
+            bundle
+                .anchors
+                .iter()
+                .any(|a| a.content.to_lowercase().contains("colorblind"))
                 || bundle
                     .messages
                     .iter()

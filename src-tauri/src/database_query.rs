@@ -1,6 +1,6 @@
 //! `database_query` agent tool: SQLite access to `.db` / `.sqlite` files under the agent workspace
-//! or (when enabled) the Nova **app data directory** — the same resolved path as the live MemoryAnchor
-//! database (`NOVA_DATA_DIR`, portable `data/` next to the executable, or OS app data). Read-only by
+//! or (when enabled) the Persistent Sage **app data directory** — the same resolved path as the live MemoryAnchor
+//! database (custom data dir, portable `data/` next to the executable, or OS app data). Read-only by
 //! default; optional writes behind a separate settings toggle.
 
 use std::path::{Path, PathBuf};
@@ -39,14 +39,14 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
     vec![ToolDefinition {
         name: "database_query".into(),
         description: Some(
-            "Run a single SQLite statement on a .db/.sqlite file. Set location to \"workspace\" (default) for files under the agent workspace, or \"app_data\" for files in the Nova data directory (same folder as nova_memory.sqlite — respects NOVA_DATA_DIR and portable data/). Read-only by default; INSERT/UPDATE/DELETE/REPLACE need 'Allow database writes'. DROP/ALTER/CREATE/ATTACH/PRAGMA/VACUUM are always blocked. Returns JSON: success, rows, columns, rowCount, error, execution_time_ms.".into(),
+            "Run a single SQLite statement on a .db/.sqlite file. Set location to \"workspace\" (default) for files under the agent workspace, or \"app_data\" for files in the Persistent Sage data directory (same folder as nova_memory.sqlite — respects Persistent Sage data-dir/portable overrides and portable data/). Read-only by default; INSERT/UPDATE/DELETE/REPLACE need 'Allow database writes'. DROP/ALTER/CREATE/ATTACH/PRAGMA/VACUUM are always blocked. Returns JSON: success, rows, columns, rowCount, error, execution_time_ms.".into(),
         ),
         parameters: json!({
             "type": "object",
             "properties": {
                 "location": {
                     "type": "string",
-                    "description": "\"workspace\" (default) or \"app_data\" (Nova data directory; requires separate Settings toggle)"
+                    "description": "\"workspace\" (default) or \"app_data\" (Persistent Sage data directory; requires separate Settings toggle)"
                 },
                 "db_path": { "type": "string", "description": "workspace: relative path under workspace. app_data: filename only (e.g. nova_memory.sqlite), no subdirectories" },
                 "query": { "type": "string", "description": "Single SQL statement (use .tables / .schema meta shortcuts if needed)" },
@@ -257,7 +257,8 @@ fn map_sqlite_error(e: rusqlite::Error) -> String {
     }
     let lower = s.to_lowercase();
     if lower.contains("database is locked") || lower.contains("busy") {
-        return "Database locked by another process — close other connections or retry shortly".into();
+        return "Database locked by another process — close other connections or retry shortly"
+            .into();
     }
     s
 }
@@ -270,9 +271,9 @@ fn json_to_sqlite_value(v: &Value) -> Result<rusqlite::types::Value, ProviderErr
             if let Some(i) = n.as_i64() {
                 Ok(rusqlite::types::Value::Integer(i))
             } else if let Some(u) = n.as_u64() {
-                Ok(rusqlite::types::Value::Integer(i64::try_from(u).map_err(|_| {
-                    tool_err("numeric parameter does not fit in SQLite integer")
-                })?))
+                Ok(rusqlite::types::Value::Integer(i64::try_from(u).map_err(
+                    |_| tool_err("numeric parameter does not fit in SQLite integer"),
+                )?))
             } else if let Some(f) = n.as_f64() {
                 Ok(rusqlite::types::Value::Real(f))
             } else {
@@ -280,7 +281,9 @@ fn json_to_sqlite_value(v: &Value) -> Result<rusqlite::types::Value, ProviderErr
             }
         }
         Value::String(s) => Ok(rusqlite::types::Value::Text(s.clone())),
-        _ => Err(tool_err("params array may only contain string, number, or null")),
+        _ => Err(tool_err(
+            "params array may only contain string, number, or null",
+        )),
     }
 }
 
@@ -317,8 +320,11 @@ fn open_connection(path: &Path, read_only: bool) -> Result<Connection, rusqlite:
     Connection::open_with_flags(path, flags)
 }
 
-/// Single-segment `.db` / `.sqlite` filename under the resolved Nova data directory (no subpaths).
-fn resolve_app_data_sqlite_path(data_directory: &Path, name: &str) -> Result<PathBuf, ProviderError> {
+/// Single-segment `.db` / `.sqlite` filename under the resolved Persistent Sage data directory (no subpaths).
+fn resolve_app_data_sqlite_path(
+    data_directory: &Path,
+    name: &str,
+) -> Result<PathBuf, ProviderError> {
     let name = name.trim();
     if name.is_empty() {
         return Err(tool_err("database_query: db_path is empty"));
@@ -446,12 +452,14 @@ pub fn run_database_query_sync(
                 Ok(p) => p,
                 Err(e) => return Ok(output_err(e.to_string())),
             };
-            if let Err(e) = assert_path_contained_in(data_directory, &p, "Nova data directory") {
+            if let Err(e) =
+                assert_path_contained_in(data_directory, &p, "Persistent Sage data directory")
+            {
                 return Ok(output_err(e.to_string()));
             }
             if !p.exists() {
                 return Ok(output_err(format!(
-                    "database file not found in Nova data directory: {db_rel}"
+                    "database file not found in Persistent Sage data directory: {db_rel}"
                 )));
             }
             p
@@ -469,7 +477,7 @@ pub fn run_database_query_sync(
     if write_data && database_allow_write {
         let preview: String = sql.chars().take(200).collect();
         eprintln!(
-            "nova: database_query WRITE ({}) at {:?} — {}",
+            "persistent-sage: database_query WRITE ({}) at {:?} — {}",
             location,
             std::time::SystemTime::now(),
             preview.replace('\n', " ")
@@ -494,7 +502,11 @@ pub fn run_database_query_sync(
                 )
             } else {
                 let mut stmt = conn.prepare(&sql)?;
-                let col_names: Vec<String> = stmt.column_names().iter().map(|s| (*s).to_string()).collect();
+                let col_names: Vec<String> = stmt
+                    .column_names()
+                    .iter()
+                    .map(|s| (*s).to_string())
+                    .collect();
                 let mut rows_out: Vec<Map<String, Value>> = Vec::new();
                 let mut rows = stmt.query(params_from_iter(sqlite_params.clone()))?;
                 let mut n = 0u32;
@@ -532,7 +544,8 @@ pub fn run_database_query_sync(
                     continue;
                 }
                 let elapsed = started_total.elapsed().as_millis();
-                if msg.contains("interrupted") || e.to_string().to_lowercase().contains("interrupt") {
+                if msg.contains("interrupted") || e.to_string().to_lowercase().contains("interrupt")
+                {
                     return Ok(output_err(format!(
                         "database_query timed out after {} seconds",
                         QUERY_TIMEOUT.as_secs()
@@ -583,7 +596,8 @@ mod tests {
             "db_path": rel,
             "query": "SELECT * FROM conversations LIMIT 5",
         });
-        let out = run_database_query_sync(Some(ws.as_path()), true, &ws, false, false, &args).unwrap();
+        let out =
+            run_database_query_sync(Some(ws.as_path()), true, &ws, false, false, &args).unwrap();
         assert!(out.contains("\"success\":true"), "{out}");
         assert!(out.contains("\"title\":\"a\""), "{out}");
         let _ = std::fs::remove_dir_all(&ws);
@@ -602,8 +616,12 @@ mod tests {
             "db_path": "w.db",
             "query": "INSERT INTO test VALUES (1)",
         });
-        let out = run_database_query_sync(Some(ws.as_path()), true, &ws, false, false, &args).unwrap();
-        assert!(out.contains("read-only") || out.contains("Write operation blocked"), "{out}");
+        let out =
+            run_database_query_sync(Some(ws.as_path()), true, &ws, false, false, &args).unwrap();
+        assert!(
+            out.contains("read-only") || out.contains("Write operation blocked"),
+            "{out}"
+        );
         let _ = std::fs::remove_dir_all(&ws);
     }
 
@@ -621,7 +639,8 @@ mod tests {
             "query": "INSERT INTO test VALUES (?)",
             "params": [42],
         });
-        let out = run_database_query_sync(Some(ws.as_path()), true, &ws, false, true, &args).unwrap();
+        let out =
+            run_database_query_sync(Some(ws.as_path()), true, &ws, false, true, &args).unwrap();
         assert!(out.contains("\"success\":true"), "{out}");
         let verify = Connection::open(&dbp).unwrap();
         let n: i64 = verify
@@ -644,7 +663,8 @@ mod tests {
             "db_path": "d.db",
             "query": "DROP TABLE memories",
         });
-        let out = run_database_query_sync(Some(ws.as_path()), true, &ws, false, true, &args).unwrap();
+        let out =
+            run_database_query_sync(Some(ws.as_path()), true, &ws, false, true, &args).unwrap();
         assert!(out.contains("blocked") || out.contains("DROP"), "{out}");
         let _ = std::fs::remove_dir_all(&ws);
     }
@@ -659,8 +679,12 @@ mod tests {
             "db_path": "u.db",
             "query": "SELECT * FROM nonexistent",
         });
-        let out = run_database_query_sync(Some(ws.as_path()), true, &ws, false, false, &args).unwrap();
-        assert!(out.contains("not found") || out.contains("nonexistent"), "{out}");
+        let out =
+            run_database_query_sync(Some(ws.as_path()), true, &ws, false, false, &args).unwrap();
+        assert!(
+            out.contains("not found") || out.contains("nonexistent"),
+            "{out}"
+        );
         let _ = std::fs::remove_dir_all(&ws);
     }
 
@@ -674,7 +698,8 @@ mod tests {
             c.execute_batch("CREATE TABLE foo (a INT);").unwrap();
         }
         let args = json!({ "db_path": "m.sqlite", "query": ".tables" });
-        let out = run_database_query_sync(Some(ws.as_path()), true, &ws, false, false, &args).unwrap();
+        let out =
+            run_database_query_sync(Some(ws.as_path()), true, &ws, false, false, &args).unwrap();
         assert!(out.contains("foo"), "{out}");
         let _ = std::fs::remove_dir_all(&ws);
     }

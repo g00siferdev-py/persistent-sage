@@ -27,7 +27,11 @@ const HTTP_REQUEST_RESPONSE_BODY_MAX_CHARS: usize = 96_000;
 const HTTP_REQUEST_MAX_HEADER_COUNT: usize = 40;
 const HTTP_REQUEST_MAX_HEADER_NAME_LEN: usize = 256;
 const HTTP_REQUEST_MAX_HEADER_VALUE_LEN: usize = 16_384;
-const NOVA_HTTP_REQUEST_UA: &str = concat!("Nova/", env!("CARGO_PKG_VERSION"), " (+https://github.com/)");
+const NOVA_HTTP_REQUEST_UA: &str = concat!(
+    "PersistentSage/",
+    env!("CARGO_PKG_VERSION"),
+    " (+https://github.com/)"
+);
 const SEARCH_QUERY_MAX: usize = 400;
 /// DuckDuckGo HTML results page (SERP) — used when the instant-answer JSON API has no snippets.
 const DDG_HTML_SERP_MAX_BYTES: usize = 512_000;
@@ -73,7 +77,10 @@ pub fn tools_system_appendix(tools: &[ToolDefinition]) -> String {
     for t in tools {
         let desc = t.description.as_deref().unwrap_or("(no description)");
         let label = tool_user_facing_label(&t.name);
-        out.push_str(&format!("- **{label}** (invoke as `{id}`): {desc}\n", id = t.name));
+        out.push_str(&format!(
+            "- **{label}** (invoke as `{id}`): {desc}\n",
+            id = t.name
+        ));
     }
     out.push_str(
         "\nAfter tools run, you receive results in follow-up messages. Summarize for the user in natural language.\n",
@@ -140,7 +147,7 @@ pub fn builtin_tool_definitions() -> Vec<ToolDefinition> {
 /// Headless Chromium page fetch (requires system Chrome/Chromium and the browser-fetch setting).
 pub fn browser_fetch_tool_definition(ignore_robots: bool) -> ToolDefinition {
     let robots_note = if ignore_robots {
-        "robots.txt checks are disabled in Nova settings"
+        "robots.txt checks are disabled in Persistent Sage settings"
     } else {
         "respects robots.txt"
     };
@@ -148,7 +155,7 @@ pub fn browser_fetch_tool_definition(ignore_robots: bool) -> ToolDefinition {
         name: "fetch_browser".into(),
         description: Some(format!(
             "Load a public https URL in headless Chrome: runs JavaScript, uses a real browser user-agent, \
-             keeps cookies in a Nova profile, {robots_note}, and per-host rate limits. Returns structured \
+             keeps cookies in a Persistent Sage profile, {robots_note}, and per-host rate limits. Returns structured \
              JSON (title, headings, paragraphs, links, images). Use for CNN, Reddit, React/Next.js sites \
              where fetch_url returns empty or 403."
         )),
@@ -182,7 +189,7 @@ pub fn workspace_tool_definitions() -> Vec<ToolDefinition> {
         ToolDefinition {
             name: "workspace_read_file".into(),
             description: Some(
-                "Read a UTF-8 text file inside the Nova workspace. Path is relative to the workspace root (forward slashes, no ..).".into(),
+                "Read a UTF-8 text file inside the Persistent Sage workspace. Path is relative to the workspace root (forward slashes, no ..).".into(),
             ),
             parameters: json!({
                 "type": "object",
@@ -224,7 +231,10 @@ pub fn workspace_tool_definitions() -> Vec<ToolDefinition> {
 }
 
 /// Build `workspace_root/rel` with `rel` sanitized (no `..`, no absolute paths, forward slashes only).
-pub fn resolve_workspace_subpath(workspace_root: &Path, rel: &str) -> Result<PathBuf, ProviderError> {
+pub fn resolve_workspace_subpath(
+    workspace_root: &Path,
+    rel: &str,
+) -> Result<PathBuf, ProviderError> {
     let rel = rel.trim();
     if rel.is_empty() {
         return Err(tool_err("path is empty"));
@@ -257,7 +267,8 @@ pub(crate) fn assert_path_contained_in(
     path: &Path,
     label: &'static str,
 ) -> Result<(), ProviderError> {
-    let root_canon = std::fs::canonicalize(root).map_err(|e| tool_err(format!("{label} root: {e}")))?;
+    let root_canon =
+        std::fs::canonicalize(root).map_err(|e| tool_err(format!("{label} root: {e}")))?;
     if path.exists() {
         let p = std::fs::canonicalize(path).map_err(|e| tool_err(format!("path: {e}")))?;
         if !p.starts_with(&root_canon) {
@@ -287,11 +298,18 @@ pub(crate) fn assert_path_contained_in(
 }
 
 /// Verifies `path` (built under the workspace) does not escape via symlinks.
-pub(crate) fn assert_path_in_workspace(workspace_root: &Path, path: &Path) -> Result<(), ProviderError> {
+pub(crate) fn assert_path_in_workspace(
+    workspace_root: &Path,
+    path: &Path,
+) -> Result<(), ProviderError> {
     assert_path_contained_in(workspace_root, path, "workspace")
 }
 
-fn workspace_read_file(workspace_root: &Path, rel: &str, max_bytes: Option<u64>) -> Result<String, ProviderError> {
+fn workspace_read_file(
+    workspace_root: &Path,
+    rel: &str,
+    max_bytes: Option<u64>,
+) -> Result<String, ProviderError> {
     let path = resolve_workspace_subpath(workspace_root, rel)?;
     assert_path_in_workspace(workspace_root, &path)?;
     let cap = max_bytes
@@ -315,7 +333,11 @@ fn workspace_read_file(workspace_root: &Path, rel: &str, max_bytes: Option<u64>)
     Ok(text)
 }
 
-fn workspace_write_file(workspace_root: &Path, rel: &str, content: &str) -> Result<String, ProviderError> {
+fn workspace_write_file(
+    workspace_root: &Path,
+    rel: &str,
+    content: &str,
+) -> Result<String, ProviderError> {
     let path = resolve_workspace_subpath(workspace_root, rel)?;
     if content.as_bytes().len() > WORKSPACE_WRITE_MAX_BYTES {
         return Err(tool_err(format!(
@@ -329,7 +351,11 @@ fn workspace_write_file(workspace_root: &Path, rel: &str, content: &str) -> Resu
     }
     assert_path_in_workspace(workspace_root, &path)?;
     std::fs::write(&path, content.as_bytes()).map_err(|e| tool_err(format!("write_file: {e}")))?;
-    Ok(format!("Wrote {} bytes to {}", content.as_bytes().len(), rel.trim()))
+    Ok(format!(
+        "Wrote {} bytes to {}",
+        content.as_bytes().len(),
+        rel.trim()
+    ))
 }
 
 fn workspace_list_directory(workspace_root: &Path, rel: &str) -> Result<String, ProviderError> {
@@ -344,7 +370,9 @@ fn workspace_list_directory(workspace_root: &Path, rel: &str) -> Result<String, 
     let mut lines: Vec<String> = Vec::new();
     for (i, ent) in read.enumerate() {
         if i >= WORKSPACE_LIST_MAX_ENTRIES {
-            lines.push(format!("… (listing truncated after {WORKSPACE_LIST_MAX_ENTRIES} entries)"));
+            lines.push(format!(
+                "… (listing truncated after {WORKSPACE_LIST_MAX_ENTRIES} entries)"
+            ));
             break;
         }
         let ent = ent.map_err(|e| tool_err(format!("list_directory: {e}")))?;
@@ -389,7 +417,9 @@ fn blocked_host(host: &str) -> bool {
     }
     if let Ok(ip) = h.parse::<IpAddr>() {
         return match ip {
-            IpAddr::V4(v4) => v4.is_private() || v4.is_loopback() || v4.is_link_local() || v4.is_broadcast(),
+            IpAddr::V4(v4) => {
+                v4.is_private() || v4.is_loopback() || v4.is_link_local() || v4.is_broadcast()
+            }
             IpAddr::V6(v6) => v6.is_loopback() || v6.is_unique_local(),
         };
     }
@@ -414,7 +444,9 @@ pub fn validate_fetch_url(raw: &str) -> Result<Url, ProviderError> {
         .host_str()
         .ok_or_else(|| tool_err("URL must include a host"))?;
     if blocked_host(host) {
-        return Err(tool_err("URL host is not allowed (private or local addresses blocked)"));
+        return Err(tool_err(
+            "URL host is not allowed (private or local addresses blocked)",
+        ));
     }
     Ok(u)
 }
@@ -433,27 +465,39 @@ fn validate_agent_https_url(raw: &str) -> Result<Url, ProviderError> {
                 "http_request only allows https:// URLs (plain http is blocked)",
             ));
         }
-        s => return Err(tool_err(format!("unsupported URL scheme: {s} (only https)"))),
+        s => {
+            return Err(tool_err(format!(
+                "unsupported URL scheme: {s} (only https)"
+            )))
+        }
     }
     if u.username() != "" || u.password().is_some() {
-        return Err(tool_err("URLs with embedded credentials are not allowed; put tokens in headers instead"));
+        return Err(tool_err(
+            "URLs with embedded credentials are not allowed; put tokens in headers instead",
+        ));
     }
     let host = u
         .host_str()
         .ok_or_else(|| tool_err("URL must include a host"))?;
     if blocked_host(host) {
-        return Err(tool_err("URL host is not allowed (private or local addresses blocked)"));
+        return Err(tool_err(
+            "URL host is not allowed (private or local addresses blocked)",
+        ));
     }
     Ok(u)
 }
 
 /// Parse `headers` object into validated HTTP headers (rejects header injection / invalid tokens).
-fn parse_http_request_headers(headers_val: Option<&Value>) -> Result<Vec<(HeaderName, HeaderValue)>, ProviderError> {
+fn parse_http_request_headers(
+    headers_val: Option<&Value>,
+) -> Result<Vec<(HeaderName, HeaderValue)>, ProviderError> {
     let Some(v) = headers_val else {
         return Ok(Vec::new());
     };
     let Some(obj) = v.as_object() else {
-        return Err(tool_err("headers must be a JSON object of string keys to string values"));
+        return Err(tool_err(
+            "headers must be a JSON object of string keys to string values",
+        ));
     };
     if obj.len() > HTTP_REQUEST_MAX_HEADER_COUNT {
         return Err(tool_err(format!(
@@ -494,9 +538,10 @@ fn parse_http_request_headers(headers_val: Option<&Value>) -> Result<Vec<(Header
                 "header `{name}` contains invalid characters (CR, LF, and NUL are not allowed — possible header injection)"
             )));
         }
-        let hn = HeaderName::from_str(name).map_err(|_| tool_err(format!("invalid HTTP header name: `{name}`")))?;
-        let hv =
-            HeaderValue::from_str(value_str).map_err(|_| tool_err(format!("invalid HTTP header value for `{name}`")))?;
+        let hn = HeaderName::from_str(name)
+            .map_err(|_| tool_err(format!("invalid HTTP header name: `{name}`")))?;
+        let hv = HeaderValue::from_str(value_str)
+            .map_err(|_| tool_err(format!("invalid HTTP header value for `{name}`")))?;
         out.push((hn, hv));
     }
     Ok(out)
@@ -521,7 +566,9 @@ fn http_method_from_json(v: &Value) -> Result<Method, ProviderError> {
     }
 }
 
-fn response_headers_to_json_map(headers: &reqwest::header::HeaderMap) -> serde_json::Map<String, Value> {
+fn response_headers_to_json_map(
+    headers: &reqwest::header::HeaderMap,
+) -> serde_json::Map<String, Value> {
     let mut acc: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (k, v) in headers.iter() {
         let key = k.as_str().to_string();
@@ -601,7 +648,9 @@ async fn http_request_tool(http: &reqwest::Client, v: &Value) -> Result<String, 
                 )));
             }
             if e.is_request() {
-                return Err(tool_err(format!("http_request could not be built or sent: {e}")));
+                return Err(tool_err(format!(
+                    "http_request could not be built or sent: {e}"
+                )));
             }
             return Err(ProviderError::Http(e));
         }
@@ -613,7 +662,9 @@ async fn http_request_tool(http: &reqwest::Client, v: &Value) -> Result<String, 
         .unwrap_or("Non-standard status")
         .to_string();
     if status == StatusCode::TOO_MANY_REQUESTS {
-        status_text.push_str(" — Rate limited by the server; slow down and honor Retry-After if present in headers.");
+        status_text.push_str(
+            " — Rate limited by the server; slow down and honor Retry-After if present in headers.",
+        );
     } else if status == StatusCode::SERVICE_UNAVAILABLE
         || status == StatusCode::BAD_GATEWAY
         || status == StatusCode::GATEWAY_TIMEOUT
@@ -645,7 +696,7 @@ async fn http_request_tool(http: &reqwest::Client, v: &Value) -> Result<String, 
             .chars()
             .take(HTTP_REQUEST_RESPONSE_BODY_MAX_CHARS)
             .collect::<String>()
-            + "\n… [truncated by Nova http_request output limit]";
+            + "\n… [truncated by Persistent Sage http_request output limit]";
     }
 
     let payload = json!({
@@ -654,7 +705,8 @@ async fn http_request_tool(http: &reqwest::Client, v: &Value) -> Result<String, 
         "headers": resp_headers,
         "body": body_out,
     });
-    serde_json::to_string(&payload).map_err(|e| tool_err(format!("http_request: failed to serialize response: {e}")))
+    serde_json::to_string(&payload)
+        .map_err(|e| tool_err(format!("http_request: failed to serialize response: {e}")))
 }
 
 fn strip_html_to_text(html: &str) -> String {
@@ -789,7 +841,10 @@ fn parse_ddg_html_serp_links(html: &str, limit: usize) -> Vec<String> {
     lines
 }
 
-async fn ddg_html_serp_fallback(http: &reqwest::Client, query: &str) -> Result<Vec<String>, ProviderError> {
+async fn ddg_html_serp_fallback(
+    http: &reqwest::Client,
+    query: &str,
+) -> Result<Vec<String>, ProviderError> {
     let res = http
         .post("https://html.duckduckgo.com/html/")
         .header("User-Agent", DDG_BROWSER_UA)
@@ -815,7 +870,7 @@ async fn ddg_html_serp_fallback(http: &reqwest::Client, query: &str) -> Result<V
     let lines = parse_ddg_html_serp_links(&html, 12);
     if lines.is_empty() {
         eprintln!(
-            "nova: ddg HTML SERP fallback found no result__a links (response_bytes={})",
+            "persistent-sage: ddg HTML SERP fallback found no result__a links (response_bytes={})",
             buf.len()
         );
     }
@@ -942,7 +997,7 @@ pub async fn ddg_web_search(http: &reqwest::Client, query: &str) -> Result<Strin
             .map(|m| m.keys().take(18).map(|k| k.to_string()).collect::<Vec<_>>())
             .unwrap_or_default();
         eprintln!(
-            "nova: ddg instant-answer JSON had no usable snippets (sample keys: {key_hint:?}); trying HTML SERP fallback"
+            "persistent-sage: ddg instant-answer JSON had no usable snippets (sample keys: {key_hint:?}); trying HTML SERP fallback"
         );
         match ddg_html_serp_fallback(http, q.as_str()).await {
             Ok(serp) if !serp.is_empty() => {
@@ -952,7 +1007,7 @@ pub async fn ddg_web_search(http: &reqwest::Client, query: &str) -> Result<Strin
                 ));
             }
             Ok(_) => {}
-            Err(e) => eprintln!("nova: ddg HTML SERP fallback failed: {e}"),
+            Err(e) => eprintln!("persistent-sage: ddg HTML SERP fallback failed: {e}"),
         }
     }
 
@@ -966,7 +1021,10 @@ pub async fn ddg_web_search(http: &reqwest::Client, query: &str) -> Result<Strin
     }
 }
 
-pub async fn fetch_url_text(http: &reqwest::Client, raw_url: &str) -> Result<String, ProviderError> {
+pub async fn fetch_url_text(
+    http: &reqwest::Client,
+    raw_url: &str,
+) -> Result<String, ProviderError> {
     let url = validate_fetch_url(raw_url)?;
     let res = http
         .get(url.clone())
@@ -987,7 +1045,10 @@ pub async fn fetch_url_text(http: &reqwest::Client, raw_url: &str) -> Result<Str
     }
 
     let text = String::from_utf8_lossy(&buf);
-    let body = if text.trim_start().to_lowercase().starts_with("<!doctype html")
+    let body = if text
+        .trim_start()
+        .to_lowercase()
+        .starts_with("<!doctype html")
         || text.contains("<html")
         || text.contains("<HTML")
     {
@@ -1108,7 +1169,9 @@ pub fn parse_text_embedded_tool_calls(content: &str) -> Vec<ToolCall> {
     while let Some(rel) = find_ci(cursor, "<invoke") {
         let block = &cursor[rel..];
         let close_rel = find_ci(block, "</invoke>");
-        let end = close_rel.map(|c| c + "</invoke>".len()).unwrap_or(block.len());
+        let end = close_rel
+            .map(|c| c + "</invoke>".len())
+            .unwrap_or(block.len());
         let invoke_block = &block[..end];
         if let Some((name, args)) = parse_one_invoke_block(invoke_block) {
             let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".into());
@@ -1164,20 +1227,23 @@ pub async fn run_builtin_tool(
     database_allow_write: bool,
     browser_ignore_robots: bool,
     personality: Option<&crate::personality::PersonalityManager>,
-    memory_tools: Option<(&crate::settings::SettingsManager, &dyn crate::memory::ConversationMemory)>,
+    memory_tools: Option<(
+        &crate::settings::SettingsManager,
+        &dyn crate::memory::ConversationMemory,
+    )>,
     name: &str,
     arguments_json: &str,
 ) -> Result<String, ProviderError> {
     let n = name.trim();
     if n == "personality_get" || n == "personality_update" {
-        let mgr = personality.ok_or_else(|| {
-            tool_err("personality self-edit tools are not enabled in Settings")
-        })?;
+        let mgr = personality
+            .ok_or_else(|| tool_err("personality self-edit tools are not enabled in Settings"))?;
         let (body, _) = crate::personality_tools::run_personality_tool(mgr, n, arguments_json)?;
         return Ok(body);
     }
 
-    let v: Value = serde_json::from_str(arguments_json).map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
+    let v: Value = serde_json::from_str(arguments_json)
+        .map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
     match n {
         "web_search" => {
             let q = v["query"].as_str().unwrap_or("").trim();
@@ -1222,9 +1288,8 @@ pub async fn run_builtin_tool(
             workspace_list_directory(root, p)
         }
         "memory_search" => {
-            let (settings, memory) = memory_tools.ok_or_else(|| {
-                tool_err("memory_search is not available (no memory context)")
-            })?;
+            let (settings, memory) = memory_tools
+                .ok_or_else(|| tool_err("memory_search is not available (no memory context)"))?;
             let body = crate::memory_tools::run_memory_search(http, settings, memory, &v)
                 .await
                 .map_err(|e| tool_err(e.to_string()))?;

@@ -3,6 +3,7 @@
 mod anthropic;
 mod engine;
 mod error;
+mod gemini;
 mod ollama;
 mod openai;
 mod placeholder;
@@ -11,10 +12,9 @@ mod types;
 pub use anthropic::{fetch_anthropic_model_ids, AnthropicProvider};
 pub use engine::LLMProviderEngine;
 pub use error::ProviderError;
-pub use ollama::{
-    fetch_ollama_cloud_model_tags, fetch_ollama_local_model_tags, OllamaProvider,
-};
-pub use openai::{fetch_openai_model_ids, OpenAIProvider};
+pub use gemini::{fetch_gemini_model_ids, GeminiProvider};
+pub use ollama::{fetch_ollama_cloud_model_tags, fetch_ollama_local_model_tags, OllamaProvider};
+pub use openai::{fetch_openai_model_ids, fetch_xai_model_ids, OpenAIProvider};
 pub use placeholder::PlaceholderEngine;
 pub use types::{
     ChatSendResult, ChatTurn, CompletionRequest, CompletionResponse, ProviderDescriptor,
@@ -59,6 +59,18 @@ pub fn list_provider_descriptors() -> Vec<ProviderDescriptor> {
             local_first: false,
             requires_api_key: true,
         },
+        ProviderDescriptor {
+            id: "gemini".into(),
+            label: "Google Gemini".into(),
+            local_first: false,
+            requires_api_key: true,
+        },
+        ProviderDescriptor {
+            id: "xai".into(),
+            label: "xAI (Grok)".into(),
+            local_first: false,
+            requires_api_key: true,
+        },
     ]
 }
 
@@ -73,6 +85,8 @@ pub fn build_engine(
         "ollama" => Arc::new(OllamaProvider::from_settings(settings, http)),
         "ollama_cloud" => Arc::new(OllamaProvider::from_cloud_settings(settings, http)?),
         "anthropic" => Arc::new(AnthropicProvider::from_settings(settings, http)?),
+        "gemini" => Arc::new(GeminiProvider::from_settings(settings, http)?),
+        "xai" => Arc::new(OpenAIProvider::from_xai_settings(settings, http)?),
         _ => Arc::new(PlaceholderEngine::new()),
     };
     Ok(engine)

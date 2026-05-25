@@ -1,11 +1,9 @@
-Nova — portable / USB quick start
+Persistent Sage — portable / USB quick start
 
-1. Double-click Start-Nova-Portable.bat (not nova.exe alone).
-2. A "data" folder appears here after first run — your chats and settings.
-3. Quit Nova before ejecting the USB drive.
+1. Double-click Start-Persistent-Sage-Portable.bat (not persistent-sage.exe alone).
+2. Data is stored in a "data" folder next to the app.
+3. Quit Persistent Sage before ejecting the USB drive.
 
-Desktop install (Windows installer):
-  Use the Start Menu "Nova" shortcut — data stays on this PC (AppData).
-  Use "Start Nova (Portable)" to keep data in this folder (USB-friendly).
-
-First launch shows a setup wizard for your AI provider and API key.
+Desktop install:
+  Use the Start Menu "Persistent Sage" shortcut — data stays on this PC (AppData).
+  Use "Start Persistent Sage (Portable)" to keep data in this folder (USB-friendly).

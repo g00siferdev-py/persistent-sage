@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
+  Brain,
   ChevronDown,
   ImagePlus,
   Loader2,
@@ -49,6 +50,8 @@ type Props = {
   companionOptions: CompanionHeaderOption[];
   /** Called when the user picks a companion; awaited from the select handler when async. */
   onCompanionChange: (profileId: string) => void | Promise<unknown>;
+  thinkingEffort: "low" | "medium" | "high";
+  onThinkingEffortChange: (effort: "low" | "medium" | "high") => void | Promise<unknown>;
 };
 
 function messageImageSrc(m: ChatMessage): string | null {
@@ -78,6 +81,8 @@ export function ChatMain({
   activeCompanionLabel,
   companionOptions,
   onCompanionChange,
+  thinkingEffort,
+  onThinkingEffortChange,
 }: Props) {
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -146,6 +151,26 @@ export function ChatMain({
           </div>
         </div>
         <div
+          className="flex shrink-0 items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-900/60 px-2.5 py-1.5"
+          title="Reasoning effort for providers that support thinking modes"
+        >
+          <Brain className="size-4 shrink-0 text-slate-500 dark:text-slate-400" aria-hidden />
+          <label htmlFor="persistent-sage-thinking" className="sr-only">
+            Thinking effort
+          </label>
+          <select
+            id="persistent-sage-thinking"
+            value={thinkingEffort}
+            disabled={threadLoading || sending}
+            onChange={(e) => void onThinkingEffortChange(e.target.value as "low" | "medium" | "high")}
+            className="h-9 appearance-none rounded-lg border border-transparent bg-transparent py-1.5 pl-1 pr-1 text-xs font-semibold text-slate-700 dark:text-slate-200 outline-none transition hover:text-slate-900 dark:hover:text-white focus-visible:ring-2 focus-visible:ring-indigo-500/30 disabled:opacity-50"
+          >
+            <option value="low">Think low</option>
+            <option value="medium">Think medium</option>
+            <option value="high">Think high</option>
+          </select>
+        </div>
+        <div
           className="flex shrink-0 items-center gap-2 rounded-xl border border-indigo-500/35 bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-1.5 shadow-inner shadow-indigo-200/50 dark:shadow-indigo-950/30"
           title={`Active companion: ${activeCompanionLabel}. Choose who to talk to before starting a new chat.`}
         >
@@ -163,12 +188,12 @@ export function ChatMain({
               value={activeCompanionProfileId}
               onChange={async (e) => {
                 const next = e.target.value;
-                console.info("[nova-chat] companion dropdown: user selected personality_id", {
+                console.info("[persistent-sage-chat] companion dropdown: user selected personality_id", {
                   personalityId: next,
                   previousPersonalityId: activeCompanionProfileId,
                 });
                 await onCompanionChange(next);
-                console.info("[nova-chat] companion dropdown: handler finished for personality_id", {
+                console.info("[persistent-sage-chat] companion dropdown: handler finished for personality_id", {
                   personalityId: next,
                 });
               }}

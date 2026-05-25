@@ -1,6 +1,6 @@
-# Nova — project status
+# Persistent Sage — project status
 
-**Version:** 0.2.0-beta.1 (**open beta**)  
+**Version:** 0.2.0-beta.4 (**open beta**)  
 **Repository:** [g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova)  
 **Maintainer:** [g00siferdev-py](https://github.com/g00siferdev-py)
 
@@ -8,7 +8,7 @@
 
 ## Executive summary
 
-Nova is a **local-first desktop AI companion** (Tauri 2 + React + Rust). Conversations and memory live in **SQLite on your machine**. **API keys are encrypted**; the **database file is not encrypted**. There is no Nova cloud for chat storage.
+Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rust). Conversations and memory live in **SQLite on your machine**. **API keys are encrypted**; the **database file is not encrypted**. There is no Persistent Sage cloud for chat storage.
 
 **Beta:** We are inviting testers to install from source, use daily workflows, and file issues. See [README.md § Beta testing](./README.md#beta-testing) and [CONTRIBUTING.md](./CONTRIBUTING.md).
 
@@ -23,13 +23,13 @@ Nova is a **local-first desktop AI companion** (Tauri 2 + React + Rust). Convers
 | Streaming chat | Per-thread history, rename/delete, optimistic UI |
 | Memory Anchor | Anchors, briefings, hybrid recall, extract, personality scoping |
 | Providers | OpenAI, Ollama local, Ollama Cloud, Anthropic, placeholder |
-| Companion | Multi-profile `personality.json`, Nova JSON + OpenClaw markdown import, live prompt preview |
+| Companion | Multi-profile `personality.json`, Persistent Sage JSON + OpenClaw markdown import, live prompt preview |
 | Personality agent tools | Opt-in `personality_get` / `personality_update` |
 | Agent tools | Web, `fetch_browser`, workspace, optional `database_query` (opt-in) |
 | Pulse | Scheduled ticks in **open sidebar thread** |
 | Vision | Image attach + multimodal provider payloads |
 | Settings | Four tabs: Companion, Provider, Tools, General |
-| Data controls | Memory wipe, factory reset, `NOVA_DATA_DIR` / portable |
+| Data controls | Memory wipe, factory reset, `PERSISTENT_SAGE_DATA_DIR` / portable |
 | Docs | `docs/` install, privacy, user guide, architecture, development |
 
 ---
@@ -39,7 +39,7 @@ Nova is a **local-first desktop AI companion** (Tauri 2 + React + Rust). Convers
 | Method | Fidelity | Notes |
 |--------|----------|-------|
 | **Workspace + companion prompt** | Highest | Copy five `.md` files → prompt to fill `personality.json` → remove `.md` files ([USER-GUIDE](./docs/USER-GUIDE.md#11-migrating-from-openclaw)) |
-| **Import OpenClaw markdown…** (UI) | Good starting point | Maps stems to Nova fields; preview before save; may miss nuance vs manual workflow |
+| **Import OpenClaw markdown…** (UI) | Good starting point | Maps stems to Persistent Sage fields; preview before save; may miss nuance vs manual workflow |
 
 **In progress:** Streamlined one-shot migration without manual workspace steps.
 
@@ -73,7 +73,7 @@ Details: **[docs/DATA-AND-PRIVACY.md](./docs/DATA-AND-PRIVACY.md)**
 ## Shipped in 0.2.0-beta.1
 
 - Open beta documentation and version bump
-- OpenClaw markdown import UI + Nova JSON import
+- OpenClaw markdown import UI + Persistent Sage JSON import
 - Personality self-edit agent tools
 - `fetch_browser` + robots.txt toggle
 - Pulse in active conversation, vision attachments, settings tab layout
@@ -103,4 +103,4 @@ npm run tauri dev   # manual smoke test
 
 ---
 
-*Last updated for **0.2.0-beta.1** — open beta, OpenClaw migration notes, personality tools, and browser fetch.*
+*Last updated for **0.2.0-beta.4** — Persistent Sage rebrand, Windows installer, portable packaging, onboarding, and beta testing docs.*

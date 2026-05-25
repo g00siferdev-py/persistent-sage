@@ -1,8 +1,8 @@
 /** Settings panel width / visibility beside the chat area. */
 export type SettingsLayoutMode = "hidden" | "compact" | "full";
 
-const STORAGE_KEY = "nova.settingsLayoutMode";
-const LAST_OPEN_KEY = "nova.settingsLayoutLastOpen";
+const STORAGE_KEY = "persistent-sage.settingsLayoutMode";
+const LAST_OPEN_KEY = "persistent-sage.settingsLayoutLastOpen";
 
 export function loadSettingsLayoutMode(): SettingsLayoutMode {
   try {

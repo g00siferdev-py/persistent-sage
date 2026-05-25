@@ -4,9 +4,7 @@ use async_trait::async_trait;
 
 use super::engine::LLMProviderEngine;
 use super::error::ProviderError;
-use super::types::{
-    CompletionRequest, CompletionResponse, ModelInfo, StreamChunk,
-};
+use super::types::{CompletionRequest, CompletionResponse, ModelInfo, StreamChunk};
 
 /// Deterministic local fallback when no remote model is configured.
 pub struct PlaceholderEngine {
@@ -42,7 +40,10 @@ impl LLMProviderEngine for PlaceholderEngine {
         }
     }
 
-    async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse, ProviderError> {
+    async fn complete(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<CompletionResponse, ProviderError> {
         let user = request
             .messages
             .iter()

@@ -1,17 +1,17 @@
 //! Headless Chromium fetch for agent `fetch_browser`: JS-rendered pages, browser-like UA,
 //! persistent profile (cookies in the user cache dir), structured content extraction, optional screenshots.
 //!
-//! Chrome profiles live under the XDG cache (`~/.cache/nova/browser_profile`) so they are not tied to
-//! the Nova data directory, which may be root-owned if the app was ever run with sudo. Ephemeral
+//! Chrome profiles live under the XDG cache (`~/.cache/persistent-sage/browser_profile`) so they are not tied to
+//! the Persistent Sage data directory, which may be root-owned if the app was ever run with sudo. Ephemeral
 //! profiles under `/tmp` are used when locks or permissions block the persistent profile.
 //!
-//! Requires a system Chrome/Chromium/Edge binary (`NOVA_CHROME_PATH` or common install paths).
+//! Requires a system Chrome/Chromium/Edge binary (`PERSISTENT_SAGE_CHROME_PATH` or common install paths).
 //!
 //! **Environment (optional):**
-//! - `NOVA_CHROME_PATH` — path to Chrome/Chromium/Edge binary
-//! - `NOVA_CHROME_NO_SANDBOX` — `1` forces `--no-sandbox` / `--disable-setuid-sandbox` (auto in Docker/Podman)
-//! - `NOVA_CHROME_IGNORE_CERT_ERRORS` — `1` ignores TLS errors (dev only; fix CA bundle in production)
-//! - `SSL_CERT_FILE` / `SSL_CERT_DIR` — passed through; on Linux Nova sets these from system CA paths when unset
+//! - `PERSISTENT_SAGE_CHROME_PATH` — path to Chrome/Chromium/Edge binary (`NOVA_CHROME_PATH` still works)
+//! - `PERSISTENT_SAGE_CHROME_NO_SANDBOX` — `1` forces `--no-sandbox` / `--disable-setuid-sandbox` (auto in Docker/Podman)
+//! - `PERSISTENT_SAGE_CHROME_IGNORE_CERT_ERRORS` — `1` ignores TLS errors (dev only; fix CA bundle in production)
+//! - `SSL_CERT_FILE` / `SSL_CERT_DIR` — passed through; on Linux Persistent Sage sets these from system CA paths when unset
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -143,16 +143,12 @@ async fn host_rate_limit_wait(host: &str) -> Result<(), ProviderError> {
     Ok(())
 }
 
-/// Best-effort robots.txt: fetch and reject if `Disallow` matches URL path for `*` / `Nova`.
+/// Best-effort robots.txt: fetch and reject if `Disallow` matches URL path for `*` / `PersistentSage`.
 async fn robots_txt_allows(http: &reqwest::Client, page_url: &Url) -> Result<bool, ProviderError> {
     let host = page_url
         .host_str()
         .ok_or_else(|| tool_err("URL missing host for robots.txt"))?;
-    let robots_url = format!(
-        "{}://{}/robots.txt",
-        page_url.scheme(),
-        host
-    );
+    let robots_url = format!("{}://{}/robots.txt", page_url.scheme(), host);
     let res = match http
         .get(&robots_url)
         .header("User-Agent", BROWSER_USER_AGENT)
@@ -181,8 +177,14 @@ fn robots_disallows_path(robots_txt: &str, path: &str) -> bool {
         }
         let lower = line.to_ascii_lowercase();
         if lower.starts_with("user-agent:") {
-            let agent = line.split_once(':').map(|(_, v)| v.trim().to_ascii_lowercase()).unwrap_or_default();
-            applies = agent == "*" || agent.contains("nova");
+            let agent = line
+                .split_once(':')
+                .map(|(_, v)| v.trim().to_ascii_lowercase())
+                .unwrap_or_default();
+            applies = agent == "*"
+                || agent.contains("persistent")
+                || agent.contains("sage")
+                || agent.contains("nova");
             continue;
         }
         if !applies {
@@ -202,7 +204,9 @@ fn robots_disallows_path(robots_txt: &str, path: &str) -> bool {
 }
 
 pub fn find_chrome_executable() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("NOVA_CHROME_PATH") {
+    if let Ok(p) =
+        std::env::var("PERSISTENT_SAGE_CHROME_PATH").or_else(|_| std::env::var("NOVA_CHROME_PATH"))
+    {
         let pb = PathBuf::from(p.trim());
         if pb.is_file() {
             return Some(pb);
@@ -255,12 +259,12 @@ pub fn find_chrome_executable() -> Option<PathBuf> {
 
 /// Called at app startup: create the cache profile dir and warn about unusable legacy paths.
 pub fn ensure_browser_directories(data_directory: &Path) {
-    warn_if_path_not_owned_by_effective_user(data_directory, "Nova data directory");
+    warn_if_path_not_owned_by_effective_user(data_directory, "Persistent Sage data directory");
 
     let cache_profile = cache_browser_profile_dir();
     if let Err(e) = std::fs::create_dir_all(&cache_profile) {
         eprintln!(
-            "nova: warning: could not create browser profile cache {}: {e}",
+            "persistent-sage: warning: could not create browser profile cache {}: {e}",
             cache_profile.display()
         );
     }
@@ -268,8 +272,8 @@ pub fn ensure_browser_directories(data_directory: &Path) {
     let legacy = data_directory.join("browser_profile");
     if legacy.exists() && !is_browser_profile_usable(&legacy) {
         eprintln!(
-            "nova: warning: legacy browser profile {} is not usable by the current user \
-             (often root-owned after running Nova with sudo). Using {} instead.",
+            "persistent-sage: warning: legacy browser profile {} is not usable by the current user \
+             (often root-owned after running Persistent Sage with sudo). Using {} instead.",
             legacy.display(),
             cache_profile.display()
         );
@@ -277,15 +281,21 @@ pub fn ensure_browser_directories(data_directory: &Path) {
 }
 
 fn cache_browser_profile_dir() -> PathBuf {
-    directories::ProjectDirs::from("app", "Nova", "Nova")
+    directories::ProjectDirs::from("app", "Persistent Sage", "Persistent Sage")
         .map(|d| d.cache_dir().join("browser_profile"))
-        .unwrap_or_else(|| std::env::temp_dir().join("nova").join("browser_profile"))
+        .unwrap_or_else(|| {
+            std::env::temp_dir()
+                .join("persistent-sage")
+                .join("browser_profile")
+        })
 }
 
 fn browser_profile_candidates(data_directory: &Path) -> Vec<PathBuf> {
     let mut candidates = vec![
         cache_browser_profile_dir(),
-        std::env::temp_dir().join("nova").join("browser_profile"),
+        std::env::temp_dir()
+            .join("persistent-sage")
+            .join("browser_profile"),
     ];
     let legacy = data_directory.join("browser_profile");
     if path_usable_for_new_profile(&legacy) {
@@ -352,7 +362,7 @@ fn warn_if_path_not_owned_by_effective_user(path: &Path, label: &str) {
     };
     if meta.uid() != uid {
         eprintln!(
-            "nova: warning: {label} {} is owned by uid {} (you are uid {}). \
+            "persistent-sage: warning: {label} {} is owned by uid {} (you are uid {}). \
              If browser fetch or settings fail, run: chown -R \"$USER:$USER\" {}",
             path.display(),
             meta.uid(),
@@ -420,7 +430,7 @@ fn resolve_browser_profile_dir(data_directory: &Path) -> Result<PathBuf, Provide
         if is_browser_profile_usable(dir) {
             if dir != &candidates[0] {
                 eprintln!(
-                    "nova: using browser profile at {} (preferred cache path was not usable)",
+                    "persistent-sage: using browser profile at {} (preferred cache path was not usable)",
                     dir.display()
                 );
             }
@@ -434,15 +444,16 @@ fn resolve_browser_profile_dir(data_directory: &Path) -> Result<PathBuf, Provide
         .join(", ");
     Err(tool_err(format!(
         "no writable Chrome profile directory (tried: {listed}). \
-         If ~/.local/share/nova was created as root, run: chown -R \"$USER:$USER\" ~/.local/share/nova"
+         If ~/.local/share/persistent-sage/data was created as root, run: chown -R \"$USER:$USER\" ~/.local/share/persistent-sage/data"
     )))
 }
 
 fn make_ephemeral_browser_profile() -> Result<PathBuf, ProviderError> {
     let dir = std::env::temp_dir()
-        .join("nova")
+        .join("persistent-sage")
         .join(format!("browser-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&dir).map_err(|e| tool_err(format!("ephemeral browser profile: {e}")))?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| tool_err(format!("ephemeral browser profile: {e}")))?;
     Ok(dir)
 }
 
@@ -486,7 +497,7 @@ async fn run_chrome_with_profile_fallback(
         Ok(bytes) => Ok(bytes),
         Err(e) if chrome_error_is_profile_lock(&e) => {
             eprintln!(
-                "nova: Chrome profile error at {}, retrying with ephemeral profile",
+                "persistent-sage: Chrome profile error at {}, retrying with ephemeral profile",
                 profile_dir.display()
             );
             let ephemeral = make_ephemeral_browser_profile()?;
@@ -515,15 +526,18 @@ fn running_in_container() -> bool {
     Path::new("/.dockerenv").exists() || Path::new("/run/.containerenv").exists()
 }
 
-/// Sandbox off in Docker/Podman by default, or when `NOVA_CHROME_NO_SANDBOX=1`. Set `=0` to force sandbox.
+/// Sandbox off in Docker/Podman by default, or when `PERSISTENT_SAGE_CHROME_NO_SANDBOX=1`. Set `=0` to force sandbox.
 fn chrome_no_sandbox_enabled() -> bool {
-    match std::env::var("NOVA_CHROME_NO_SANDBOX") {
+    match std::env::var("PERSISTENT_SAGE_CHROME_NO_SANDBOX")
+        .or_else(|_| std::env::var("NOVA_CHROME_NO_SANDBOX"))
+    {
         Ok(s) => {
             let s = s.trim();
             if s == "0" || s.eq_ignore_ascii_case("false") || s.eq_ignore_ascii_case("no") {
                 false
             } else {
-                env_flag_true("NOVA_CHROME_NO_SANDBOX")
+                env_flag_true("PERSISTENT_SAGE_CHROME_NO_SANDBOX")
+                    || env_flag_true("NOVA_CHROME_NO_SANDBOX")
             }
         }
         Err(_) => running_in_container(),
@@ -536,10 +550,10 @@ fn chrome_extra_launch_args() -> Vec<String> {
         args.push("--no-sandbox".into());
         args.push("--disable-setuid-sandbox".into());
     }
-    if env_flag_true("NOVA_CHROME_IGNORE_CERT_ERRORS") {
-        eprintln!(
-            "nova: warning: Chrome ignoring TLS certificate errors (NOVA_CHROME_IGNORE_CERT_ERRORS)"
-        );
+    if env_flag_true("PERSISTENT_SAGE_CHROME_IGNORE_CERT_ERRORS")
+        || env_flag_true("NOVA_CHROME_IGNORE_CERT_ERRORS")
+    {
+        eprintln!("persistent-sage: warning: Chrome ignoring TLS certificate errors");
         args.push("--ignore-certificate-errors".into());
         args.push("--allow-insecure-localhost".into());
     }
@@ -585,32 +599,35 @@ fn apply_chrome_launch_env(cmd: &mut Command) {
         }
     }
 
-    if chrome_no_sandbox_enabled() && std::env::var("NOVA_CHROME_NO_SANDBOX").is_err() && running_in_container()
+    if chrome_no_sandbox_enabled()
+        && std::env::var("PERSISTENT_SAGE_CHROME_NO_SANDBOX").is_err()
+        && std::env::var("NOVA_CHROME_NO_SANDBOX").is_err()
+        && running_in_container()
     {
-        eprintln!("nova: container detected; Chrome launched with --no-sandbox");
+        eprintln!("persistent-sage: container detected; Chrome launched with --no-sandbox");
     }
 }
 
 fn chrome_stderr_hint(stderr: &str) -> &'static str {
     if stderr.contains("SingletonLock") && stderr.contains("Permission denied") {
         " Chrome could not lock its profile directory (not writable, wrong owner, or another \
-         Chrome is using the same profile). Nova stores browser data under the user cache \
-         (~/.cache/nova/browser_profile); if this persists, remove stale locks or run: \
-         chown -R \"$USER:$USER\" ~/.local/share/nova"
+         Chrome is using the same profile). Persistent Sage stores browser data under the user cache \
+         (~/.cache/persistent-sage/browser_profile); if this persists, remove stale locks or run: \
+         chown -R \"$USER:$USER\" ~/.local/share/persistent-sage/data"
     } else if stderr.contains("error while loading shared libraries")
         || stderr.contains("No such file")
     {
-        " Install Google Chrome or Chromium, or set NOVA_CHROME_PATH to the browser binary."
+        " Install Google Chrome or Chromium, or set PERSISTENT_SAGE_CHROME_PATH to the browser binary."
     } else if stderr.contains("certificate")
         || stderr.contains("SSL")
         || stderr.contains("ERR_CERT")
         || stderr.contains("NET::ERR_")
     {
         " TLS/CA issue: install system CA certs (e.g. apt install ca-certificates), mount /etc/ssl/certs \
-         in containers, or set SSL_CERT_FILE. Dev only: NOVA_CHROME_IGNORE_CERT_ERRORS=1. \
-         Sandbox: NOVA_CHROME_NO_SANDBOX=1"
+         in containers, or set SSL_CERT_FILE. Dev only: PERSISTENT_SAGE_CHROME_IGNORE_CERT_ERRORS=1. \
+         Sandbox: PERSISTENT_SAGE_CHROME_NO_SANDBOX=1"
     } else if stderr.contains("sandbox") || stderr.contains("Sandbox") {
-        " Chrome sandbox blocked launch. Set NOVA_CHROME_NO_SANDBOX=1 (auto-enabled in Docker/Podman)."
+        " Chrome sandbox blocked launch. Set PERSISTENT_SAGE_CHROME_NO_SANDBOX=1 (auto-enabled in Docker/Podman)."
     } else {
         ""
     }
@@ -632,10 +649,7 @@ async fn run_chrome(
         "--disable-blink-features=AutomationControlled".into(),
         format!("--user-agent={BROWSER_USER_AGENT}"),
         format!("--user-data-dir={}", profile_dir.display()),
-        format!(
-            "--virtual-time-budget={}",
-            wait.virtual_time_budget_ms()
-        ),
+        format!("--virtual-time-budget={}", wait.virtual_time_budget_ms()),
     ];
     args.extend(chrome_extra_launch_args());
     if let Some(path) = screenshot_path {
@@ -650,13 +664,10 @@ async fn run_chrome(
     cmd.args(&args);
     apply_chrome_launch_env(&mut cmd);
     let fut = cmd.output();
-    let output = tokio::time::timeout(
-        Duration::from_secs(BROWSER_FETCH_TIMEOUT_SECS),
-        fut,
-    )
-    .await
-    .map_err(|_| tool_err("headless browser timed out"))?
-    .map_err(|e| tool_err(format!("failed to start Chrome/Chromium: {e}")))?;
+    let output = tokio::time::timeout(Duration::from_secs(BROWSER_FETCH_TIMEOUT_SECS), fut)
+        .await
+        .map_err(|_| tool_err("headless browser timed out"))?
+        .map_err(|e| tool_err(format!("failed to start Chrome/Chromium: {e}")))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -683,7 +694,12 @@ fn resolve_href(base: &Url, raw: &str) -> Option<String> {
 }
 
 fn element_text(el: ElementRef<'_>) -> String {
-    el.text().collect::<Vec<_>>().join(" ").split_whitespace().collect::<Vec<_>>().join(" ")
+    el.text()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn extract_semantic_content(html: &str, base_url: &Url) -> BrowserFetchResult {
@@ -747,7 +763,11 @@ fn extract_semantic_content(html: &str, base_url: &Url) -> BrowserFetchResult {
         if images.len() >= MAX_IMAGES {
             break;
         }
-        let src_raw = el.value().attr("src").or_else(|| el.value().attr("data-src")).unwrap_or("");
+        let src_raw = el
+            .value()
+            .attr("src")
+            .or_else(|| el.value().attr("data-src"))
+            .unwrap_or("");
         let Some(src) = resolve_href(base_url, src_raw) else {
             continue;
         };
@@ -810,7 +830,7 @@ pub async fn fetch_browser_page(
     let chrome = find_chrome_executable().ok_or_else(|| {
         tool_err(
             "fetch_browser requires Google Chrome, Chromium, or Microsoft Edge on this system. \
-             Install one or set NOVA_CHROME_PATH to the browser executable.",
+             Install one or set PERSISTENT_SAGE_CHROME_PATH to the browser executable.",
         )
     })?;
 
@@ -831,7 +851,8 @@ pub async fn fetch_browser_page(
         let shots_dir = workspace_root
             .map(|w| w.join("browser-screenshots"))
             .unwrap_or_else(|| data_directory.join("browser-screenshots"));
-        std::fs::create_dir_all(&shots_dir).map_err(|e| tool_err(format!("screenshot dir: {e}")))?;
+        std::fs::create_dir_all(&shots_dir)
+            .map_err(|e| tool_err(format!("screenshot dir: {e}")))?;
         let name = format!("shot-{}.png", uuid::Uuid::new_v4());
         Some(shots_dir.join(name))
     } else {
@@ -863,10 +884,7 @@ pub async fn fetch_browser_page(
         }
     }
 
-    if result.title.is_empty()
-        && result.headings.is_empty()
-        && result.paragraphs.is_empty()
-    {
+    if result.title.is_empty() && result.headings.is_empty() && result.paragraphs.is_empty() {
         result.paragraphs.push(
             "(No article text extracted; page may still be blocked or heavily scripted. \
              Try a different wait_until or check the URL in a normal browser.)"

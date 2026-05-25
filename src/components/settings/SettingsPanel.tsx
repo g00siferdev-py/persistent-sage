@@ -67,9 +67,9 @@ const BROWSER_FETCH_INFO = (
   <>
     Uses system Chrome, Chromium, or Edge to load pages with JavaScript, a normal browser user-agent, and a
     persistent cookie profile. Better for news sites and bot-protected pages. Requires a browser install or{" "}
-    <span className="font-mono text-slate-600 dark:text-slate-400">NOVA_CHROME_PATH</span>. In Docker, install{" "}
+    <span className="font-mono text-slate-600 dark:text-slate-400">PERSISTENT_SAGE_CHROME_PATH</span>. In Docker, install{" "}
     <span className="font-mono text-slate-600 dark:text-slate-400">ca-certificates</span> and set{" "}
-    <span className="font-mono text-slate-600 dark:text-slate-400">NOVA_CHROME_NO_SANDBOX=1</span> if needed. Off by default.
+    <span className="font-mono text-slate-600 dark:text-slate-400">PERSISTENT_SAGE_CHROME_NO_SANDBOX=1</span> if needed. Off by default.
   </>
 );
 
@@ -91,7 +91,7 @@ const WORKSPACE_TOOLS_INFO = (
         "workspace_write_file",
       ])}
     </strong>{" "}
-    in the Nova workspace, and <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("database_query")}</strong> on{" "}
+    in the Persistent Sage workspace, and <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("database_query")}</strong> on{" "}
     <span className="font-mono text-slate-600 dark:text-slate-400">.db</span> / <span className="font-mono text-slate-600 dark:text-slate-400">.sqlite</span> files there
     (workspace location). Paths are relative; <span className="font-mono text-slate-600 dark:text-slate-400">..</span> is rejected. Off by default.
     For the live app database folder, enable App data directory databases below instead.
@@ -101,8 +101,8 @@ const WORKSPACE_TOOLS_INFO = (
 const APP_DATA_DB_INFO = (
   <>
     When enabled, your companion may use <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("database_query")}</strong> on
-    SQLite files in Nova&apos;s data directory — the same resolved path as the live memory database (for example{" "}
-    <span className="font-mono text-slate-600 dark:text-slate-400">~/.local/share/nova</span> on Linux, or the portable{" "}
+    SQLite files in Persistent Sage&apos;s data directory — the same resolved path as the live memory database (for example{" "}
+    <span className="font-mono text-slate-600 dark:text-slate-400">~/.local/share/persistent-sage/data</span> on Linux, or the portable{" "}
     <span className="font-mono text-slate-600 dark:text-slate-400">data/</span> folder next to the executable). Use a filename only (e.g.{" "}
     <span className="font-mono text-slate-600 dark:text-slate-400">nova_memory.sqlite</span>), no subdirectories. Off by default.
   </>
@@ -121,13 +121,13 @@ const DB_WRITE_INFO = (
 function providerSupportsTools(settings: SettingsView | null): boolean {
   return Boolean(
     settings &&
-      ["openai", "ollama", "ollama_cloud", "anthropic"].includes(settings.selectedProvider),
+      ["openai", "ollama", "ollama_cloud", "anthropic", "xai"].includes(settings.selectedProvider),
   );
 }
 
 function providerToolsFootnote(settings: SettingsView | null): string | undefined {
   if (providerSupportsTools(settings)) return undefined;
-  return "Switch provider to OpenAI, Ollama, or Anthropic.";
+  return "Switch provider to OpenAI, xAI, Ollama, or Anthropic.";
 }
 
 function settingsPanelWidth(mode: SettingsLayoutMode): string {
@@ -148,6 +148,11 @@ type SettingsView = {
   ollamaModel: string;
   ollamaBaseUrl: string;
   anthropicModel: string;
+  geminiModel: string;
+  geminiBaseUrl: string;
+  xaiModel: string;
+  xaiBaseUrl: string;
+  thinkingEffort: "low" | "medium" | "high";
   temperature: number;
   /** Omitted in JSON when unset (Rust `None`) — treat like `null` (model default). */
   maxTokens?: number | null;
@@ -160,7 +165,7 @@ type SettingsView = {
   /** When true, the model may read/write/list files only under the app workspace folder (see data paths). */
   agentWorkspaceEnabled: boolean;
   agentPersonalityEditEnabled: boolean;
-  /** When true, database_query may use location=app_data on .db/.sqlite files in the Nova data directory (same folder as the live memory DB). */
+  /** When true, database_query may use location=app_data on .db/.sqlite files in the Persistent Sage data directory (same folder as the live memory DB). */
   databaseAppDataEnabled: boolean;
   /** When true, database_query may run INSERT/UPDATE/DELETE/REPLACE on workspace .db files (DROP/ALTER/CREATE still blocked). */
   databaseAllowWrite: boolean;
@@ -174,6 +179,8 @@ type SettingsView = {
   hasOpenaiApiKey: boolean;
   hasAnthropicApiKey: boolean;
   hasOllamaApiKey: boolean;
+  hasGeminiApiKey: boolean;
+  hasXaiApiKey: boolean;
   onboardingCompleted: boolean;
 };
 
@@ -184,6 +191,11 @@ type SettingsPatch = {
   ollamaModel?: string;
   ollamaBaseUrl?: string;
   anthropicModel?: string;
+  geminiModel?: string;
+  geminiBaseUrl?: string;
+  xaiModel?: string;
+  xaiBaseUrl?: string;
+  thinkingEffort?: "low" | "medium" | "high";
   temperature?: number;
   /** Omit = unchanged; null = clear cap */
   maxTokens?: number | null;
@@ -205,7 +217,7 @@ type SettingsPatch = {
 
 const MEMORY_LLM_INFO = (
   <>
-    After each user message, Nova asks your chat provider to extract durable facts (health, preferences,
+    After each user message, Persistent Sage asks your chat provider to extract durable facts (health, preferences,
     accessibility) as curated anchors. Uses a small JSON completion — not the full reply. Off falls back to
     keyword heuristics only.
   </>
@@ -229,12 +241,12 @@ type ProviderDescriptor = {
 const DEBOUNCE_MS = 400;
 
 const MEMORY_WIPE_COPY = `This will permanently delete ALL conversations, messages, anchors, and memories across every personality.
-Nova will forget everything it has learned about you.
+Persistent Sage will forget everything it has learned about you.
 Your API keys, settings, and personality profiles will be preserved.This action cannot be undone.
 To proceed, type CONFIRM and click Wipe.`;
 
 const FACTORY_RESET_COPY = `This will permanently delete ALL conversations, memories, anchors, and settings.
-Nova will forget everything it has ever learned about you.
+Persistent Sage will forget everything it has ever learned about you.
 This action cannot be undone.To proceed, type CONFIRM in the box below and click Reset.`;
 
 const TEMPERATURE_INFO =
@@ -265,6 +277,22 @@ const DEFAULT_ANTHROPIC_MODELS = [
   "claude-3-opus-20240229",
   "claude-3-sonnet-20240229",
   "claude-3-haiku-20240307",
+] as const;
+
+const DEFAULT_GEMINI_MODELS = [
+  "gemini-2.5-pro",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-pro",
+  "gemini-1.5-flash",
+] as const;
+
+const DEFAULT_XAI_MODELS = [
+  "grok-4-fast-reasoning",
+  "grok-4-fast-non-reasoning",
+  "grok-3",
+  "grok-3-mini",
+  "grok-2-vision-1212",
 ] as const;
 
 function mergeModelOptions(
@@ -412,6 +440,8 @@ export function SettingsPanel({
   const [openaiKeyInput, setOpenaiKeyInput] = useState("");
   const [anthropicKeyInput, setAnthropicKeyInput] = useState("");
   const [ollamaKeyInput, setOllamaKeyInput] = useState("");
+  const [geminiKeyInput, setGeminiKeyInput] = useState("");
+  const [xaiKeyInput, setXaiKeyInput] = useState("");
   const [cloudModelTags, setCloudModelTags] = useState<string[] | null>(null);
   const [cloudTagsLoading, setCloudTagsLoading] = useState(false);
   const [openaiFetchedModels, setOpenaiFetchedModels] = useState<string[] | null>(null);
@@ -420,6 +450,10 @@ export function SettingsPanel({
   const [localOllamaTagsLoading, setLocalOllamaTagsLoading] = useState(false);
   const [anthropicFetchedModels, setAnthropicFetchedModels] = useState<string[] | null>(null);
   const [anthropicModelsLoading, setAnthropicModelsLoading] = useState(false);
+  const [geminiFetchedModels, setGeminiFetchedModels] = useState<string[] | null>(null);
+  const [geminiModelsLoading, setGeminiModelsLoading] = useState(false);
+  const [xaiFetchedModels, setXaiFetchedModels] = useState<string[] | null>(null);
+  const [xaiModelsLoading, setXaiModelsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [destructiveModal, setDestructiveModal] = useState<DestructiveModal | null>(null);
@@ -527,7 +561,7 @@ export function SettingsPanel({
   );
 
   const applyModelPatchImmediate = useCallback(
-    async (patch: Pick<SettingsPatch, "openaiModel" | "ollamaModel" | "anthropicModel">) => {
+    async (patch: Pick<SettingsPatch, "openaiModel" | "ollamaModel" | "anthropicModel" | "geminiModel" | "xaiModel">) => {
       try {
         setError(null);
         flushDebounce();
@@ -570,6 +604,21 @@ export function SettingsPanel({
     [anthropicFetchedModels, settings?.anthropicModel],
   );
 
+  const geminiModelOptions = useMemo(
+    () =>
+      mergeModelOptions(
+        DEFAULT_GEMINI_MODELS,
+        geminiFetchedModels,
+        settings?.geminiModel ?? "",
+      ),
+    [geminiFetchedModels, settings?.geminiModel],
+  );
+
+  const xaiModelOptions = useMemo(
+    () => mergeModelOptions(DEFAULT_XAI_MODELS, xaiFetchedModels, settings?.xaiModel ?? ""),
+    [xaiFetchedModels, settings?.xaiModel],
+  );
+
   const saveOpenaiKey = async () => {
     try {
       setError(null);
@@ -597,6 +646,28 @@ export function SettingsPanel({
       setError(null);
       await invoke("settings_save_api_key", { provider: "ollama", apiKey: ollamaKeyInput });
       setOllamaKeyInput("");
+      await refreshSettings();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const saveGeminiKey = async () => {
+    try {
+      setError(null);
+      await invoke("settings_save_api_key", { provider: "gemini", apiKey: geminiKeyInput });
+      setGeminiKeyInput("");
+      await refreshSettings();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const saveXaiKey = async () => {
+    try {
+      setError(null);
+      await invoke("settings_save_api_key", { provider: "xai", apiKey: xaiKeyInput });
+      setXaiKeyInput("");
       await refreshSettings();
     } catch (e) {
       setError(String(e));
@@ -656,6 +727,34 @@ export function SettingsPanel({
       setError(String(e));
     } finally {
       setAnthropicModelsLoading(false);
+    }
+  }, []);
+
+  const refreshGeminiModels = useCallback(async () => {
+    try {
+      setGeminiModelsLoading(true);
+      setError(null);
+      const ids = await invoke<string[]>("gemini_list_models");
+      setGeminiFetchedModels(ids);
+    } catch (e) {
+      setGeminiFetchedModels(null);
+      setError(String(e));
+    } finally {
+      setGeminiModelsLoading(false);
+    }
+  }, []);
+
+  const refreshXaiModels = useCallback(async () => {
+    try {
+      setXaiModelsLoading(true);
+      setError(null);
+      const ids = await invoke<string[]>("xai_list_models");
+      setXaiFetchedModels(ids);
+    } catch (e) {
+      setXaiFetchedModels(null);
+      setError(String(e));
+    } finally {
+      setXaiModelsLoading(false);
     }
   }, []);
 
@@ -1125,6 +1224,152 @@ export function SettingsPanel({
             </button>
           </section>
 
+          <section className="space-y-3 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Google Gemini
+            </h3>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="gemini-base">
+              Base URL
+            </label>
+            <input
+              id="gemini-base"
+              type="url"
+              value={settings?.geminiBaseUrl ?? ""}
+              disabled={!settings}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSettings((s) => (s ? { ...s, geminiBaseUrl: v } : s));
+                schedulePatch({ geminiBaseUrl: v });
+              }}
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+            />
+            <ModelPickRow
+              htmlFor="gemini-model"
+              label="Model"
+              value={settings?.geminiModel ?? ""}
+              optionIds={geminiModelOptions}
+              disabled={!settings}
+              loading={geminiModelsLoading}
+              onChangeModel={(v) => void applyModelPatchImmediate({ geminiModel: v })}
+              onRefresh={refreshGeminiModels}
+              refreshLabel="Refresh Models"
+            />
+            <details className="mt-2 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-2 py-2">
+              <summary className="cursor-pointer text-[11px] text-slate-500">Type model name…</summary>
+              <input
+                type="text"
+                placeholder="e.g. gemini-2.5-flash"
+                value={settings?.geminiModel ?? ""}
+                disabled={!settings}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setSettings((s) => (s ? { ...s, geminiModel: v } : s));
+                  schedulePatch({ geminiModel: v });
+                }}
+                className="mt-2 w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+              />
+            </details>
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <KeyRound className="size-3.5 shrink-0" aria-hidden />
+              <span>
+                API key:{" "}
+                {settings?.hasGeminiApiKey ? (
+                  <span className="text-emerald-400/90">saved (encrypted)</span>
+                ) : (
+                  <span className="text-amber-400/90">not set</span>
+                )}
+              </span>
+            </div>
+            <input
+              type="password"
+              autoComplete="off"
+              placeholder="Google AI Studio API key"
+              value={geminiKeyInput}
+              onChange={(e) => setGeminiKeyInput(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+            />
+            <button
+              type="button"
+              onClick={() => void saveGeminiKey()}
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800"
+            >
+              Save Gemini API key
+            </button>
+          </section>
+
+          <section className="space-y-3 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              xAI (Grok)
+            </h3>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="xai-base">
+              Base URL
+            </label>
+            <input
+              id="xai-base"
+              type="url"
+              value={settings?.xaiBaseUrl ?? ""}
+              disabled={!settings}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSettings((s) => (s ? { ...s, xaiBaseUrl: v } : s));
+                schedulePatch({ xaiBaseUrl: v });
+              }}
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+            />
+            <ModelPickRow
+              htmlFor="xai-model"
+              label="Model"
+              value={settings?.xaiModel ?? ""}
+              optionIds={xaiModelOptions}
+              disabled={!settings}
+              loading={xaiModelsLoading}
+              onChangeModel={(v) => void applyModelPatchImmediate({ xaiModel: v })}
+              onRefresh={refreshXaiModels}
+              refreshLabel="Refresh Models"
+            />
+            <details className="mt-2 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-2 py-2">
+              <summary className="cursor-pointer text-[11px] text-slate-500">Type model name…</summary>
+              <input
+                type="text"
+                placeholder="e.g. grok-4-fast-reasoning"
+                value={settings?.xaiModel ?? ""}
+                disabled={!settings}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setSettings((s) => (s ? { ...s, xaiModel: v } : s));
+                  schedulePatch({ xaiModel: v });
+                }}
+                className="mt-2 w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+              />
+            </details>
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <KeyRound className="size-3.5 shrink-0" aria-hidden />
+              <span>
+                API key:{" "}
+                {settings?.hasXaiApiKey ? (
+                  <span className="text-emerald-400/90">saved (encrypted)</span>
+                ) : (
+                  <span className="text-amber-400/90">not set</span>
+                )}
+              </span>
+            </div>
+            <input
+              type="password"
+              autoComplete="off"
+              placeholder="xAI API key"
+              value={xaiKeyInput}
+              onChange={(e) => setXaiKeyInput(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+            />
+            <button
+              type="button"
+              onClick={() => void saveXaiKey()}
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800"
+            >
+              Save xAI API key
+            </button>
+          </section>
+
           <section className="space-y-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Generation
@@ -1180,7 +1425,7 @@ export function SettingsPanel({
               Presets match common context sizes. This caps how many tokens the model may produce in its
               reply (generation budget).{" "}
               <span className="text-slate-600 dark:text-slate-400">
-                <strong className="font-medium text-slate-700 dark:text-slate-300">Use model default</strong> lets Nova use this
+                <strong className="font-medium text-slate-700 dark:text-slate-300">Use model default</strong> lets Persistent Sage use this
                 model&apos;s context window from the provider, then apply a safe per-API limit. Explicit values
                 are clamped if the active model cannot honor them.
               </span>
@@ -1506,7 +1751,7 @@ export function SettingsPanel({
                   Dark mode
                 </span>
               }
-              description="Use dark colors across Nova. Saved on this device."
+              description="Use dark colors across Persistent Sage. Saved on this device."
               checked={isDark}
               onChange={setDarkMode}
             />
@@ -1518,7 +1763,7 @@ export function SettingsPanel({
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-violet-200/90">Pulse</h3>
             </div>
             <p className="text-[11px] leading-relaxed text-slate-500">
-              On a timer, Nova posts your instructions as a <strong className="font-medium text-slate-700 dark:text-slate-300">normal user
+              On a timer, Persistent Sage posts your instructions as a <strong className="font-medium text-slate-700 dark:text-slate-300">normal user
               message</strong> in the chat you have open — same session, history, tools, and reply stream as if you
               typed it. Keep that thread selected in the sidebar while Pulse is on.
             </p>
@@ -1772,7 +2017,7 @@ export function SettingsPanel({
               Chats, settings, and <code className="text-slate-600 dark:text-slate-400">personality.json</code> live here — not in your git
               checkout. On Linux the default is under{" "}
               <code className="text-slate-600 dark:text-slate-400">~/.local/share/</code> (XDG data home). Set{" "}
-              <code className="text-slate-600 dark:text-slate-400">NOVA_DATA_DIR</code> to pin a visible folder (e.g. inside your project or a
+              <code className="text-slate-600 dark:text-slate-400">PERSISTENT_SAGE_DATA_DIR</code> to pin a visible folder (e.g. inside your project or a
               synced drive) so every machine uses the same files.
             </p>
             {dataPaths ? (
@@ -1787,8 +2032,8 @@ export function SettingsPanel({
                 </li>
                 <li className="text-slate-500">
                   Profile: {dataPaths.sqliteProfile}
-                  {dataPaths.novaDataDirEnv ? " · NOVA_DATA_DIR set" : ""}
-                  {dataPaths.novaPortableEnv ? " · NOVA_PORTABLE set" : ""}
+                  {dataPaths.novaDataDirEnv ? " · custom data dir set" : ""}
+                  {dataPaths.novaPortableEnv ? " · portable mode set" : ""}
                 </li>
               </ul>
             ) : (
@@ -1822,7 +2067,7 @@ export function SettingsPanel({
               About
             </h3>
             <p className="text-xs leading-relaxed text-slate-500">
-              Settings and API keys are stored under your Nova data directory; keys are encrypted
+              Settings and API keys are stored under your Persistent Sage data directory; keys are encrypted
               (AES-GCM) with material from the OS keychain when available.
             </p>
             <button

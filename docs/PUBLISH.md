@@ -1,4 +1,4 @@
-# Publishing Nova for beta testers
+# Publishing Persistent Sage for beta testers
 
 How to ship a **Windows installer** to users without asking them to compile from source.
 
@@ -10,7 +10,7 @@ How to ship a **Windows installer** to users without asking them to compile from
 | **Actions → Artifacts** | Public repo: yes, but hidden and **expires in 30 days** | Maintainers / smoke tests only |
 | **Clone + build from source** | Yes (public repo) | Developers only |
 
-**Artifacts from a manual workflow run are not a product download page.** Publish a **Release** when you want testers to install Nova.
+**Artifacts from a manual workflow run are not a product download page.** Publish a **Release** when you want testers to install Persistent Sage.
 
 ---
 
@@ -18,20 +18,20 @@ How to ship a **Windows installer** to users without asking them to compile from
 
 ### Option A — Tag + CI (automated draft)
 
-1. Confirm version in `package.json` and `src-tauri/tauri.conf.json` (e.g. `0.2.0-beta.3`).
+1. Confirm version in `package.json` and `src-tauri/tauri.conf.json` (e.g. `0.2.0-beta.4`).
 2. Update **[CHANGELOG.md](../CHANGELOG.md)** for that version.
 3. Commit and push `main`.
 4. Create and push a tag (must start with `v`):
 
    ```bash
-   git tag v0.2.0-beta.3
-   git push origin v0.2.0-beta.3
+   git tag v0.2.0-beta.4
+   git push origin v0.2.0-beta.4
    ```
 
 5. Wait for **Actions → Build Windows** to finish (triggered by the tag).
 6. Open **Releases** — you should see a **draft prerelease** with:
-   - `Nova_*_x64-setup.exe`
-   - `NovaPortable.zip`
+   - `Persistent Sage_*_x64-setup.exe`
+   - `PersistentSagePortable.zip`
 7. Edit the release notes (copy from CHANGELOG), then click **Publish release**.
 
 **Share with testers:**
@@ -50,12 +50,12 @@ On a prerelease, use the specific tag URL until you promote a non-prerelease “
 
 1. Download **Artifacts** from a successful **Build Windows** run.
 2. **Releases → Draft a new release**
-3. **Choose a tag:** create `v0.2.0-beta.3` on `main`.
-4. Title: `Nova 0.2.0-beta.3`
+3. **Choose a tag:** create `v0.2.0-beta.4` on `main`.
+4. Title: `Persistent Sage 0.2.0-beta.4`
 5. Check **Set as a pre-release**
 6. Attach:
-   - `Nova_*_x64-setup.exe`
-   - `NovaPortable.zip` (optional, for USB testers)
+   - `Persistent Sage_*_x64-setup.exe`
+   - `PersistentSagePortable.zip` (optional, for USB testers)
 7. Paste release notes from CHANGELOG → **Publish release**.
 
 ---
@@ -65,14 +65,14 @@ On a prerelease, use the specific tag URL until you promote a non-prerelease “
 Send them:
 
 1. **Releases** link (above)
-2. Download **`Nova_*_x64-setup.exe`**
+2. Download **`Persistent Sage_*_x64-setup.exe`**
 3. Run installer (SmartScreen: **More info → Run anyway** if unsigned)
-4. Open Nova from Start Menu; complete the **setup wizard**
+4. Open Persistent Sage from Start Menu; complete the **setup wizard**
 5. **[INSTALL-WINDOWS.md](./INSTALL-WINDOWS.md)** for portable USB and troubleshooting
 6. **[USER-GUIDE.md](./USER-GUIDE.md)** for daily use
 7. Issues: https://github.com/g00siferdev-py/project-nova/issues
 
-**USB / portable:** download `NovaPortable.zip`, unzip, run **`Start-Nova-Portable.bat`** (not `nova.exe` alone).
+**USB / portable:** download `PersistentSagePortable.zip`, unzip, run **`Start-Persistent-Sage-Portable.bat`** (not `persistent-sage.exe` alone).
 
 ---
 
@@ -82,7 +82,7 @@ After publishing:
 
 - [ ] **[README.md](../README.md)** — beta section links to Releases (not only source build)
 - [ ] **Release notes** — match CHANGELOG for that version
-- [ ] **Issue template / beta callout** — ask for OS, Nova version, provider
+- [ ] **Issue template / beta callout** — ask for OS, Persistent Sage version, provider
 
 ---
 

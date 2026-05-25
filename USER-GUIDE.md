@@ -1,4 +1,4 @@
-# Nova user guide
+# Persistent Sage user guide
 
 The full, up-to-date user guide lives in the documentation folder:
 

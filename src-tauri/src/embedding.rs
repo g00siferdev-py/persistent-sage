@@ -53,12 +53,7 @@ pub fn deserialize_embedding(blob: &[u8]) -> Option<Vec<f32>> {
     let mut out = Vec::with_capacity(dim);
     for i in 0..dim {
         let off = 4 + i * 4;
-        let b = [
-            blob[off],
-            blob[off + 1],
-            blob[off + 2],
-            blob[off + 3],
-        ];
+        let b = [blob[off], blob[off + 1], blob[off + 2], blob[off + 3]];
         out.push(f32::from_le_bytes(b));
     }
     Some(out)
@@ -97,7 +92,9 @@ pub fn resolve_embedding_spec(settings: &SettingsManager) -> Result<EmbeddingSpe
                 .decrypt_api_key("openai")
                 .map_err(|e| EmbeddingError::Provider(e.to_string()))?
                 .filter(|s| !s.trim().is_empty())
-                .ok_or_else(|| EmbeddingError::Provider("OpenAI API key required for embeddings".into()))?;
+                .ok_or_else(|| {
+                    EmbeddingError::Provider("OpenAI API key required for embeddings".into())
+                })?;
             Ok(EmbeddingSpec {
                 provider_id: "openai".into(),
                 model,
@@ -118,7 +115,9 @@ pub fn resolve_embedding_spec(settings: &SettingsManager) -> Result<EmbeddingSpe
                     .decrypt_api_key("ollama")
                     .map_err(|e| EmbeddingError::Provider(e.to_string()))?
                     .filter(|s| !s.trim().is_empty())
-                    .ok_or_else(|| EmbeddingError::Provider("Ollama Cloud API key required".into()))?;
+                    .ok_or_else(|| {
+                        EmbeddingError::Provider("Ollama Cloud API key required".into())
+                    })?;
                 ("https://ollama.com".to_string(), Some(token))
             } else {
                 (settings.ollama_base_url(), None)
@@ -173,7 +172,8 @@ pub async fn embed_one(
     text: &str,
 ) -> Result<Vec<f32>, EmbeddingError> {
     let mut v = embed_texts(http, spec, &[text.to_string()]).await?;
-    v.pop().ok_or_else(|| EmbeddingError::Parse("empty embedding response".into()))
+    v.pop()
+        .ok_or_else(|| EmbeddingError::Parse("empty embedding response".into()))
 }
 
 #[derive(Debug, Deserialize)]

@@ -7,6 +7,8 @@
 //! derives the AES-256-GCM key used for API keys in `settings.json`.
 
 use std::collections::HashMap;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 
@@ -21,7 +23,8 @@ use thiserror::Error;
 use crate::database_query::{PREF_DATABASE_ALLOW_WRITE, PREF_DATABASE_APP_DATA};
 use crate::memory::{ConversationMemory, MemoryError};
 
-const KEYRING_SERVICE: &str = "Nova";
+const KEYRING_SERVICE: &str = "Persistent Sage";
+const LEGACY_KEYRING_SERVICE: &str = "Nova";
 const KEYRING_USER: &str = "settings_master_ikm";
 const SETTINGS_VERSION: u32 = 1;
 
@@ -68,6 +71,16 @@ pub struct SettingsFile {
     pub ollama_base_url: String,
     #[serde(default)]
     pub anthropic_model: String,
+    #[serde(default = "default_gemini_model")]
+    pub gemini_model: String,
+    #[serde(default = "default_gemini_base_url")]
+    pub gemini_base_url: String,
+    #[serde(default = "default_xai_model")]
+    pub xai_model: String,
+    #[serde(default = "default_xai_base_url")]
+    pub xai_base_url: String,
+    #[serde(default = "default_thinking_effort")]
+    pub thinking_effort: String,
     #[serde(default = "default_temperature")]
     pub temperature: f32,
     pub max_tokens: Option<u32>,
@@ -163,6 +176,26 @@ fn default_temperature() -> f32 {
     0.7
 }
 
+fn default_thinking_effort() -> String {
+    "medium".into()
+}
+
+fn default_gemini_model() -> String {
+    "gemini-2.5-flash".into()
+}
+
+fn default_gemini_base_url() -> String {
+    "https://generativelanguage.googleapis.com/v1beta".into()
+}
+
+fn default_xai_model() -> String {
+    "grok-4-fast-reasoning".into()
+}
+
+fn default_xai_base_url() -> String {
+    "https://api.x.ai/v1".into()
+}
+
 impl Default for SettingsFile {
     fn default() -> Self {
         Self {
@@ -173,6 +206,11 @@ impl Default for SettingsFile {
             ollama_model: "llama3.2".into(),
             ollama_base_url: "http://127.0.0.1:11434".into(),
             anthropic_model: "claude-3-5-sonnet-20241022".into(),
+            gemini_model: default_gemini_model(),
+            gemini_base_url: default_gemini_base_url(),
+            xai_model: default_xai_model(),
+            xai_base_url: default_xai_base_url(),
+            thinking_effort: default_thinking_effort(),
             temperature: 0.7,
             max_tokens: None,
             agent_web_tools_enabled: false,
@@ -205,6 +243,11 @@ pub struct SettingsView {
     pub ollama_model: String,
     pub ollama_base_url: String,
     pub anthropic_model: String,
+    pub gemini_model: String,
+    pub gemini_base_url: String,
+    pub xai_model: String,
+    pub xai_base_url: String,
+    pub thinking_effort: String,
     pub temperature: f32,
     pub max_tokens: Option<u32>,
     pub agent_web_tools_enabled: bool,
@@ -224,6 +267,8 @@ pub struct SettingsView {
     pub has_openai_api_key: bool,
     pub has_anthropic_api_key: bool,
     pub has_ollama_api_key: bool,
+    pub has_gemini_api_key: bool,
+    pub has_xai_api_key: bool,
     pub onboarding_completed: bool,
 }
 
@@ -236,6 +281,11 @@ pub struct SettingsUpdatePayload {
     pub ollama_model: Option<String>,
     pub ollama_base_url: Option<String>,
     pub anthropic_model: Option<String>,
+    pub gemini_model: Option<String>,
+    pub gemini_base_url: Option<String>,
+    pub xai_model: Option<String>,
+    pub xai_base_url: Option<String>,
+    pub thinking_effort: Option<String>,
     pub temperature: Option<f32>,
     /// Omitted = no change. JSON `null` = clear cap. Number = set cap (`Option<Option<u32>>`
     /// cannot represent “present null” from JS; use [`JsonValue`]).
@@ -276,7 +326,8 @@ fn encrypt_aes_gcm(key: &[u8; 32], plaintext: &[u8]) -> Result<EncryptedApiKeyBl
         .map_err(|_| SettingsError::Crypto("rng nonce".into()))?;
     let nonce = Nonce::assume_unique_for_key(nonce_bytes);
     let k = LessSafeKey::new(
-        UnboundKey::new(&AES_256_GCM, key).map_err(|_| SettingsError::Crypto("bad aes key".into()))?,
+        UnboundKey::new(&AES_256_GCM, key)
+            .map_err(|_| SettingsError::Crypto("bad aes key".into()))?,
     );
     let mut buf = plaintext.to_vec();
     let tag = k
@@ -302,7 +353,8 @@ fn decrypt_aes_gcm(key: &[u8; 32], blob: &EncryptedApiKeyBlob) -> Result<Vec<u8>
         return Err(SettingsError::Crypto("truncated ciphertext".into()));
     }
     let k = LessSafeKey::new(
-        UnboundKey::new(&AES_256_GCM, key).map_err(|_| SettingsError::Crypto("bad aes key".into()))?,
+        UnboundKey::new(&AES_256_GCM, key)
+            .map_err(|_| SettingsError::Crypto("bad aes key".into()))?,
     );
     let plain = k
         .open_in_place(nonce, Aad::empty(), &mut combined)
@@ -311,7 +363,8 @@ fn decrypt_aes_gcm(key: &[u8; 32], blob: &EncryptedApiKeyBlob) -> Result<Vec<u8>
 }
 
 fn stretch_ikm_to_aes_key(ikm: &[u8; 32], salt: &[u8; 16]) -> Result<[u8; 32], SettingsError> {
-    let params = Params::new(19456, 2, 1, None).map_err(|e| SettingsError::Crypto(e.to_string()))?;
+    let params =
+        Params::new(19456, 2, 1, None).map_err(|e| SettingsError::Crypto(e.to_string()))?;
     let argon2 = Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
     let mut out = [0u8; 32];
     argon2
@@ -385,9 +438,12 @@ fn load_or_create_ikm(data_dir: &Path) -> Result<[u8; 32], SettingsError> {
         return Ok(ikm);
     }
 
-    // Legacy: IKM only in keyring (older Nova). Copy to disk once so all future runs match.
-    if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER) {
-        if let Ok(hex_str) = entry.get_password() {
+    // Legacy: IKM only in keyring (older beta installs). Copy to disk once so all future runs match.
+    for service in [KEYRING_SERVICE, LEGACY_KEYRING_SERVICE] {
+        if let Ok(entry) = keyring::Entry::new(service, KEYRING_USER) {
+            let Ok(hex_str) = entry.get_password() else {
+                continue;
+            };
             let bytes = hex::decode(hex_str.trim())
                 .map_err(|_| SettingsError::Crypto("keyring hex decode".into()))?;
             if bytes.len() == 32 {
@@ -473,7 +529,10 @@ impl SettingsManager {
     }
 
     fn persist_unlocked(&self) -> Result<(), SettingsError> {
-        let inner = self.inner.read().map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
+        let inner = self
+            .inner
+            .read()
+            .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
         let json = serde_json::to_string_pretty(&*inner)?;
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -490,7 +549,10 @@ impl SettingsManager {
 
     /// Non-secret preferences mirrored for legacy / briefing (secrets never stored here).
     fn sync_public_prefs(&self) -> Result<(), SettingsError> {
-        let inner = self.inner.read().map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
+        let inner = self
+            .inner
+            .read()
+            .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
         self.memory
             .preference_set("nova.provider.active", inner.selected_provider.trim())?;
         self.memory
@@ -501,9 +563,27 @@ impl SettingsManager {
             .preference_set("nova.ollama.model", inner.ollama_model.trim())?;
         self.memory
             .preference_set("nova.ollama.base_url", inner.ollama_base_url.trim())?;
+        self.memory
+            .preference_set("persistent_sage.gemini.model", inner.gemini_model.trim())?;
+        self.memory.preference_set(
+            "persistent_sage.gemini.base_url",
+            inner.gemini_base_url.trim(),
+        )?;
+        self.memory
+            .preference_set("persistent_sage.xai.model", inner.xai_model.trim())?;
+        self.memory
+            .preference_set("persistent_sage.xai.base_url", inner.xai_base_url.trim())?;
+        self.memory.preference_set(
+            "persistent_sage.thinking_effort",
+            inner.thinking_effort.trim(),
+        )?;
         self.memory.preference_set(
             PREF_DATABASE_ALLOW_WRITE,
-            if inner.database_allow_write { "true" } else { "false" },
+            if inner.database_allow_write {
+                "true"
+            } else {
+                "false"
+            },
         )?;
         self.memory.preference_set(
             PREF_DATABASE_APP_DATA,
@@ -520,11 +600,18 @@ impl SettingsManager {
         let _ = self.memory.preference_delete("nova.openai.api_key");
         let _ = self.memory.preference_delete("nova.anthropic.api_key");
         let _ = self.memory.preference_delete("nova.ollama.api_key");
+        let _ = self
+            .memory
+            .preference_delete("persistent_sage.gemini.api_key");
+        let _ = self.memory.preference_delete("persistent_sage.xai.api_key");
         Ok(())
     }
 
     pub fn view(&self) -> Result<SettingsView, SettingsError> {
-        let inner = self.inner.read().map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
+        let inner = self
+            .inner
+            .read()
+            .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
         Ok(SettingsView {
             selected_provider: inner.selected_provider.clone(),
             openai_model: inner.openai_model.clone(),
@@ -532,6 +619,11 @@ impl SettingsManager {
             ollama_model: inner.ollama_model.clone(),
             ollama_base_url: inner.ollama_base_url.clone(),
             anthropic_model: inner.anthropic_model.clone(),
+            gemini_model: inner.gemini_model.clone(),
+            gemini_base_url: inner.gemini_base_url.clone(),
+            xai_model: inner.xai_model.clone(),
+            xai_base_url: inner.xai_base_url.clone(),
+            thinking_effort: inner.thinking_effort.clone(),
             temperature: inner.temperature,
             max_tokens: inner.max_tokens,
             agent_web_tools_enabled: inner.agent_web_tools_enabled,
@@ -548,21 +640,39 @@ impl SettingsManager {
             memory_llm_extraction_enabled: inner.memory_llm_extraction_enabled,
             memory_semantic_enabled: inner.memory_semantic_enabled,
             embedding_model: inner.embedding_model.clone(),
-            has_openai_api_key: can_decrypt_api_blob(&self.aes_key, inner.encrypted_api_keys.get("openai")),
+            has_openai_api_key: can_decrypt_api_blob(
+                &self.aes_key,
+                inner.encrypted_api_keys.get("openai"),
+            ),
             has_anthropic_api_key: can_decrypt_api_blob(
                 &self.aes_key,
                 inner.encrypted_api_keys.get("anthropic"),
             ),
-            has_ollama_api_key: can_decrypt_api_blob(&self.aes_key, inner.encrypted_api_keys.get("ollama")),
+            has_ollama_api_key: can_decrypt_api_blob(
+                &self.aes_key,
+                inner.encrypted_api_keys.get("ollama"),
+            ),
+            has_gemini_api_key: can_decrypt_api_blob(
+                &self.aes_key,
+                inner.encrypted_api_keys.get("gemini"),
+            ),
+            has_xai_api_key: can_decrypt_api_blob(
+                &self.aes_key,
+                inner.encrypted_api_keys.get("xai"),
+            ),
             onboarding_completed: inner.onboarding_completed,
         })
     }
 
     pub fn temperature(&self) -> f32 {
+        self.inner.read().map(|g| g.temperature).unwrap_or(0.7)
+    }
+
+    pub fn thinking_effort(&self) -> String {
         self.inner
             .read()
-            .map(|g| g.temperature)
-            .unwrap_or(0.7)
+            .map(|g| normalize_thinking_effort(&g.thinking_effort))
+            .unwrap_or_else(|_| default_thinking_effort())
     }
 
     pub fn max_tokens(&self) -> Option<u32> {
@@ -660,6 +770,34 @@ impl SettingsManager {
             .unwrap_or_else(|_| "claude-3-5-sonnet-20241022".into())
     }
 
+    pub fn gemini_model(&self) -> String {
+        self.inner
+            .read()
+            .map(|g| g.gemini_model.clone())
+            .unwrap_or_else(|_| default_gemini_model())
+    }
+
+    pub fn gemini_base_url(&self) -> String {
+        self.inner
+            .read()
+            .map(|g| g.gemini_base_url.clone())
+            .unwrap_or_else(|_| default_gemini_base_url())
+    }
+
+    pub fn xai_model(&self) -> String {
+        self.inner
+            .read()
+            .map(|g| g.xai_model.clone())
+            .unwrap_or_else(|_| default_xai_model())
+    }
+
+    pub fn xai_base_url(&self) -> String {
+        self.inner
+            .read()
+            .map(|g| g.xai_base_url.clone())
+            .unwrap_or_else(|_| default_xai_base_url())
+    }
+
     pub fn memory_llm_extraction_enabled(&self) -> bool {
         self.inner
             .read()
@@ -682,7 +820,10 @@ impl SettingsManager {
     }
 
     pub fn decrypt_api_key(&self, slot: &str) -> Result<Option<String>, SettingsError> {
-        let inner = self.inner.read().map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
+        let inner = self
+            .inner
+            .read()
+            .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
         let Some(blob) = inner.encrypted_api_keys.get(slot) else {
             return Ok(None);
         };
@@ -691,20 +832,20 @@ impl SettingsManager {
                 Ok(s) if !s.trim().is_empty() => Ok(Some(s)),
                 Ok(_) => {
                     eprintln!(
-                        "nova: warning: decrypted API key `{slot}` is empty; treating as unset."
+                        "persistent-sage: warning: decrypted API key `{slot}` is empty; treating as unset."
                     );
                     Ok(None)
                 }
                 Err(e) => {
                     eprintln!(
-                        "nova: warning: API key `{slot}` is not valid UTF-8 ({e}); treating as unset."
+                        "persistent-sage: warning: API key `{slot}` is not valid UTF-8 ({e}); treating as unset."
                     );
                     Ok(None)
                 }
             },
             Err(e) => {
                 eprintln!(
-                    "nova: warning: could not decrypt API key `{slot}` ({e}). \
+                    "persistent-sage: warning: could not decrypt API key `{slot}` ({e}). \
                      If you changed data directories or restored an old `settings.json`, re-save the key in Settings."
                 );
                 Ok(None)
@@ -714,7 +855,7 @@ impl SettingsManager {
 
     /// Replace `settings.json` content with defaults (clears encrypted API keys and all prefs fields).
     pub fn reset_to_install_defaults(&self) -> Result<(), SettingsError> {
-        eprintln!("nova: settings reset_to_install_defaults — restoring defaults");
+        eprintln!("persistent-sage: settings reset_to_install_defaults — restoring defaults");
         {
             let mut inner = self
                 .inner
@@ -729,7 +870,10 @@ impl SettingsManager {
     }
 
     pub fn apply_update(&self, patch: SettingsUpdatePayload) -> Result<(), SettingsError> {
-        let mut inner = self.inner.write().map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
+        let mut inner = self
+            .inner
+            .write()
+            .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
         if let Some(s) = patch.selected_provider {
             inner.selected_provider = s.trim().to_lowercase();
         }
@@ -747,6 +891,21 @@ impl SettingsManager {
         }
         if let Some(s) = patch.anthropic_model {
             inner.anthropic_model = s;
+        }
+        if let Some(s) = patch.gemini_model {
+            inner.gemini_model = s;
+        }
+        if let Some(s) = patch.gemini_base_url {
+            inner.gemini_base_url = s.trim_end_matches('/').to_string();
+        }
+        if let Some(s) = patch.xai_model {
+            inner.xai_model = s;
+        }
+        if let Some(s) = patch.xai_base_url {
+            inner.xai_base_url = s.trim_end_matches('/').to_string();
+        }
+        if let Some(s) = patch.thinking_effort {
+            inner.thinking_effort = normalize_thinking_effort(&s);
         }
         if let Some(t) = patch.temperature {
             inner.temperature = t.clamp(0.0, 2.0);
@@ -838,7 +997,10 @@ impl SettingsManager {
         let slot = normalize_key_slot(provider)?;
         let key = api_key.trim();
         if key.is_empty() {
-            let mut inner = self.inner.write().map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
+            let mut inner = self
+                .inner
+                .write()
+                .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
             inner.encrypted_api_keys.remove(&slot);
             drop(inner);
             self.persist()?;
@@ -846,7 +1008,10 @@ impl SettingsManager {
             return Ok(());
         }
         let blob = encrypt_aes_gcm(&self.aes_key, key.as_bytes())?;
-        let mut inner = self.inner.write().map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
+        let mut inner = self
+            .inner
+            .write()
+            .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
         inner.encrypted_api_keys.insert(slot, blob);
         drop(inner);
         self.persist()?;
@@ -888,8 +1053,18 @@ impl SettingsManager {
 fn normalize_key_slot(provider: &str) -> Result<String, SettingsError> {
     let s = provider.trim().to_lowercase();
     match s.as_str() {
-        "openai" | "anthropic" | "ollama" => Ok(s),
+        "openai" | "anthropic" | "ollama" | "ollama_cloud" => Ok("ollama".into()),
+        "gemini" | "google" => Ok("gemini".into()),
+        "xai" | "grok" => Ok("xai".into()),
         _ => Err(SettingsError::InvalidKeySlot(provider.to_string())),
+    }
+}
+
+fn normalize_thinking_effort(raw: &str) -> String {
+    match raw.trim().to_lowercase().as_str() {
+        "low" => "low".into(),
+        "high" => "high".into(),
+        _ => "medium".into(),
     }
 }
 

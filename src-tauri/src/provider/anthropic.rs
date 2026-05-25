@@ -26,7 +26,10 @@ pub struct AnthropicProvider {
 }
 
 impl AnthropicProvider {
-    pub fn from_settings(settings: &SettingsManager, http: &reqwest::Client) -> Result<Self, ProviderError> {
+    pub fn from_settings(
+        settings: &SettingsManager,
+        http: &reqwest::Client,
+    ) -> Result<Self, ProviderError> {
         let api_key = settings
             .decrypt_api_key("anthropic")?
             .filter(|s| !s.trim().is_empty())
@@ -140,7 +143,8 @@ impl AnthropicProvider {
                 let id = block["id"].as_str().unwrap_or("").to_string();
                 let name = block["name"].as_str().unwrap_or("").to_string();
                 let input = block["input"].clone();
-                let arguments_json = serde_json::to_string(&input).unwrap_or_else(|_| "{}".to_string());
+                let arguments_json =
+                    serde_json::to_string(&input).unwrap_or_else(|_| "{}".to_string());
                 tool_calls.push(ToolCall {
                     id,
                     name,
@@ -191,7 +195,10 @@ impl LLMProviderEngine for AnthropicProvider {
         }
     }
 
-    async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse, ProviderError> {
+    async fn complete(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<CompletionResponse, ProviderError> {
         let body = self.build_body(request, false);
         let res = self
             .apply_auth(self.client.post(ANTHROPIC_API).json(&body))

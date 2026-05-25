@@ -22,10 +22,14 @@ pub struct OpenAIProvider {
     api_key: String,
     model: String,
     base_url: String,
+    provider_id: &'static str,
 }
 
 impl OpenAIProvider {
-    pub fn from_settings(settings: &SettingsManager, http: &reqwest::Client) -> Result<Self, ProviderError> {
+    pub fn from_settings(
+        settings: &SettingsManager,
+        http: &reqwest::Client,
+    ) -> Result<Self, ProviderError> {
         let api_key = settings
             .decrypt_api_key("openai")?
             .filter(|s| !s.trim().is_empty())
@@ -37,6 +41,24 @@ impl OpenAIProvider {
             api_key,
             model,
             base_url,
+            provider_id: "openai",
+        })
+    }
+
+    pub fn from_xai_settings(
+        settings: &SettingsManager,
+        http: &reqwest::Client,
+    ) -> Result<Self, ProviderError> {
+        let api_key = settings
+            .decrypt_api_key("xai")?
+            .filter(|s| !s.trim().is_empty())
+            .ok_or(ProviderError::MissingApiKey("xai"))?;
+        Ok(Self {
+            client: http.clone(),
+            api_key,
+            model: settings.xai_model(),
+            base_url: settings.xai_base_url().trim_end_matches('/').to_string(),
+            provider_id: "xai",
         })
     }
 
@@ -77,13 +99,29 @@ impl OpenAIProvider {
             "stream": stream,
         });
         if let Some(t) = request.temperature {
-            body.as_object_mut().unwrap().insert("temperature".into(), json!(t));
+            body.as_object_mut()
+                .unwrap()
+                .insert("temperature".into(), json!(t));
         }
         if let Some(mt) = request.max_tokens {
             let capped = Self::clamp_completion_tokens_for_model(&self.model, mt);
             body.as_object_mut()
                 .unwrap()
                 .insert("max_tokens".into(), json!(capped));
+        }
+        if let Some(effort) = request.thinking_effort.as_deref() {
+            let effort = effort.trim().to_lowercase();
+            let m = self.model.to_lowercase();
+            let supports_reasoning_effort = self.provider_id == "xai"
+                || m.starts_with("o1")
+                || m.starts_with("o3")
+                || m.starts_with("o4")
+                || m.contains("reasoning");
+            if supports_reasoning_effort && matches!(effort.as_str(), "low" | "medium" | "high") {
+                body.as_object_mut()
+                    .unwrap()
+                    .insert("reasoning_effort".into(), json!(effort));
+            }
         }
         if let Some(ref tools) = request.tools {
             if !tools.is_empty() {
@@ -165,7 +203,10 @@ impl OpenAIProvider {
             for tc in arr {
                 let id = tc["id"].as_str().unwrap_or("").to_string();
                 let name = tc["function"]["name"].as_str().unwrap_or("").to_string();
-                let args = tc["function"]["arguments"].as_str().unwrap_or("{}").to_string();
+                let args = tc["function"]["arguments"]
+                    .as_str()
+                    .unwrap_or("{}")
+                    .to_string();
                 tool_calls.push(ToolCall {
                     id,
                     name,
@@ -191,18 +232,21 @@ impl OpenAIProvider {
 #[async_trait]
 impl LLMProviderEngine for OpenAIProvider {
     fn provider_id(&self) -> &'static str {
-        "openai"
+        self.provider_id
     }
 
     fn model_info(&self) -> ModelInfo {
         ModelInfo {
-            provider_id: "openai".to_string(),
+            provider_id: self.provider_id.to_string(),
             model_id: self.model.clone(),
             context_window_tokens: Self::context_for_model(&self.model),
         }
     }
 
-    async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse, ProviderError> {
+    async fn complete(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<CompletionResponse, ProviderError> {
         let url = format!("{}/chat/completions", self.base_url);
         let body = self.build_body(request, false);
         let res = self
@@ -282,12 +326,7 @@ impl LLMProviderEngine for OpenAIProvider {
                         .unwrap_or("")
                         .to_string();
                     if !delta.is_empty() {
-                        let _ = tx
-                            .send(Ok(StreamChunk {
-                                delta,
-                                done: false,
-                            }))
-                            .await;
+                        let _ = tx.send(Ok(StreamChunk { delta, done: false })).await;
                     }
                 }
             }
@@ -313,6 +352,41 @@ pub async fn fetch_openai_model_ids(
         .filter(|s| !s.trim().is_empty())
         .ok_or(ProviderError::MissingApiKey("openai"))?;
     let base = settings.openai_base_url();
+    let base = base.trim_end_matches('/');
+    let url = format!("{}/models", base);
+    let res = http
+        .get(&url)
+        .bearer_auth(api_key.trim())
+        .timeout(Duration::from_secs(45))
+        .send()
+        .await?
+        .error_for_status()?;
+    let v: Value = res.json().await?;
+    if let Some(msg) = v["error"]["message"].as_str() {
+        return Err(ProviderError::Api(msg.to_string()));
+    }
+    let mut names = Vec::new();
+    if let Some(data) = v["data"].as_array() {
+        for m in data {
+            if let Some(id) = m["id"].as_str() {
+                names.push(id.to_string());
+            }
+        }
+    }
+    names.sort();
+    names.dedup();
+    Ok(names)
+}
+
+pub async fn fetch_xai_model_ids(
+    http: &reqwest::Client,
+    settings: &SettingsManager,
+) -> Result<Vec<String>, ProviderError> {
+    let api_key = settings
+        .decrypt_api_key("xai")?
+        .filter(|s| !s.trim().is_empty())
+        .ok_or(ProviderError::MissingApiKey("xai"))?;
+    let base = settings.xai_base_url();
     let base = base.trim_end_matches('/');
     let url = format!("{}/models", base);
     let res = http

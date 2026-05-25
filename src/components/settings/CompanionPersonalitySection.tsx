@@ -38,7 +38,7 @@ function emptyProfile(id: string, profileName: string): PersonalityProfile {
   return {
     id,
     profileName,
-    companionName: "Nova",
+    companionName: "Sage",
     corePersonality: "",
     toneOfVoice: "",
     backgroundStory: "",
@@ -435,7 +435,7 @@ export function CompanionPersonalitySection({
             <p className="mt-2 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
               Companion in chat:{" "}
               <span className="font-medium text-slate-800 dark:text-slate-200">
-                {(current.companionName || "Nova").trim() || "Nova"}
+                {(current.companionName || "Sage").trim() || "Sage"}
               </span>
             </p>
           </div>
@@ -443,7 +443,7 @@ export function CompanionPersonalitySection({
           <div className="flex items-start gap-2">
             <Heart className="mt-0.5 size-5 shrink-0 text-indigo-400" aria-hidden />
             <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Customize Nova</h3>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Customize companion</h3>
               <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
                 Companion personality · saved as <span className="font-mono">personality.json</span> in your data
                 folder. The generated prompt is sent with every message as the first system layer.
@@ -456,14 +456,14 @@ export function CompanionPersonalitySection({
               Import from file
             </p>
             <p className="mt-1 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-              <span className="font-medium text-slate-700 dark:text-slate-300">Nova JSON</span> — full{" "}
+              <span className="font-medium text-slate-700 dark:text-slate-300">Personality JSON</span> — full{" "}
               <span className="font-mono">personality.json</span>, a <span className="font-mono">profiles</span> array,
               or one profile object. <span className="font-medium text-slate-700 dark:text-slate-300">OpenClaw</span> — select{" "}
               <span className="font-mono">SOUL.md</span>, <span className="font-mono">IDENTITY.md</span>,{" "}
               <span className="font-mono">USER.md</span>, <span className="font-mono">JOURNAL.md</span>,{" "}
               <span className="font-mono">MEMORY.md</span>, <span className="font-mono">TOOLS.md</span> (any subset).
               OpenClaw templates use bullet lists (<span className="font-mono">- Name:</span>, etc.) — we map those
-              into Nova fields, show a preview, then add one profile. Use{" "}
+              into companion fields, show a preview, then add one profile. Use{" "}
               <span className="text-indigo-300">Save changes</span> to persist.
             </p>
             <input
@@ -498,7 +498,7 @@ export function CompanionPersonalitySection({
                 className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-slate-100 dark:bg-slate-900/80 px-3 py-2 text-xs font-medium text-amber-100 hover:bg-slate-200 dark:bg-slate-800"
               >
                 <FileJson className="size-3.5 shrink-0" aria-hidden />
-                Import Nova JSON…
+                Import personality JSON…
               </button>
               <button
                 type="button"
@@ -669,7 +669,7 @@ export function CompanionPersonalitySection({
             </p>
             <ul className="mt-3 space-y-2" aria-label="Companion profiles">
               {file.profiles.map((p) => {
-                const cname = (p.companionName || "").trim() || "Nova";
+                const cname = (p.companionName || "").trim() || "Sage";
                 const isLiveChat = p.id === chatActiveProfileId;
                 return (
                   <li
@@ -723,7 +723,7 @@ export function CompanionPersonalitySection({
             <input
               value={current.companionName}
               onChange={(e) => updateActive({ companionName: e.target.value })}
-              placeholder="Nova"
+              placeholder="Sage"
               className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
             />
           </div>
