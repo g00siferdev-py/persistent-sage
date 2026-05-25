@@ -77,6 +77,11 @@ export function OnboardingWizard({ onComplete }: Props) {
     () => providerNeedsApiKey(providerId, providers) && !hasKeyForProvider(settings, providerId),
     [providerId, providers, settings],
   );
+  const selectedProviderRequiresKey = useMemo(
+    () => providerNeedsApiKey(providerId, providers),
+    [providerId, providers],
+  );
+  const selectedProviderHasKey = hasKeyForProvider(settings, providerId);
 
   const stepIndex = STEPS.indexOf(step);
   const progress = ((stepIndex + 1) / STEPS.length) * 100;
@@ -85,7 +90,13 @@ export function OnboardingWizard({ onComplete }: Props) {
     setError(null);
     if (step === "welcome") setStep("storage");
     else if (step === "storage") setStep("provider");
-    else if (step === "provider") setStep(needsApiStep ? "apikey" : "done");
+    else if (step === "provider") {
+      if (needsApiStep) {
+        setError("Save an API key for this provider, or choose Offline placeholder / Local Ollama.");
+        return;
+      }
+      setStep("done");
+    }
     else if (step === "apikey") setStep("done");
   };
 
@@ -100,12 +111,16 @@ export function OnboardingWizard({ onComplete }: Props) {
   const applyProvider = async (id: string) => {
     setBusy(true);
     setError(null);
+    setApiKeyInput("");
+    setProviderId(id);
     try {
-      await invoke("provider_switch", { providerId: id });
-      const s = await invoke<SettingsView>("settings_get");
+      const s = await invoke<SettingsView>("settings_update", {
+        patch: { selectedProvider: id },
+      });
       setSettings(s);
       setProviderId(id);
     } catch (e) {
+      setProviderId(settings?.selectedProvider || "placeholder");
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -138,6 +153,7 @@ export function OnboardingWizard({ onComplete }: Props) {
       const s = await invoke<SettingsView>("settings_get");
       setSettings(s);
       setApiKeyInput("");
+      setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -288,6 +304,48 @@ export function OnboardingWizard({ onComplete }: Props) {
                 <p className="mt-2 text-xs text-slate-500">
                   Requires Ollama running locally (default http://127.0.0.1:11434).
                 </p>
+              ) : null}
+              {selectedProviderRequiresKey ? (
+                <div className="mt-4 rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-3">
+                  <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                    {selectedProviderHasKey
+                      ? "An API key is already saved for this provider on this device."
+                      : "This provider needs an API key before chat can work. Keys are encrypted and stored only on this device."}
+                  </p>
+                  {!selectedProviderHasKey ? (
+                    <>
+                      <input
+                        type="password"
+                        autoComplete="off"
+                        placeholder={
+                          providerId === "openai"
+                            ? "sk-…"
+                            : providerId === "anthropic"
+                              ? "sk-ant-…"
+                              : providerId === "gemini"
+                                ? "Google AI Studio API key"
+                                : providerId === "xai"
+                                  ? "xAI API key"
+                                  : "Ollama Cloud API key"
+                        }
+                        value={apiKeyInput}
+                        disabled={busy}
+                        onChange={(e) => setApiKeyInput(e.target.value)}
+                        className="mt-3 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 font-mono text-sm outline-none focus:border-indigo-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void saveApiKey()}
+                        className="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                      >
+                        Save API key
+                      </button>
+                    </>
+                  ) : (
+                    <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">Key saved.</p>
+                  )}
+                </div>
               ) : null}
             </>
           ) : null}
