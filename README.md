@@ -1,4 +1,8 @@
-<img width="392" height="584" alt="Persistent Sage Logo" src="https://github.com/user-attachments/assets/82f4226e-2dbb-45f2-b4f5-e0f7912655af" />
+
+<img width="757" height="597" alt="Splash" src="https://github.com/user-attachments/assets/0218f6c2-8511-49d9-87a2-270e8649b413" />
+
+
+
 
 # Persistent Sage
 
@@ -80,7 +84,9 @@ After you build and run Persistent Sage, **nothing is stored on a Persistent Sag
 - **Vision** — Attach images in the composer; multimodal payloads for supported models.
 - **Portable layouts** — `PERSISTENT_SAGE_DATA_DIR` and `PERSISTENT_SAGE_PORTABLE` (legacy `NOVA_*` also works) for custom or USB data locations.
 
-<img width="1920" height="1053" alt="Persistent Sage screenshot" src="https://github.com/user-attachments/assets/c6b01618-6ee5-4b0f-9b24-cc34518e274" />
+
+
+<img width="261" height="389" alt="IMG_0029" src="https://github.com/user-attachments/assets/57583b42-ebe6-4475-b95c-e5e5a7828e76" />
 
 ---
 
@@ -156,6 +162,9 @@ More: **[docs/INSTALL.md § Troubleshooting](./docs/INSTALL.md#10-troubleshootin
 ## Project status
 
 Persistent Sage **0.2.0-beta.4** is in **open beta**: core chat, memory, personalities, Pulse, vision, and agent tools are usable; migration UX and hardening continue. See [PERSISTENT-SAGE-STATUS.md](./PERSISTENT-SAGE-STATUS.md) and [CHANGELOG.md](./CHANGELOG.md).
+
+<img width="261" height="389" alt="IMG_2515" src="https://github.com/user-attachments/assets/7f7731f4-5c19-44b4-b86f-bc7c101df250" />
+
 
 **Maintainer:** [g00siferdev-py](https://github.com/g00siferdev-py)
 
