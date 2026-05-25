@@ -50,6 +50,10 @@ jobs:
         env:
           # Safer on shared runners; omit to use default parallelism.
           CARGO_BUILD_JOBS: 2
+          # Required for Tauri updater artifacts (.sig files). Store the private key
+          # content in GitHub Secrets after running `npm run tauri signer generate`.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Package portable folder
         run: npm run package:portable
@@ -60,6 +64,10 @@ jobs:
           if (Test-Path dist/PersistentSagePortable.zip) { Remove-Item dist/PersistentSagePortable.zip }
           Compress-Archive -Path dist/PersistentSagePortable/* -DestinationPath dist/PersistentSagePortable.zip
 
+      - name: Generate updater manifest
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm run updater:manifest
+
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -68,8 +76,10 @@ jobs:
           if-no-files-found: error
           path: |
             src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/nsis/*-setup.exe.sig
             src-tauri/target/release/persistent-sage.exe
             dist/PersistentSagePortable.zip
+            dist/latest.json
 
       - name: Publish GitHub Release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
@@ -80,6 +90,8 @@ jobs:
           generate_release_notes: true
           files: |
             src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/nsis/*-setup.exe.sig
             dist/PersistentSagePortable.zip
+            dist/latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

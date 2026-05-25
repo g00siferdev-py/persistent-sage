@@ -7,7 +7,10 @@ Use GitHub Actions when a local machine cannot complete a Windows build (low RAM
 1. Push this repository to GitHub.
 2. Open **Settings → Actions → General → Workflow permissions**.
 3. Select **Read and write permissions** (needed to attach installers to Releases when you push a `v*` tag).
-4. Save.
+4. Add updater signing secrets under **Settings → Secrets and variables → Actions**:
+   - `TAURI_SIGNING_PRIVATE_KEY`
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (blank is okay for the current beta key)
+5. Save.
 
 ## Run a build (no tag)
 
@@ -21,7 +24,9 @@ The zip contains:
 | File | Use |
 |------|-----|
 | `Persistent Sage_*_x64-setup.exe` | Normal Windows install |
+| `Persistent Sage_*_x64-setup.exe.sig` | Tauri updater signature |
 | `PersistentSagePortable.zip` | Unzip to USB; run `Start-Persistent-Sage-Portable.bat` |
+| `latest.json` | Tauri updater manifest for tag releases |
 | `persistent-sage.exe` | Raw binary (optional) |
 
 ## Release build (tag)
@@ -33,7 +38,7 @@ git tag v0.2.0-beta.4
 git push origin v0.2.0-beta.4
 ```
 
-The same workflow runs, uploads artifacts, and creates a **draft prerelease** on GitHub with the installer and portable zip attached. Publish the draft from **Releases** when ready.
+The same workflow runs, uploads artifacts, signs the NSIS installer for Tauri updater verification, generates `latest.json`, and creates a **draft prerelease** on GitHub with the installer, signature, updater manifest, and portable zip attached. Publish the draft from **Releases** when ready.
 
 ## Local vs CI
 
@@ -51,6 +56,7 @@ The same workflow runs, uploads artifacts, and creates a **draft prerelease** on
 | Workflow not listed | Push `.github/workflows/build-windows.yml` to the default branch |
 | `Resource not accessible by integration` | Enable **Read and write** workflow permissions (above) |
 | Artifact missing `*-setup.exe` | Open the failed job log; search for `nsis` / `bundling` errors |
+| Updater `.sig` missing | Confirm `TAURI_SIGNING_PRIVATE_KEY` is set in GitHub Actions secrets |
 | MSI error about pre-release / `65535` | MSI is excluded from bundle targets (WiX rejects `beta.3`). CI runs `tauri build -- --bundles nsis`. Pull latest `main` and re-run. |
 | Release not created | Only **tag** pushes (`v*`) create a Release; manual runs only upload Artifacts |
 

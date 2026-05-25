@@ -11,12 +11,15 @@
     "tauri": "tauri",
     "branding:nsis": "node scripts/generate-nsis-branding.mjs",
     "branding:icons": "npx tauri icon packaging/branding/SageIcon1024.png -o src-tauri/icons",
+    "updater:manifest": "node scripts/generate-updater-manifest.mjs",
     "build:windows-installer": "npm run build && tauri build -- --bundles nsis",
     "package:portable": "node scripts/package-portable.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-process": "^2",
+    "@tauri-apps/plugin-updater": "^2",
     "lucide-react": "^1.14.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"

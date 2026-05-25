@@ -24,6 +24,7 @@ No need for a second empty repository.
 - SQLite file: `nova_memory.sqlite`
 - Legacy env overrides: `NOVA_DATA_DIR`, `NOVA_PORTABLE` (new names are `PERSISTENT_SAGE_*`)
 - GitHub remote URL until you rename the repo
+- Local clone folder name: existing developer machines may still use `/Projects/Nova`; fresh clones use `persistent-sage`
 
 ## Migrating from Nova beta installs
 

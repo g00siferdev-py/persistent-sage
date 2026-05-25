@@ -294,7 +294,7 @@ For maintainers:
 5. Let GitHub Actions build.
 6. Publish the draft prerelease.
 
-Auto-update is not fully configured unless the Tauri updater plugin is added and releases include signed updater artifacts.
+Persistent Sage can use the Tauri updater once a release includes `latest.json` and signed updater artifacts. This is separate from Windows Authenticode signing: updater signatures verify the package came from the maintainer, while Windows SmartScreen trust still requires future code signing.
 
 ## Privacy Notes
 

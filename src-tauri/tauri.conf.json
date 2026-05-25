@@ -46,6 +46,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["nsis", "deb", "rpm", "appimage", "dmg"],
     "icon": [
       "icons/32x32.png",
@@ -54,5 +55,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDREODEwMUZDNDA4OEQ1RTAKUldUZzFZaEEvQUdCVFhKNHdGQ1MzdTlRSE1oQ3o0b2ZyUXYzOFNTMUdoa0MrZXA1WmwyWjkyOE0K",
+      "endpoints": [
+        "https://github.com/g00siferdev-py/persistent-sage/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

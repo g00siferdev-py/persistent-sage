@@ -82,6 +82,7 @@ After you build and run Persistent Sage, **nothing is stored on a Persistent Sag
 - **Agent tools** (opt-in) — Web search, URL fetch, headless **`fetch_browser`**, HTTPS `http_request`, sandboxed workspace files, optional database query.
 - **Pulse** — Timer-driven check-ins that run as **normal chat turns** in your selected sidebar thread.
 - **Vision** — Attach images in the composer; multimodal payloads for supported models.
+- **In-app updates** — Tauri updater checks GitHub Releases for signed update packages.
 - **Portable layouts** — `PERSISTENT_SAGE_DATA_DIR` and `PERSISTENT_SAGE_PORTABLE` (legacy `NOVA_*` also works) for custom or USB data locations.
 
 

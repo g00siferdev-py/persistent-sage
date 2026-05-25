@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   Activity,
   Cpu,
+  Download,
   FolderOpen,
   Heart,
   KeyRound,
@@ -11,6 +12,7 @@ import {
   Maximize2,
   Minimize2,
   Moon,
+  RefreshCw,
   SlidersHorizontal,
   Wrench,
   X,
@@ -423,6 +425,13 @@ type AppDataPaths = {
   novaPortableEnv: boolean;
 };
 
+type PendingUpdate = {
+  version: string;
+  date?: string;
+  body?: string;
+  downloadAndInstall: (callback?: (event: unknown) => void) => Promise<void>;
+};
+
 export function SettingsPanel({
   layoutMode,
   onLayoutModeChange,
@@ -464,6 +473,10 @@ export function SettingsPanel({
   const [dataPaths, setDataPaths] = useState<AppDataPaths | null>(null);
   const [revealPathError, setRevealPathError] = useState<string | null>(null);
   const [lastPulse, setLastPulse] = useState<PulseTickPayload | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
+  const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null);
+  const [updateProgress, setUpdateProgress] = useState<string | null>(null);
 
   const loadVersion = useCallback(async () => {
     try {
@@ -757,6 +770,56 @@ export function SettingsPanel({
       setXaiModelsLoading(false);
     }
   }, []);
+
+  const checkForUpdates = useCallback(async () => {
+    try {
+      setUpdateBusy(true);
+      setUpdateStatus(null);
+      setUpdateProgress(null);
+      setPendingUpdate(null);
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const update = (await check({ timeout: 30_000 })) as PendingUpdate | null;
+      if (!update) {
+        setUpdateStatus("Persistent Sage is up to date.");
+        return;
+      }
+      setPendingUpdate(update);
+      setUpdateStatus(`Update ${update.version} is available.`);
+    } catch (e) {
+      setUpdateStatus(`Could not check for updates: ${String(e)}`);
+    } finally {
+      setUpdateBusy(false);
+    }
+  }, []);
+
+  const installPendingUpdate = useCallback(async () => {
+    if (!pendingUpdate) return;
+    try {
+      setUpdateBusy(true);
+      setUpdateStatus(`Downloading Persistent Sage ${pendingUpdate.version}…`);
+      setUpdateProgress(null);
+      await pendingUpdate.downloadAndInstall((event) => {
+        const payload = event as
+          | { event: "Started"; data: { contentLength?: number } }
+          | { event: "Progress"; data: { chunkLength: number } }
+          | { event: "Finished" };
+        if (payload.event === "Started") {
+          const bytes = payload.data.contentLength;
+          setUpdateProgress(bytes ? `Download started (${bytes.toLocaleString()} bytes).` : "Download started.");
+        } else if (payload.event === "Progress") {
+          setUpdateProgress(`Downloaded another ${payload.data.chunkLength.toLocaleString()} bytes…`);
+        } else if (payload.event === "Finished") {
+          setUpdateProgress("Download finished. Installing update…");
+        }
+      });
+      setUpdateStatus("Update installed. Restarting Persistent Sage…");
+      const { relaunch } = await import("@tauri-apps/plugin-process");
+      await relaunch();
+    } catch (e) {
+      setUpdateStatus(`Could not install update: ${String(e)}`);
+      setUpdateBusy(false);
+    }
+  }, [pendingUpdate]);
 
   const onProviderChange = async (id: string) => {
     try {
@@ -1740,6 +1803,57 @@ export function SettingsPanel({
               Provider, API keys, and desktop vs USB storage tips. Windows installer guide:{" "}
               <span className="font-mono text-slate-600 dark:text-slate-400">docs/INSTALL-WINDOWS.md</span>
             </p>
+          </SettingsSection>
+
+          <SettingsSection
+            title="Updates"
+            description="Check GitHub Releases for signed Tauri updater packages. This does not require Windows code signing."
+          >
+            <div className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-800/70 bg-slate-50 dark:bg-slate-950/35 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={updateBusy}
+                  onClick={() => void checkForUpdates()}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {updateBusy && !pendingUpdate ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  ) : (
+                    <RefreshCw className="size-4" aria-hidden />
+                  )}
+                  Check for updates
+                </button>
+                <button
+                  type="button"
+                  disabled={updateBusy || !pendingUpdate}
+                  onClick={() => void installPendingUpdate()}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {updateBusy && pendingUpdate ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  ) : (
+                    <Download className="size-4" aria-hidden />
+                  )}
+                  Download & install
+                </button>
+              </div>
+              {updateStatus ? (
+                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">{updateStatus}</p>
+              ) : (
+                <p className="text-[11px] leading-relaxed text-slate-500">
+                  Updates are verified with Persistent Sage&apos;s Tauri updater key before installation.
+                </p>
+              )}
+              {pendingUpdate?.body ? (
+                <p className="max-h-24 overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-200 dark:border-slate-800/60 bg-white/70 dark:bg-slate-950/50 p-2 text-[10px] leading-relaxed text-slate-500">
+                  {pendingUpdate.body}
+                </p>
+              ) : null}
+              {updateProgress ? (
+                <p className="text-[10px] text-slate-500">{updateProgress}</p>
+              ) : null}
+            </div>
           </SettingsSection>
 
           <SettingsSection title="Appearance">

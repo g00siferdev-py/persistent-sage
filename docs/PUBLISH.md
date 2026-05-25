@@ -31,7 +31,9 @@ How to ship a **Windows installer** to users without asking them to compile from
 5. Wait for **Actions → Build Windows** to finish (triggered by the tag).
 6. Open **Releases** — you should see a **draft prerelease** with:
    - `Persistent Sage_*_x64-setup.exe`
+   - `Persistent Sage_*_x64-setup.exe.sig`
    - `PersistentSagePortable.zip`
+   - `latest.json` (Tauri updater manifest)
 7. Edit the release notes (copy from CHANGELOG), then click **Publish release**.
 
 **Share with testers:**
@@ -55,7 +57,9 @@ On a prerelease, use the specific tag URL until you promote a non-prerelease “
 5. Check **Set as a pre-release**
 6. Attach:
    - `Persistent Sage_*_x64-setup.exe`
+   - `Persistent Sage_*_x64-setup.exe.sig`
    - `PersistentSagePortable.zip` (optional, for USB testers)
+   - `latest.json` (required for in-app updates)
 7. Paste release notes from CHANGELOG → **Publish release**.
 
 ---
@@ -97,8 +101,29 @@ To rebuild without a new tag: **Actions → Build Windows → Run workflow**, do
 
 ---
 
+## In-app updater
+
+Persistent Sage uses the Tauri updater. This is separate from Windows code signing: update artifacts are verified with a Tauri updater key, while SmartScreen warnings still require a future Windows signing certificate.
+
+One-time maintainer setup:
+
+1. Keep the generated private key file secret: `persistent-sage-updater.key` (ignored by git).
+2. In GitHub repo settings, add these Actions secrets:
+   - `TAURI_SIGNING_PRIVATE_KEY` — contents of `persistent-sage-updater.key`
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — blank is okay for the current no-password beta key
+3. Confirm the public key in `src-tauri/tauri.conf.json` matches the key pair.
+
+On every tag build, CI signs the NSIS installer, generates `dist/latest.json`, and attaches both to the GitHub Release. Published releases make this endpoint available to installed apps:
+
+```text
+https://github.com/g00siferdev-py/persistent-sage/releases/latest/download/latest.json
+```
+
+Users can then run **Settings → General → Updates → Check for updates**.
+
+---
+
 ## Not covered yet
 
 - **macOS / Linux** pre-built installers (no CI workflow yet — source build only)
 - **Code signing** (SmartScreen warnings on Windows until you sign the exe)
-- **Auto-updater** (Tauri updater not configured for this repo)

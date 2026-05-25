@@ -6,6 +6,8 @@
   "permissions": [
     "nova-invoke-allowlist",
     "dialog:default",
+    "process:allow-restart",
+    "updater:default",
     "core:path:default",
     "core:window:default",
     "core:webview:default",
