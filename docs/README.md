@@ -2,7 +2,7 @@
 
 Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rust). Everything in this folder is written for beta testers, contributors, and anyone performing a **fresh install** from source.
 
-**Repository:** [g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage) · **Version:** 0.2.0-beta.6 (open beta)
+**Repository:** [g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage) · **Version:** 0.2.0-beta.7 (open beta)
 
 ## Start here
 
@@ -37,7 +37,7 @@ After you build and run Persistent Sage, **all conversation data lives on your m
 
 | Requirement | Version / notes |
 |-------------|-----------------|
-| Persistent Sage | **0.2.0-beta.6** |
+| Persistent Sage | **0.2.0-beta.7** |
 | Rust | **1.77+** (`rust-version` in `src-tauri/Cargo.toml`) |
 | Node.js | **LTS** (18 or 20 recommended) |
 | Desktop OS | Linux, macOS, Windows (see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)) |
@@ -50,4 +50,4 @@ Use **Settings → General → Open beta feedback** in the app, or open [GitHub 
 
 ---
 
-*Documentation aligns with app **0.2.0-beta.6**. Update these files when user-visible behavior changes.*
+*Documentation aligns with app **0.2.0-beta.7**. Update these files when user-visible behavior changes.*

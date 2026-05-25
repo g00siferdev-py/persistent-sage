@@ -12,7 +12,7 @@ body:
     attributes:
       label: Persistent Sage version
       description: Find this in Settings > General > About.
-      placeholder: "0.2.0-beta.6"
+      placeholder: "0.2.0-beta.7"
     validations:
       required: true
   - type: dropdown
