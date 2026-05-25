@@ -35,18 +35,24 @@ Existing testers who used **Nova** builds have data under the old path, for exam
 
 **Options:**
 
-1. **Fresh start** — install Persistent Sage beta.4; re-enter API keys in setup wizard.
+1. **Fresh start** — install the latest Persistent Sage beta; re-enter API keys in setup wizard.
 2. **Copy data** — quit the app, copy `nova_memory.sqlite`, `settings.json`, `personality.json`, and `workspace/` from the old folder into the new data directory, then start Persistent Sage.
 
 Portable USB: copy the whole `data\` folder next to the new portable build.
 
 ## SignPath / web presence
 
-SignPath and similar programs care about **project identity** (open source, website, name), not the git folder name. Use **Persistent Sage** on your site and in the application; link to this repo or a future `persistent-sage` repo.
+SignPath and similar programs care about **project identity** (open source, website, name), not the git folder name. Use **Persistent Sage** on your site and in the application; link to this repo.
+
+Current readiness documents:
+
+- [../PRIVACY.md](../PRIVACY.md)
+- [../SECURITY.md](../SECURITY.md)
+- [SIGNING-AND-UPDATES.md](./SIGNING-AND-UPDATES.md)
 
 ## Release checklist after rebrand
 
 1. Bump version in `package.json`, `tauri.conf.json`, `Cargo.toml`.
 2. `npm run branding:icons` (after changing `SageIcon1024.png`).
-3. Tag `v0.2.0-beta.4` → CI → publish GitHub Release.
-4. Release notes: `docs/releases/v0.2.0-beta.4.md`.
+3. Tag the next `v0.2.0-beta.x` → CI → publish GitHub Release.
+4. Release notes: add or update `docs/releases/v0.2.0-beta.x.md`.

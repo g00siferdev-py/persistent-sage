@@ -23,8 +23,8 @@ The zip contains:
 
 | File | Use |
 |------|-----|
-| `Persistent Sage_*_x64-setup.exe` | Normal Windows install |
-| `Persistent Sage_*_x64-setup.exe.sig` | Tauri updater signature |
+| `Persistent.Sage_*_x64-setup.exe` | Normal Windows install |
+| `Persistent.Sage_*_x64-setup.exe.sig` | Tauri updater signature |
 | `PersistentSagePortable.zip` | Unzip to USB; run `Start-Persistent-Sage-Portable.bat` |
 | `latest.json` | Tauri updater manifest for tag releases |
 | `persistent-sage.exe` | Raw binary (optional) |
@@ -34,11 +34,15 @@ The zip contains:
 Create and push a version tag matching `package.json` / `tauri.conf.json`:
 
 ```bash
-git tag v0.2.0-beta.4
-git push origin v0.2.0-beta.4
+git tag v0.2.0-beta.6
+git push origin v0.2.0-beta.6
 ```
 
-The same workflow runs, uploads artifacts, signs the NSIS installer for Tauri updater verification, generates `latest.json`, and creates a **draft prerelease** on GitHub with the installer, signature, updater manifest, and portable zip attached. Publish the draft from **Releases** when ready.
+Use the next current version.
+
+The same workflow runs, uploads artifacts, signs the NSIS installer for Tauri updater verification, generates `latest.json`, and creates a **draft release** on GitHub with the installer, signature, updater manifest, and portable zip attached. Publish the draft from **Releases** when ready.
+
+Updater-enabled beta releases should not be marked as GitHub prereleases. GitHub's `releases/latest` endpoint excludes prereleases, and the app uses that endpoint for `latest.json`.
 
 ## Local vs CI
 
@@ -57,6 +61,7 @@ The same workflow runs, uploads artifacts, signs the NSIS installer for Tauri up
 | `Resource not accessible by integration` | Enable **Read and write** workflow permissions (above) |
 | Artifact missing `*-setup.exe` | Open the failed job log; search for `nsis` / `bundling` errors |
 | Updater `.sig` missing | Confirm `TAURI_SIGNING_PRIVATE_KEY` is set in GitHub Actions secrets |
+| Updater says it cannot fetch valid release JSON | Confirm the release is published, includes `latest.json`, and is not marked as a GitHub prerelease |
 | MSI error about pre-release / `65535` | MSI is excluded from bundle targets (WiX rejects `beta.3`). CI runs `tauri build -- --bundles nsis`. Pull latest `main` and re-run. |
 | Release not created | Only **tag** pushes (`v*`) create a Release; manual runs only upload Artifacts |
 

@@ -5,6 +5,7 @@ import {
   Activity,
   Cpu,
   Download,
+  ExternalLink,
   FolderOpen,
   Heart,
   KeyRound,
@@ -119,6 +120,8 @@ const DB_WRITE_INFO = (
     remain blocked.
   </>
 );
+
+const FEEDBACK_ISSUE_URL = "https://github.com/g00siferdev-py/persistent-sage/issues/new";
 
 function providerSupportsTools(settings: SettingsView | null): boolean {
   return Boolean(
@@ -431,6 +434,71 @@ type PendingUpdate = {
   body?: string;
   downloadAndInstall: (callback?: (event: unknown) => void) => Promise<void>;
 };
+
+type FeedbackKind = "bug" | "idea" | "beta";
+
+function modelForProvider(settings: SettingsView | null): string {
+  if (!settings) return "unknown";
+  switch (settings.selectedProvider) {
+    case "openai":
+      return settings.openaiModel || "unknown";
+    case "ollama":
+    case "ollama_cloud":
+      return settings.ollamaModel || "unknown";
+    case "anthropic":
+      return settings.anthropicModel || "unknown";
+    case "gemini":
+      return settings.geminiModel || "unknown";
+    case "xai":
+      return settings.xaiModel || "unknown";
+    default:
+      return "n/a";
+  }
+}
+
+function feedbackIssueUrl(kind: FeedbackKind, settings: SettingsView | null, backend: string | null, dataPaths: AppDataPaths | null): string {
+  const appVersion = backend ?? "unknown";
+  const provider = settings?.selectedProvider ?? "unknown";
+  const model = modelForProvider(settings);
+  const installType = dataPaths?.novaPortableEnv ? "portable" : "desktop/default";
+  const titlePrefix =
+    kind === "bug" ? "[Bug]" : kind === "idea" ? "[Idea]" : "[Beta feedback]";
+  const labels =
+    kind === "bug" ? "bug,beta-feedback" : kind === "idea" ? "enhancement,beta-feedback" : "beta-feedback";
+  const body = [
+    "## Summary",
+    "",
+    kind === "bug"
+      ? "What went wrong?"
+      : kind === "idea"
+        ? "What would make Persistent Sage better?"
+        : "How did the beta feel? What worked well or felt confusing?",
+    "",
+    "## Environment",
+    "",
+    `- App version: ${appVersion}`,
+    `- Provider: ${provider}`,
+    `- Model: ${model}`,
+    `- Install type: ${installType}`,
+    "- OS: ",
+    "",
+    "## Details",
+    "",
+    kind === "bug"
+      ? "Steps to reproduce:\n1. \n2. \n3. \n\nExpected result:\n\nActual result:"
+      : "Notes:",
+    "",
+    "## Privacy check",
+    "",
+    "Please do not paste API keys, private chats, Memory Anchor contents, or sensitive personal information.",
+  ].join("\n");
+
+  const url = new URL(FEEDBACK_ISSUE_URL);
+  url.searchParams.set("title", `${titlePrefix} `);
+  url.searchParams.set("labels", labels);
+  url.searchParams.set("body", body);
+  return url.toString();
+}
 
 export function SettingsPanel({
   layoutMode,
@@ -820,6 +888,20 @@ export function SettingsPanel({
       setUpdateBusy(false);
     }
   }, [pendingUpdate]);
+
+  const openFeedback = useCallback(
+    async (kind: FeedbackKind) => {
+      try {
+        setError(null);
+        await invoke("open_feedback_issue", {
+          issueUrl: feedbackIssueUrl(kind, settings, backend, dataPaths),
+        });
+      } catch (e) {
+        setError(String(e));
+      }
+    },
+    [backend, dataPaths, settings],
+  );
 
   const onProviderChange = async (id: string) => {
     try {
@@ -1853,6 +1935,44 @@ export function SettingsPanel({
               {updateProgress ? (
                 <p className="text-[10px] text-slate-500">{updateProgress}</p>
               ) : null}
+            </div>
+          </SettingsSection>
+
+          <SettingsSection
+            title="Open beta feedback"
+            description="Send public bug reports and ideas to the Persistent Sage GitHub issue tracker."
+          >
+            <div className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-800/70 bg-slate-50 dark:bg-slate-950/35 p-3">
+              <p className="text-[11px] leading-relaxed text-slate-500">
+                These buttons open your browser with a prefilled GitHub Issue. Persistent Sage does not attach chats,
+                Memory Anchors, logs, or API keys automatically.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={() => void openFeedback("bug")}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-300/70 dark:border-rose-800/70 bg-rose-50 dark:bg-rose-950/25 px-3 py-2 text-xs font-semibold text-rose-800 dark:text-rose-200 hover:bg-rose-100 dark:hover:bg-rose-950/40"
+                >
+                  <ExternalLink className="size-3.5" aria-hidden />
+                  Report a bug
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void openFeedback("idea")}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-indigo-300/70 dark:border-indigo-800/70 bg-indigo-50 dark:bg-indigo-950/25 px-3 py-2 text-xs font-semibold text-indigo-800 dark:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-950/40"
+                >
+                  <ExternalLink className="size-3.5" aria-hidden />
+                  Suggest an idea
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void openFeedback("beta")}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-300/70 dark:border-emerald-800/70 bg-emerald-50 dark:bg-emerald-950/25 px-3 py-2 text-xs font-semibold text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-950/40"
+                >
+                  <ExternalLink className="size-3.5" aria-hidden />
+                  Beta feedback
+                </button>
+              </div>
             </div>
           </SettingsSection>
 

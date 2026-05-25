@@ -243,7 +243,7 @@ Then run `npm run tauri dev`, send a test message, and confirm the sidebar shows
 
 ## 12. Beta testing
 
-Persistent Sage **0.2.0-beta.4** is in **open beta**. After you complete § 11 (verify install):
+Persistent Sage **0.2.0-beta.6** is in **open beta**. After you complete § 11 (verify install):
 
 1. Configure a live provider and send several chat turns.
 2. Try **Settings → Companion** (personalities, optional OpenClaw import).
@@ -257,5 +257,7 @@ See also [CONTRIBUTING.md](../CONTRIBUTING.md) and [README.md § Beta testing](.
 ## 13. Next steps
 
 - [USER-GUIDE.md](./USER-GUIDE.md) — Day-to-day usage
+- [../PRIVACY.md](../PRIVACY.md) — Public privacy policy
 - [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md) — Encryption and local storage
+- [SIGNING-AND-UPDATES.md](./SIGNING-AND-UPDATES.md) — Updater and code-signing notes
 - [DEVELOPMENT.md](./DEVELOPMENT.md) — Contributing and pre-push checks

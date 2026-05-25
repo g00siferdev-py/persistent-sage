@@ -1,6 +1,6 @@
 # Persistent Sage — project status
 
-**Version:** 0.2.0-beta.4 (**open beta**)  
+**Version:** 0.2.0-beta.6 (**open beta**)
 **Repository:** [g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage)  
 **Maintainer:** [g00siferdev-py](https://github.com/g00siferdev-py)
 
@@ -30,7 +30,9 @@ Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rus
 | Vision | Image attach + multimodal provider payloads |
 | Settings | Four tabs: Companion, Provider, Tools, General |
 | Data controls | Memory wipe, factory reset, `PERSISTENT_SAGE_DATA_DIR` / portable |
-| Docs | `docs/` install, privacy, user guide, architecture, development |
+| Updates | Tauri updater artifacts and in-app update check |
+| Feedback | Settings buttons open structured public GitHub Issues |
+| Docs | `docs/` install, privacy, user guide, architecture, development, signing/update notes |
 
 ---
 
@@ -54,7 +56,7 @@ Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rus
 | `personality.json` | **No** | App data directory |
 | API keys | **Yes** (AES-256-GCM) | `settings.json` + `.nova_crypto/` |
 
-Details: **[docs/DATA-AND-PRIVACY.md](./docs/DATA-AND-PRIVACY.md)**
+Details: **[PRIVACY.md](./PRIVACY.md)** and **[docs/DATA-AND-PRIVACY.md](./docs/DATA-AND-PRIVACY.md)**
 
 ---
 
@@ -103,4 +105,4 @@ npm run tauri dev   # manual smoke test
 
 ---
 
-*Last updated for **0.2.0-beta.4** — Persistent Sage rebrand, Windows installer, portable packaging, onboarding, and beta testing docs.*
+*Last updated for **0.2.0-beta.6** — updater-enabled Windows beta, privacy policy, and signing/update documentation.*

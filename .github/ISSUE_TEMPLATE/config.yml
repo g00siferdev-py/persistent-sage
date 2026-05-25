@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Persistent Sage releases
+    url: https://github.com/g00siferdev-py/persistent-sage/releases
+    about: Download the latest open beta release.
+  - name: Privacy policy
+    url: https://github.com/g00siferdev-py/persistent-sage/blob/main/PRIVACY.md
+    about: Review what Persistent Sage stores locally and what can leave your device.

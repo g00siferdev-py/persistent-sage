@@ -1,6 +1,6 @@
 # Installing Persistent Sage on Windows (beta)
 
-Download the installer from **[GitHub Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** (`Persistent Sage_*_x64-setup.exe`). No Node or Rust required.
+Download the installer from **[GitHub Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** (`Persistent.Sage_*_x64-setup.exe`). No Node or Rust required.
 
 Two supported ways to run Persistent Sage: **desktop install** (recommended) and **portable** (USB / flash drive).
 
@@ -10,8 +10,8 @@ Two supported ways to run Persistent Sage: **desktop install** (recommended) and
 
 ### Install from Releases
 
-1. Open **[Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** and pick the latest beta (e.g. `v0.2.0-beta.4`).
-2. Download **`Persistent Sage_*_x64-setup.exe`**.
+1. Open **[Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** and pick the latest beta (e.g. `v0.2.0-beta.6`).
+2. Download **`Persistent.Sage_*_x64-setup.exe`**.
 3. Run the installer. If **SmartScreen** warns (unsigned beta): **More info → Run anyway**.
 4. Open **Persistent Sage** from the Start Menu and complete the **setup wizard**.
 
@@ -33,7 +33,7 @@ npm install
 npm run build:windows-installer
 ```
 
-See **[docs/PUBLISH.md](./PUBLISH.md)** to publish builds for users.
+See **[docs/PUBLISH.md](./PUBLISH.md)** to publish builds for users and **[docs/SIGNING-AND-UPDATES.md](./SIGNING-AND-UPDATES.md)** for updater/signing status.
 
 ---
 

@@ -2,7 +2,7 @@
 #
 # Triggers:
 #   - Actions → "Build Windows" → Run workflow (any branch)
-#   - Push a version tag, e.g. v0.2.0-beta.4 → build + draft GitHub Release
+#   - Push a version tag, e.g. v0.2.0-beta.6 → build + draft GitHub Release
 #
 # Repo settings: Settings → Actions → General → Workflow permissions →
 #   "Read and write permissions" (required for tag releases).
@@ -86,7 +86,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          prerelease: true
+          # Keep beta status in the SemVer tag/name. GitHub's /releases/latest
+          # endpoint excludes prereleases, and the Tauri updater uses that URL.
+          prerelease: false
+          make_latest: true
           generate_release_notes: true
           files: |
             src-tauri/target/release/bundle/nsis/*-setup.exe

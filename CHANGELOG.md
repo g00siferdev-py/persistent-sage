@@ -11,15 +11,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Google Gemini and xAI Grok providers** — provider settings, encrypted API keys, model refresh, and chat routing.
 - **Thinking selector** — Low / Medium / High control in the chat window for providers with reasoning or thinking modes.
 - **Sage support guide** — `docs/SAGE-GUIDE.md` is installed as `guide.md` in the companion workspace for support-bot use.
+- **Privacy and signing documents** — root `PRIVACY.md`, `SECURITY.md`, and `docs/SIGNING-AND-UPDATES.md`.
+- **Tauri updater support** — signed updater artifacts, release manifest generation, and Settings-based update checks.
+- **Open beta feedback flow** — Settings buttons open public prefilled GitHub Issues, backed by structured bug, idea, and beta tester issue templates.
 
 ### Changed
 
 - **Default companion profile** — ships with Sage as one default companion profile for the Persistent Sage platform, while keeping multi-companion support clear.
 - **Memory Anchor injection** — deterministic raw anchor ingest now runs even when LLM extraction is enabled, and automatic cross-session recall runs for every non-empty user turn.
+- **Release publishing** — updater-enabled beta releases are published as normal GitHub releases so `/releases/latest/download/latest.json` works.
 
 ### Fixed
 
 - **First-run setup API key save** — onboarding now sends the correct API-key payload for the selected provider.
+- **Updater release JSON fetch** — documented and configured the release workflow to avoid GitHub prerelease assets being excluded from the updater endpoint.
 
 ---
 

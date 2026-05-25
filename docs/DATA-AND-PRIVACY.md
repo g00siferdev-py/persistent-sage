@@ -100,6 +100,7 @@ When you send a chat message, Persistent Sage decrypts the key in process memory
 | `web_search` tool | DuckDuckGo (when enabled) |
 | `fetch_url` / `http_request` | URLs chosen by the model (SSRF-filtered; HTTPS-only for `http_request`) |
 | Pulse | Same as normal chat — uses the open sidebar thread |
+| In-app update checks | GitHub Releases metadata and installer assets |
 
 Disable agent tools in **Settings → Tools** if you want chat limited to the LLM provider only.
 
@@ -144,7 +145,7 @@ Always **quit Persistent Sage** before copying or restoring `nova_memory.sqlite`
 
 ## Compliance-oriented notes
 
-Persistent Sage is **open beta** software (`0.2.0-beta.4`). It does not implement:
+Persistent Sage is **open beta** software (`0.2.0-beta.6`). It does not implement:
 
 - Database encryption
 - Multi-user access control
@@ -158,5 +159,7 @@ Evaluate whether your threat model requires additional controls before storing s
 ## Related documents
 
 - [INSTALL.md](./INSTALL.md) — Fresh install and data directory setup
+- [../PRIVACY.md](../PRIVACY.md) — Public privacy policy
+- [SIGNING-AND-UPDATES.md](./SIGNING-AND-UPDATES.md) — Updater and code-signing status
 - [USER-GUIDE.md](./USER-GUIDE.md) — Feature-level usage
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — Implementation map

@@ -172,6 +172,20 @@ fn reveal_data_directory() -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_feedback_issue(issue_url: String) -> Result<(), String> {
+    let parsed = url::Url::parse(&issue_url).map_err(|e| format!("invalid feedback URL: {e}"))?;
+    let is_allowed = parsed.scheme() == "https"
+        && parsed.host_str() == Some("github.com")
+        && parsed.path() == "/g00siferdev-py/persistent-sage/issues/new";
+    if !is_allowed {
+        return Err(
+            "feedback URL must point to the official Persistent Sage GitHub issue form".into(),
+        );
+    }
+    opener::open(issue_url).map_err(|e| format!("open feedback form: {e}"))
+}
+
+#[tauri::command]
 async fn provider_info(state: State<'_, NovaState>) -> Result<String, String> {
     let engine = state.llm.read().await.clone();
     let m = engine.model_info();
@@ -685,6 +699,7 @@ pub fn run() {
             app_version,
             app_data_paths,
             reveal_data_directory,
+            open_feedback_issue,
             provider_info,
             provider_list_available,
             ollama_cloud_list_models,

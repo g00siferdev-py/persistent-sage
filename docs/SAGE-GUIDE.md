@@ -270,7 +270,7 @@ Windows users should download from GitHub Releases.
 
 Installer:
 
-- `Persistent Sage_*_x64-setup.exe`
+- `Persistent.Sage_*_x64-setup.exe`
 - Adds Start Menu shortcuts.
 - Stores data in AppData by default.
 - May show SmartScreen because beta builds are unsigned.
@@ -292,7 +292,7 @@ For maintainers:
 3. Push main.
 4. Tag `vX.Y.Z`.
 5. Let GitHub Actions build.
-6. Publish the draft prerelease.
+6. Publish the draft release. For updater-enabled beta builds, do not mark the GitHub release as a prerelease because GitHub excludes prereleases from the `/releases/latest` updater endpoint.
 
 Persistent Sage can use the Tauri updater once a release includes `latest.json` and signed updater artifacts. This is separate from Windows Authenticode signing: updater signatures verify the package came from the maintainer, while Windows SmartScreen trust still requires future code signing.
 

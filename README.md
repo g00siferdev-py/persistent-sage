@@ -11,7 +11,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
 **Repository:** [github.com/g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage)  
-**Status:** **Open beta** (`0.2.0-beta.4`) — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues)
+**Status:** **Open beta** (`0.2.0-beta.6`) — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues)
 
 ---
 
@@ -21,11 +21,12 @@ Persistent Sage is in **open beta**. **Windows users** can install from **[GitHu
 
 | Step | Action |
 |------|--------|
-| 1 | **Windows install** — **[Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** → download `Persistent Sage_*_x64-setup.exe` → run installer. See **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)**. |
+| 1 | **Windows install** — **[Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** → download `Persistent.Sage_*_x64-setup.exe` → run installer. See **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)**. |
 | 2 | **Build from source** — `git clone https://github.com/g00siferdev-py/persistent-sage.git && cd persistent-sage` → **[docs/INSTALL.md](./docs/INSTALL.md)**. |
 | 3 | **Configure** — **Settings → Provider** (API key + model), then start a chat |
-| 4 | **Report** — [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues) with OS, app version, provider, steps to reproduce |
-| 5 | **Contribute** — **[CONTRIBUTING.md](./CONTRIBUTING.md)** |
+| 4 | **Update** — after installing an updater-enabled build, use **Settings → General → Updates** |
+| 5 | **Report** — use **Settings → General → Open beta feedback** or [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues) with OS, app version, provider, steps to reproduce |
+| 6 | **Contribute** — **[CONTRIBUTING.md](./CONTRIBUTING.md)** |
 
 **Maintainers:** how to publish installers → **[docs/PUBLISH.md](./docs/PUBLISH.md)**. CI builds → **[docs/BUILD-CI.md](./docs/BUILD-CI.md)**.
 
@@ -41,6 +42,8 @@ Persistent Sage is in **open beta**. **Windows users** can install from **[GitHu
 | **[docs/BUILD-CI.md](./docs/BUILD-CI.md)** | CI Windows builds (Actions) |
 | **[docs/USER-GUIDE.md](./docs/USER-GUIDE.md)** | Day-to-day usage — chat, memory, settings, Pulse, OpenClaw migration |
 | **[docs/DATA-AND-PRIVACY.md](./docs/DATA-AND-PRIVACY.md)** | What is stored locally; **API keys encrypted**, **database not encrypted** |
+| **[PRIVACY.md](./PRIVACY.md)** | Public privacy policy |
+| **[docs/SIGNING-AND-UPDATES.md](./docs/SIGNING-AND-UPDATES.md)** | Updater behavior and SignPath readiness |
 | **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** | Technical overview for developers |
 | **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)** | Dev workflow and pre-push checklist |
 | [CHANGELOG.md](./CHANGELOG.md) | Release notes |
@@ -70,7 +73,7 @@ We are **still improving** one-click migration; see **[docs/USER-GUIDE.md § Mig
 | API keys | `settings.json` + `.nova_crypto/` | **Yes** |
 | Personalities | `personality.json` | No |
 
-After you build and run Persistent Sage, **nothing is stored on a Persistent Sage-operated cloud**. Messages go only to the **LLM provider you configure** (and optional tool URLs if you enable agent tools). See **[docs/DATA-AND-PRIVACY.md](./docs/DATA-AND-PRIVACY.md)** for the full picture.
+After you build and run Persistent Sage, **nothing is stored on a Persistent Sage-operated cloud**. Messages go only to the **LLM provider you configure** (and optional tool URLs if you enable agent tools). See **[PRIVACY.md](./PRIVACY.md)** and **[docs/DATA-AND-PRIVACY.md](./docs/DATA-AND-PRIVACY.md)** for the full picture.
 
 ---
 
@@ -83,6 +86,7 @@ After you build and run Persistent Sage, **nothing is stored on a Persistent Sag
 - **Pulse** — Timer-driven check-ins that run as **normal chat turns** in your selected sidebar thread.
 - **Vision** — Attach images in the composer; multimodal payloads for supported models.
 - **In-app updates** — Tauri updater checks GitHub Releases for signed update packages.
+- **Open beta feedback** — Settings buttons open prefilled GitHub Issues without attaching private chats or logs.
 - **Portable layouts** — `PERSISTENT_SAGE_DATA_DIR` and `PERSISTENT_SAGE_PORTABLE` (legacy `NOVA_*` also works) for custom or USB data locations.
 
 
@@ -162,7 +166,7 @@ More: **[docs/INSTALL.md § Troubleshooting](./docs/INSTALL.md#10-troubleshootin
 
 ## Project status
 
-Persistent Sage **0.2.0-beta.4** is in **open beta**: core chat, memory, personalities, Pulse, vision, and agent tools are usable; migration UX and hardening continue. See [PERSISTENT-SAGE-STATUS.md](./PERSISTENT-SAGE-STATUS.md) and [CHANGELOG.md](./CHANGELOG.md).
+Persistent Sage **0.2.0-beta.6** is in **open beta**: core chat, memory, personalities, Pulse, vision, agent tools, and in-app updater support are usable; migration UX and hardening continue. See [PERSISTENT-SAGE-STATUS.md](./PERSISTENT-SAGE-STATUS.md) and [CHANGELOG.md](./CHANGELOG.md).
 
 <img width="261" height="389" alt="IMG_2515" src="https://github.com/user-attachments/assets/7f7731f4-5c19-44b4-b86f-bc7c101df250" />
 

@@ -1,0 +1,48 @@
+name: Feedback or idea
+description: Suggest an improvement for Persistent Sage
+title: "[Idea] "
+labels: ["enhancement", "beta-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for usability feedback, feature ideas, and workflow improvements.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem or friction did you hit?
+      placeholder: "Describe the moment where Persistent Sage felt confusing, missing something, or slower than expected."
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to happen instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Chat
+        - Memory Anchor
+        - Companion personalities
+        - Settings
+        - Providers/API keys
+        - Tools/workspace
+        - Updates/install
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Persistent Sage version
+      placeholder: "0.2.0-beta.6"
+  - type: textarea
+    id: context
+    attributes:
+      label: Extra context
+      description: Optional. Do not include private chats, API keys, or sensitive personal information.

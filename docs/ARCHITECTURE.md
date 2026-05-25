@@ -145,3 +145,4 @@ Commands are allowlisted in `src-tauri/permissions/nova-invoke-allowlist.toml`. 
 
 - [DEVELOPMENT.md](./DEVELOPMENT.md) — Build, test, contribute
 - [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md) — Encryption boundaries
+- [SIGNING-AND-UPDATES.md](./SIGNING-AND-UPDATES.md) — Update and signing flow

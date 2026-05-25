@@ -1,6 +1,6 @@
 # Persistent Sage user guide
 
-Complete guide to the Persistent Sage desktop application as shipped in **version 0.2.0-beta.4** (open beta).
+Complete guide to the Persistent Sage desktop application as shipped in **version 0.2.0-beta.6** (open beta).
 
 **Runtime requirement:** `npm run tauri dev` or an installed release build. Browser-only Vite preview cannot access chat, memory, or settings backends.
 
@@ -158,6 +158,8 @@ For migrating a long-running OpenClaw agent with maximum fidelity, see [§ 11 Mi
 | **Generation** | Temperature, max output tokens |
 | **Memory** | LLM extraction, semantic recall, optional embedding model override, re-index embeddings |
 | **Pulse** | Enable timer, interval (minutes), instructions; runs in **sidebar-selected** thread |
+| **Updates** | Check GitHub Releases for signed Tauri updater packages |
+| **Open beta feedback** | Open prefilled GitHub Issues for bugs, ideas, or general beta notes |
 | **Data** | Reveal data folder, wipe memories, factory reset |
 | **About** | Backend version |
 
@@ -193,7 +195,11 @@ Images save to `{data_dir}/attachments/{conversationId}/`. Paths are stored in S
 | API keys in settings | **Yes** (AES-GCM) |
 | Image files in `attachments/` | **No** |
 
-Full detail: [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md)
+Full detail: [PRIVACY.md](../PRIVACY.md) and [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md)
+
+### Feedback privacy
+
+The feedback buttons open public GitHub Issues. Persistent Sage pre-fills safe app context but does not attach private chats, Memory Anchors, logs, or API keys automatically.
 
 ### Environment variables
 
@@ -212,6 +218,7 @@ Full detail: [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md)
 | Light theme | Settings → General → Appearance → Dark mode (off = light) |
 | Browser-only `npm run dev` | No backend |
 | Semantic vector search | Optional in Settings → Memory; hybrid with FTS + keyword |
+| Windows code signing | Not active yet; see [SIGNING-AND-UPDATES.md](./SIGNING-AND-UPDATES.md) |
 | Dedicated projects UI | Projects in briefing only |
 | Pulse + tools | Pulse uses normal chat path; tools follow same rules as manual send |
 
@@ -227,6 +234,7 @@ Full detail: [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md)
 - [x] Image attach for vision models
 - [x] Agent tools (optional), including `fetch_browser`
 - [x] OpenClaw / Persistent Sage JSON personality import
+- [x] In-app updater support for updater-enabled releases
 - [x] Portable / custom data directory
 
 ---

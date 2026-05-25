@@ -1,0 +1,66 @@
+name: Beta tester report
+description: Share overall beta testing notes
+title: "[Beta feedback] "
+labels: ["beta-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping test Persistent Sage. Please keep reports public-safe and avoid private chat content.
+  - type: input
+    id: version
+    attributes:
+      label: Persistent Sage version
+      placeholder: "0.2.0-beta.6"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Windows 11, Windows 10, Linux, macOS"
+    validations:
+      required: true
+  - type: dropdown
+    id: install-type
+    attributes:
+      label: Install type
+      options:
+        - Windows installer
+        - Portable zip
+        - Built from source
+        - Other
+  - type: input
+    id: provider
+    attributes:
+      label: Provider and model tested
+      placeholder: "OpenAI, Gemini, xAI, Ollama, Anthropic, Placeholder"
+  - type: textarea
+    id: worked
+    attributes:
+      label: What worked well?
+    validations:
+      required: true
+  - type: textarea
+    id: confusing
+    attributes:
+      label: What was confusing or rough?
+    validations:
+      required: true
+  - type: textarea
+    id: wishlist
+    attributes:
+      label: What would make you more likely to keep using it?
+  - type: checkboxes
+    id: areas-tested
+    attributes:
+      label: Areas tested
+      options:
+        - label: Chat
+        - label: Memory Anchor
+        - label: Companion personalities
+        - label: Provider setup/API keys
+        - label: Image attachments
+        - label: Agent tools
+        - label: Pulse
+        - label: In-app updater
