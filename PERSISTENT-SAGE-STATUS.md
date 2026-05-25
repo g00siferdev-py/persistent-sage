@@ -1,7 +1,7 @@
 # Persistent Sage — project status
 
 **Version:** 0.2.0-beta.4 (**open beta**)  
-**Repository:** [g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova)  
+**Repository:** [g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage)  
 **Maintainer:** [g00siferdev-py](https://github.com/g00siferdev-py)
 
 ---
@@ -22,7 +22,7 @@ Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rus
 |------|--------|
 | Streaming chat | Per-thread history, rename/delete, optimistic UI |
 | Memory Anchor | Anchors, briefings, hybrid recall, extract, personality scoping |
-| Providers | OpenAI, Ollama local, Ollama Cloud, Anthropic, placeholder |
+| Providers | OpenAI, Google Gemini, xAI Grok, Ollama local, Ollama Cloud, Anthropic, placeholder |
 | Companion | Multi-profile `personality.json`, Persistent Sage JSON + OpenClaw markdown import, live prompt preview |
 | Personality agent tools | Opt-in `personality_get` / `personality_update` |
 | Agent tools | Web, `fetch_browser`, workspace, optional `database_query` (opt-in) |

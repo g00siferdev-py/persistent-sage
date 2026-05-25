@@ -6,7 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **Google Gemini and xAI Grok providers** — provider settings, encrypted API keys, model refresh, and chat routing.
+- **Thinking selector** — Low / Medium / High control in the chat window for providers with reasoning or thinking modes.
+- **Sage support guide** — `docs/SAGE-GUIDE.md` is installed as `guide.md` in the companion workspace for support-bot use.
+
+### Changed
+
+- **Default companion profile** — ships with Sage as one default companion profile for the Persistent Sage platform, while keeping multi-companion support clear.
+- **Memory Anchor injection** — deterministic raw anchor ingest now runs even when LLM extraction is enabled, and automatic cross-session recall runs for every non-empty user turn.
+
+### Fixed
+
+- **First-run setup API key save** — onboarding now sends the correct API-key payload for the selected provider.
 
 ---
 

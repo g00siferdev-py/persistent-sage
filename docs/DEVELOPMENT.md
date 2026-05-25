@@ -1,6 +1,6 @@
 # Development guide
 
-Instructions for contributors working on [g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova).
+Instructions for contributors working on Persistent Sage in [g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage).
 
 ---
 

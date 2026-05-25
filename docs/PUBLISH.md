@@ -37,7 +37,7 @@ How to ship a **Windows installer** to users without asking them to compile from
 **Share with testers:**
 
 ```text
-https://github.com/g00siferdev-py/project-nova/releases/latest
+https://github.com/g00siferdev-py/persistent-sage/releases/latest
 ```
 
 On a prerelease, use the specific tag URL until you promote a non-prerelease “latest”.
@@ -70,7 +70,7 @@ Send them:
 4. Open Persistent Sage from Start Menu; complete the **setup wizard**
 5. **[INSTALL-WINDOWS.md](./INSTALL-WINDOWS.md)** for portable USB and troubleshooting
 6. **[USER-GUIDE.md](./USER-GUIDE.md)** for daily use
-7. Issues: https://github.com/g00siferdev-py/project-nova/issues
+7. Issues: https://github.com/g00siferdev-py/persistent-sage/issues
 
 **USB / portable:** download `PersistentSagePortable.zip`, unzip, run **`Start-Persistent-Sage-Portable.bat`** (not `persistent-sage.exe` alone).
 

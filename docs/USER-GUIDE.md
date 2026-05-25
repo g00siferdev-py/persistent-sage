@@ -131,6 +131,8 @@ For migrating a long-running OpenClaw agent with maximum fidelity, see [§ 11 Mi
 |---------|-------|
 | **Placeholder** | Offline; no network |
 | **OpenAI** | API key, base URL, model (e.g. `gpt-4o`, `gpt-4o-mini`) |
+| **Google Gemini** | API key, base URL, model (e.g. `gemini-2.5-flash`) |
+| **xAI Grok** | API key, base URL, model (e.g. `grok-4-fast-reasoning`) |
 | **Ollama (local)** | Base URL (default `http://127.0.0.1:11434`), model name |
 | **Ollama Cloud** | API key, cloud model (e.g. `kimi-k2.5:cloud`) |
 | **Anthropic** | API key, Claude model id |

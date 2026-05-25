@@ -2,7 +2,7 @@
 
 Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rust). Everything in this folder is written for beta testers, contributors, and anyone performing a **fresh install** from source.
 
-**Project:** [g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova) · **Version:** 0.2.0-beta.4 (open beta)
+**Repository:** [g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage) · **Version:** 0.2.0-beta.4 (open beta)
 
 ## Start here
 

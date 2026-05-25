@@ -95,7 +95,7 @@ When you send a chat message, Persistent Sage decrypts the key in process memory
 
 | Action | Network destination |
 |--------|---------------------|
-| Chat (OpenAI / Anthropic / Ollama Cloud) | Provider API you configure |
+| Chat (OpenAI / Anthropic / Gemini / xAI / Ollama Cloud) | Provider API you configure |
 | Ollama local | `http://127.0.0.1:11434` (default) or your base URL |
 | `web_search` tool | DuckDuckGo (when enabled) |
 | `fetch_url` / `http_request` | URLs chosen by the model (SSRF-filtered; HTTPS-only for `http_request`) |

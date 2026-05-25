@@ -6,21 +6,21 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
-**Repository:** [github.com/g00siferdev-py/project-nova](https://github.com/g00siferdev-py/project-nova)  
-**Status:** **Open beta** (`0.2.0-beta.4`) — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/project-nova/issues)
+**Repository:** [github.com/g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage)  
+**Status:** **Open beta** (`0.2.0-beta.4`) — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues)
 
 ---
 
 ## Beta testing
 
-Persistent Sage is in **open beta**. **Windows users** can install from **[GitHub Releases](https://github.com/g00siferdev-py/project-nova/releases)** (pre-built installer). Developers and other platforms: build from source below.
+Persistent Sage is in **open beta**. **Windows users** can install from **[GitHub Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** (pre-built installer). Developers and other platforms: build from source below.
 
 | Step | Action |
 |------|--------|
-| 1 | **Windows install** — **[Releases](https://github.com/g00siferdev-py/project-nova/releases)** → download `Persistent Sage_*_x64-setup.exe` → run installer. See **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)**. |
-| 2 | **Build from source** — `git clone https://github.com/g00siferdev-py/project-nova.git && cd project-nova` → **[docs/INSTALL.md](./docs/INSTALL.md)**. |
+| 1 | **Windows install** — **[Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** → download `Persistent Sage_*_x64-setup.exe` → run installer. See **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)**. |
+| 2 | **Build from source** — `git clone https://github.com/g00siferdev-py/persistent-sage.git && cd persistent-sage` → **[docs/INSTALL.md](./docs/INSTALL.md)**. |
 | 3 | **Configure** — **Settings → Provider** (API key + model), then start a chat |
-| 4 | **Report** — [GitHub Issues](https://github.com/g00siferdev-py/project-nova/issues) with OS, app version, provider, steps to reproduce |
+| 4 | **Report** — [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues) with OS, app version, provider, steps to reproduce |
 | 5 | **Contribute** — **[CONTRIBUTING.md](./CONTRIBUTING.md)** |
 
 **Maintainers:** how to publish installers → **[docs/PUBLISH.md](./docs/PUBLISH.md)**. CI builds → **[docs/BUILD-CI.md](./docs/BUILD-CI.md)**.
@@ -40,7 +40,7 @@ Persistent Sage is in **open beta**. **Windows users** can install from **[GitHu
 | **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** | Technical overview for developers |
 | **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)** | Dev workflow and pre-push checklist |
 | [CHANGELOG.md](./CHANGELOG.md) | Release notes |
-| [docs/REBRAND.md](./docs/REBRAND.md) | Nova → Persistent Sage migration |
+| [docs/REBRAND.md](./docs/REBRAND.md) | Codename, rebrand, and legacy data migration |
 | [PERSISTENT-SAGE-STATUS.md](./PERSISTENT-SAGE-STATUS.md) | Engineering status |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | How to test and contribute |
 
@@ -74,7 +74,7 @@ After you build and run Persistent Sage, **nothing is stored on a Persistent Sag
 
 - **Memory Anchor** — SQLite conversations, messages, anchors, projects, and preferences; hybrid FTS recall and startup briefings.
 - **Companion profiles** — Multiple personalities with live system-prompt preview; Persistent Sage JSON and OpenClaw markdown import; optional agent self-edit of `personality.json`.
-- **Providers** — OpenAI, Ollama (local), Ollama Cloud, Anthropic, or offline placeholder.
+- **Providers** — OpenAI, Google Gemini, xAI Grok, Ollama (local), Ollama Cloud, Anthropic, or offline placeholder.
 - **Agent tools** (opt-in) — Web search, URL fetch, headless **`fetch_browser`**, HTTPS `http_request`, sandboxed workspace files, optional database query.
 - **Pulse** — Timer-driven check-ins that run as **normal chat turns** in your selected sidebar thread.
 - **Vision** — Attach images in the composer; multimodal payloads for supported models.
@@ -87,8 +87,8 @@ After you build and run Persistent Sage, **nothing is stored on a Persistent Sag
 ## Quick start (experienced developers)
 
 ```bash
-git clone https://github.com/g00siferdev-py/project-nova.git
-cd project-nova
+git clone https://github.com/g00siferdev-py/persistent-sage.git
+cd persistent-sage
 npm install
 npm run tauri dev
 ```
@@ -105,7 +105,7 @@ First launch creates local data under your OS app directory (or `PERSISTENT_SAGE
 |----------|---------|
 | `PERSISTENT_SAGE_DATA_DIR` | Absolute path for `nova_memory.sqlite`, settings, personalities, workspace, attachments (legacy `NOVA_DATA_DIR` still works) |
 | `PERSISTENT_SAGE_PORTABLE=1` | Store data in `{executable}/data/` (legacy `NOVA_PORTABLE=1` also works) |
-| `PERSISTENT_SAGE_CHROME_PATH` | Chrome/Chromium/Edge binary for `fetch_browser` (legacy `PERSISTENT_SAGE_CHROME_PATH` also works) |
+| `PERSISTENT_SAGE_CHROME_PATH` | Chrome/Chromium/Edge binary for `fetch_browser` (legacy `NOVA_CHROME_PATH` also works) |
 | `PERSISTENT_SAGE_CHROME_NO_SANDBOX` | Set to `1` in Docker or locked-down environments |
 | *(unset)* | OS default application data location |
 

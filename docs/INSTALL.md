@@ -83,8 +83,8 @@ Install **Microsoft C++ Build Tools** and **WebView2** (see Tauri prerequisites 
 ## 3. Clone the repository
 
 ```bash
-git clone https://github.com/g00siferdev-py/project-nova.git
-cd project-nova
+git clone https://github.com/g00siferdev-py/persistent-sage.git
+cd persistent-sage
 ```
 
 If you received a ZIP archive, extract it and `cd` into the folder that contains `package.json` and `src-tauri/`.
@@ -155,7 +155,7 @@ Open **Settings** from the chat header (right side). Tabs:
 
 ### Minimum steps for live chat
 
-1. **Settings → Provider** — Choose **OpenAI**, **Ollama (local)**, **Ollama Cloud**, or **Anthropic** (not *Placeholder*).
+1. **Settings → Provider** — Choose **OpenAI**, **Google Gemini**, **xAI Grok**, **Ollama (local)**, **Ollama Cloud**, or **Anthropic** (not *Placeholder*).
 2. Enter and **save** the API key if required.
 3. Pick a **model** appropriate for your provider.
 4. **Settings → General** or sidebar — **New chat**, then send a message.
@@ -248,7 +248,7 @@ Persistent Sage **0.2.0-beta.4** is in **open beta**. After you complete § 11 (
 1. Configure a live provider and send several chat turns.
 2. Try **Settings → Companion** (personalities, optional OpenClaw import).
 3. If you use OpenClaw today, follow **[USER-GUIDE.md § Migrating from OpenClaw](./USER-GUIDE.md#11-migrating-from-openclaw)** and report results on GitHub.
-4. File issues at [github.com/g00siferdev-py/project-nova/issues](https://github.com/g00siferdev-py/project-nova/issues).
+4. File issues at [github.com/g00siferdev-py/persistent-sage/issues](https://github.com/g00siferdev-py/persistent-sage/issues).
 
 See also [CONTRIBUTING.md](../CONTRIBUTING.md) and [README.md § Beta testing](../README.md#beta-testing).
 

@@ -18,7 +18,7 @@ Persistent Sage is a **Tauri 2** desktop application: a **React 19** frontend ta
 │  chat.rs — send pipeline, streaming, agent tool loop        │
 │  memory.rs — MemoryAnchor (SQLite)                          │
 │  settings.rs · personality.rs                               │
-│  provider/ — OpenAI, Ollama, Anthropic, Placeholder         │
+│  provider/ — OpenAI, Gemini, xAI, Ollama, Anthropic         │
 │  attachments.rs — vision payloads                           │
 │  pulse.rs — scheduled ticks in open thread                  │
 │  agent_tools.rs · browser_fetch.rs · personality_tools.rs   │
@@ -54,15 +54,15 @@ Held in Tauri managed state (`lib.rs`):
 **Entry:** `chat_send_message` → optional image save → `execute_chat_turn`
 
 1. Sync active `personality_id` to memory and personality store.
-2. `build_engine` from settings (OpenAI / Ollama / Ollama Cloud / Anthropic / Placeholder).
+2. `build_engine` from settings (OpenAI / Gemini / xAI / Ollama / Ollama Cloud / Anthropic / Placeholder).
 3. Vision gate if image attached (`model_supports_vision`).
 4. Store user message (text + optional `image_attachment` / `image_mime`).
 5. Emit `chat:stream-start`.
 6. Build **startup briefing** (transcript + anchors + projects + prefs).
-7. Optional **auto memory recall** for qualifying user text.
-7. Load recent messages; map each to `ChatTurn` via `attachments::chat_turn_from_stored`.
-8. `run_chat_completion` — streaming or agent tool loop.
-9. Persist assistant reply; stream events to UI.
+7. Run automatic cross-session Memory Anchor recall for the user turn.
+8. Load recent messages; map each to `ChatTurn` via `attachments::chat_turn_from_stored`.
+9. `run_chat_completion` — streaming or agent tool loop.
+10. Persist assistant reply; stream events to UI.
 
 **Pulse** (`pulse.rs`) calls the same `execute_chat_turn` on a timer for the conversation id stored in settings (`pulseConversationId`), bound to the sidebar-selected thread from the frontend.
 
@@ -84,6 +84,8 @@ Held in Tauri managed state (`lib.rs`):
 | `provider_id` | Implementation |
 |---------------|----------------|
 | `openai` | Chat Completions + tools + multimodal `image_url` parts |
+| `gemini` | Google Generative Language API |
+| `xai` | OpenAI-compatible xAI Grok API + tools |
 | `ollama` / `ollama_cloud` | `/api/chat` + `images` array for vision |
 | `anthropic` | Messages API + image blocks |
 | `placeholder` | Offline stub |
