@@ -1,0 +1,57 @@
+# Build a Microsoft Store MSIX package on GitHub-hosted Windows runners.
+#
+# This workflow is intentionally manual and branch-friendly. It does not publish
+# a GitHub Release or affect the normal NSIS updater release workflow.
+
+name: Build MSIX
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: build-msix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-msix:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Setup WinApp CLI
+        uses: microsoft/setup-WinAppCli@v0.1
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build MSIX package
+        run: npm run msix:pack
+        env:
+          CARGO_BUILD_JOBS: 2
+
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: persistent-sage-msix-${{ github.sha }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            *.msix
+            *.msixbundle
+            *.appx
+            *.appxbundle
