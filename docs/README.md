@@ -12,6 +12,7 @@ Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rus
 | [**INSTALL-WINDOWS.md**](./INSTALL-WINDOWS.md) | Windows testers | Installer, portable USB, troubleshooting |
 | [**PUBLISH.md**](./PUBLISH.md) | Maintainers | Ship installers via GitHub Releases |
 | [**BUILD-CI.md**](./BUILD-CI.md) | Maintainers | GitHub Actions Windows builds |
+| [**MICROSOFT-STORE.md**](./MICROSOFT-STORE.md) | Maintainers | MSIX packaging path for Microsoft Store submission |
 | [**DATA-AND-PRIVACY.md**](./DATA-AND-PRIVACY.md) | Security-conscious users | What stays on disk, what is encrypted, what is **not** encrypted |
 | [**SIGNING-AND-UPDATES.md**](./SIGNING-AND-UPDATES.md) | Maintainers and testers | Tauri updater, release assets, SignPath readiness |
 | [**USER-GUIDE.md**](./USER-GUIDE.md) | Daily users | UI layout, chat, memory, settings, Pulse, OpenClaw migration |

@@ -8,6 +8,11 @@ dist/
 dist-ssr/
 build/
 out/
+msix-dist/
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
 *.local
 .vite/
 
@@ -26,6 +31,7 @@ src-tauri/gen/schemas/
 !.env*.example
 *.pem
 *.key
+*.pfx
 secrets/
 .secrets/
 # Local credential notes (never commit)
