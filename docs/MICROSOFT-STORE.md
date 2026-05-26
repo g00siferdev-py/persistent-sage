@@ -39,10 +39,11 @@ npm install
 Use this path when a local Windows machine does not have enough RAM to build the app.
 
 1. Push the `store-msix` branch.
-2. Open **Actions → Build MSIX**.
-3. Click **Run workflow** and choose the `store-msix` branch.
-4. Download the `persistent-sage-msix-<sha>` artifact when the workflow completes.
-5. Upload the generated `.msix` to Partner Center.
+2. The **Build MSIX** workflow runs automatically after the push.
+3. Download the `persistent-sage-msix-<sha>` artifact when the workflow completes.
+4. Upload the generated `.msix` to Partner Center.
+
+If the workflow is later merged into `main`, it can also be started manually from **Actions → Build MSIX → Run workflow**.
 
 ### Local Windows build
 

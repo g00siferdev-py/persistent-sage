@@ -7,6 +7,9 @@ name: Build MSIX
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - store-msix
 
 concurrency:
   group: build-msix-${{ github.ref }}
