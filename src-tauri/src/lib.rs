@@ -735,6 +735,7 @@ pub fn run() {
             memory_reindex_embeddings,
             memory_list_anchors,
             memory_list_projects,
+            pulse::pulse_run_now,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Persistent Sage (Tauri application)");

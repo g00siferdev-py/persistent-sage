@@ -11,6 +11,7 @@ import {
   type SettingsLayoutMode,
 } from "@/lib/settingsLayout";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
+import { buildWhatsNewContent, WhatsNewModal } from "@/components/WhatsNewModal";
 
 /** Subset of `settings_get` for the main-window provider hint (no secrets). */
 type SettingsForHint = {
@@ -22,6 +23,7 @@ type SettingsForHint = {
   hasXaiApiKey: boolean;
   thinkingEffort: "low" | "medium" | "high";
   onboardingCompleted: boolean;
+  whatsNewSeenVersion?: string;
 };
 
 function truncate(s: string, max: number): string {
@@ -38,7 +40,39 @@ export function ChatLayout() {
   const [thinkingEffort, setThinkingEffort] = useState<"low" | "medium" | "high">("medium");
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
+  const [whatsNewVersion, setWhatsNewVersion] = useState<string | null>(null);
   const prevSettingsLayoutMode = useRef<SettingsLayoutMode>(settingsLayoutMode);
+
+  const maybeShowWhatsNew = useCallback(async () => {
+    try {
+      const [version, settings] = await Promise.all([
+        invoke<string>("app_version"),
+        invoke<SettingsForHint>("settings_get"),
+      ]);
+      if (!settings.onboardingCompleted) return;
+      const seen = (settings.whatsNewSeenVersion ?? "").trim();
+      const current = version.trim();
+      if (seen === current) return;
+      setWhatsNewVersion(current);
+      setShowWhatsNew(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const dismissWhatsNew = useCallback(async () => {
+    const version = whatsNewVersion;
+    if (version) {
+      try {
+        await invoke("settings_update", { patch: { whatsNewSeenVersion: version } });
+      } catch {
+        /* ignore */
+      }
+    }
+    setShowWhatsNew(false);
+    setWhatsNewVersion(null);
+  }, [whatsNewVersion]);
 
   const setSettingsLayout = useCallback((mode: SettingsLayoutMode) => {
     setSettingsLayoutMode(mode);
@@ -114,6 +148,11 @@ export function ChatLayout() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!onboardingChecked || showOnboarding) return;
+    void maybeShowWhatsNew();
+  }, [onboardingChecked, showOnboarding, maybeShowWhatsNew]);
+
   const {
     conversations,
     conversationsForTitle,
@@ -181,7 +220,14 @@ export function ChatLayout() {
           onComplete={() => {
             setShowOnboarding(false);
             void loadBackendHint();
+            void maybeShowWhatsNew();
           }}
+        />
+      ) : null}
+      {onboardingChecked && !showOnboarding && showWhatsNew && whatsNewVersion ? (
+        <WhatsNewModal
+          content={buildWhatsNewContent(whatsNewVersion)}
+          onDismiss={() => void dismissWhatsNew()}
         />
       ) : null}
       <ConversationSidebar

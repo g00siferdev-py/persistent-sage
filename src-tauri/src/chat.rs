@@ -541,6 +541,40 @@ pub struct ChatStreamEvent {
     pub done: bool,
 }
 
+/// Controls streaming, transcript persistence, and tool use for a chat turn.
+#[derive(Clone, Debug)]
+pub struct ChatTurnOptions {
+    pub emit_stream: bool,
+    pub persist_user_message: bool,
+    pub persist_assistant_message: bool,
+    pub enable_tools: bool,
+    /// Prepended to the assistant message when saved (Pulse labels in chat).
+    pub assistant_reply_prefix: Option<String>,
+}
+
+impl ChatTurnOptions {
+    pub fn interactive() -> Self {
+        Self {
+            emit_stream: true,
+            persist_user_message: true,
+            persist_assistant_message: true,
+            enable_tools: true,
+            assistant_reply_prefix: None,
+        }
+    }
+
+    /// Pulse: hidden user prompt, tools on, assistant reply saved to chat with a label prefix.
+    pub fn pulse(assistant_reply_prefix: String) -> Self {
+        Self {
+            emit_stream: false,
+            persist_user_message: false,
+            persist_assistant_message: true,
+            enable_tools: true,
+            assistant_reply_prefix: Some(assistant_reply_prefix),
+        }
+    }
+}
+
 /// Shared LLM path after `messages` (system + transcript) is built: tools or stream, then persist assistant.
 async fn run_chat_completion(
     app: &AppHandle,
@@ -548,6 +582,7 @@ async fn run_chat_completion(
     conversation_id: &str,
     engine: &std::sync::Arc<dyn LLMProviderEngine + Send + Sync>,
     mut messages: Vec<ChatTurn>,
+    options: ChatTurnOptions,
 ) -> Result<String, String> {
     let configured = state.settings.max_tokens();
     let max_tokens = match configured {
@@ -559,7 +594,7 @@ async fn run_chat_completion(
     let thinking_effort = Some(state.settings.thinking_effort());
 
     let mut tool_definitions: Vec<ToolDefinition> = Vec::new();
-    if state.settings.agent_web_tools_enabled() {
+    if options.enable_tools && state.settings.agent_web_tools_enabled() {
         tool_definitions.extend(crate::agent_tools::builtin_tool_definitions());
         if state.settings.agent_browser_fetch_enabled() {
             tool_definitions.push(crate::agent_tools::browser_fetch_tool_definition(
@@ -567,20 +602,21 @@ async fn run_chat_completion(
             ));
         }
     }
-    if state.settings.agent_workspace_enabled() {
+    if options.enable_tools && state.settings.agent_workspace_enabled() {
         tool_definitions.extend(crate::agent_tools::workspace_tool_definitions());
     }
-    let database_tools_enabled =
-        state.settings.agent_workspace_enabled() || state.settings.database_app_data_enabled();
+    let database_tools_enabled = options.enable_tools
+        && (state.settings.agent_workspace_enabled() || state.settings.database_app_data_enabled());
     if database_tools_enabled {
         tool_definitions.extend(crate::database_query::tool_definitions());
     }
-    let personality_edit_enabled = state.settings.agent_personality_edit_enabled();
+    let personality_edit_enabled =
+        options.enable_tools && state.settings.agent_personality_edit_enabled();
     if personality_edit_enabled {
         tool_definitions.extend(crate::personality_tools::tool_definitions());
     }
     let provider_id = engine.provider_id();
-    let memory_tools_active = provider_id != "placeholder";
+    let memory_tools_active = options.enable_tools && provider_id != "placeholder";
     if memory_tools_active {
         tool_definitions.extend(crate::memory_tools::tool_definitions());
     }
@@ -676,11 +712,15 @@ async fn run_chat_completion(
         {
             Ok(text) => {
                 full = text;
-                emit_synthetic_stream_deltas(app, conversation_id, &full);
+                if options.emit_stream {
+                    emit_synthetic_stream_deltas(app, conversation_id, &full);
+                }
             }
             Err(e) => {
                 let msg = e.to_string();
-                let _ = app.emit("chat:stream-error", msg.clone());
+                if options.emit_stream {
+                    let _ = app.emit("chat:stream-error", msg.clone());
+                }
                 return Err(msg);
             }
         }
@@ -703,31 +743,37 @@ async fn run_chat_completion(
                 Ok(chunk) => {
                     if !chunk.delta.is_empty() {
                         full.push_str(&chunk.delta);
-                        let _ = app.emit(
-                            "chat:stream",
-                            ChatStreamEvent {
-                                conversation_id: conversation_id.to_string(),
-                                delta: chunk.delta,
-                                done: false,
-                            },
-                        );
+                        if options.emit_stream {
+                            let _ = app.emit(
+                                "chat:stream",
+                                ChatStreamEvent {
+                                    conversation_id: conversation_id.to_string(),
+                                    delta: chunk.delta,
+                                    done: false,
+                                },
+                            );
+                        }
                     }
                     if chunk.done {
                         saw_done = true;
-                        let _ = app.emit(
-                            "chat:stream",
-                            ChatStreamEvent {
-                                conversation_id: conversation_id.to_string(),
-                                delta: String::new(),
-                                done: true,
-                            },
-                        );
+                        if options.emit_stream {
+                            let _ = app.emit(
+                                "chat:stream",
+                                ChatStreamEvent {
+                                    conversation_id: conversation_id.to_string(),
+                                    delta: String::new(),
+                                    done: true,
+                                },
+                            );
+                        }
                         break;
                     }
                 }
                 Err(e) => {
                     let msg = e.to_string();
-                    let _ = app.emit("chat:stream-error", msg.clone());
+                    if options.emit_stream {
+                        let _ = app.emit("chat:stream-error", msg.clone());
+                    }
                     send_task.abort();
                     return Err(msg);
                 }
@@ -738,17 +784,21 @@ async fn run_chat_completion(
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
                 let msg = e.to_string();
-                let _ = app.emit("chat:stream-error", msg.clone());
+                if options.emit_stream {
+                    let _ = app.emit("chat:stream-error", msg.clone());
+                }
                 return Err(msg);
             }
             Err(j) => {
                 let msg = j.to_string();
-                let _ = app.emit("chat:stream-error", msg.clone());
+                if options.emit_stream {
+                    let _ = app.emit("chat:stream-error", msg.clone());
+                }
                 return Err(msg);
             }
         }
 
-        if !saw_done {
+        if !saw_done && options.emit_stream {
             let _ = app.emit(
                 "chat:stream",
                 ChatStreamEvent {
@@ -783,7 +833,9 @@ async fn run_chat_completion(
                 {
                     Ok(Some(text)) => {
                         full = text;
-                        emit_synthetic_stream_deltas(app, conversation_id, &full);
+                        if options.emit_stream {
+                            emit_synthetic_stream_deltas(app, conversation_id, &full);
+                        }
                     }
                     Ok(None) | Err(_) => {
                         full = user_facing_tool_markup_message(provider_id, has_images);
@@ -803,10 +855,23 @@ async fn run_chat_completion(
         reply = user_facing_tool_markup_message(provider_id, has_images);
     }
 
-    state
-        .memory
-        .store_message(conversation_id, MessageRole::Assistant, &reply, None, None)
-        .map_err(|e| e.to_string())?;
+    if options.persist_assistant_message {
+        let stored = if let Some(prefix) = &options.assistant_reply_prefix {
+            format!("{prefix}{reply}")
+        } else {
+            reply.clone()
+        };
+        state
+            .memory
+            .store_message(
+                conversation_id,
+                MessageRole::Assistant,
+                &stored,
+                None,
+                None,
+            )
+            .map_err(|e| e.to_string())?;
+    }
 
     Ok(reply)
 }
@@ -821,7 +886,7 @@ pub struct PendingImage {
 const CHAT_CONTEXT_RECENT: usize = 32;
 const CHAT_PREP_TIMEOUT: Duration = Duration::from_secs(12);
 
-/// One user turn on an existing conversation — same path for manual send and scheduled Pulse.
+/// One user turn on an existing conversation — manual chat or background Pulse.
 pub async fn execute_chat_turn(
     app: &AppHandle,
     state: &NovaState,
@@ -829,6 +894,7 @@ pub async fn execute_chat_turn(
     message: &str,
     personality_id: &str,
     pending_image: Option<PendingImage>,
+    options: ChatTurnOptions,
 ) -> Result<String, String> {
     let text = message.trim();
     if text.is_empty() && pending_image.is_none() {
@@ -842,12 +908,14 @@ pub async fn execute_chat_turn(
         pid
     };
 
-    let _ = app.emit(
-        "chat:stream-start",
-        ChatStreamStart {
-            conversation_id: conversation_id.to_string(),
-        },
-    );
+    if options.emit_stream {
+        let _ = app.emit(
+            "chat:stream-start",
+            ChatStreamStart {
+                conversation_id: conversation_id.to_string(),
+            },
+        );
+    }
 
     state
         .personality
@@ -888,19 +956,22 @@ pub async fn execute_chat_turn(
         "image attachment".into()
     };
     let companion_for_prep = companion_label.clone();
+    let persist_user_message = options.persist_user_message;
 
     let prep = tokio::time::timeout(
         CHAT_PREP_TIMEOUT,
         tokio::task::spawn_blocking(move || -> Result<(String, Vec<StoredMessage>), String> {
-            memory
-                .store_message(
-                    &conv_id,
-                    MessageRole::User,
-                    &user_text,
-                    img_rel.as_deref(),
-                    img_mime.as_deref(),
-                )
-                .map_err(|e| e.to_string())?;
+            if persist_user_message {
+                memory
+                    .store_message(
+                        &conv_id,
+                        MessageRole::User,
+                        &user_text,
+                        img_rel.as_deref(),
+                        img_mime.as_deref(),
+                    )
+                    .map_err(|e| e.to_string())?;
+            }
 
             let mut briefing = memory
                 .get_startup_briefing(&conv_id, &companion_for_prep)
@@ -957,7 +1028,7 @@ pub async fn execute_chat_turn(
         }
     };
 
-    if !text.is_empty() {
+    if !text.is_empty() && options.persist_user_message {
         crate::memory_extract::spawn_post_message_memory(
             state.http.clone(),
             state.settings.clone(),
@@ -1009,7 +1080,17 @@ pub async fn execute_chat_turn(
         messages.push(turn);
     }
 
-    run_chat_completion(app, state, conversation_id, &engine, messages).await
+    if !options.persist_user_message && !text.is_empty() {
+        messages.push(ChatTurn::text(
+            "user",
+            format!(
+                "{text}\n\n\
+                 (Background Pulse check-in. Reply briefly for the user. This turn is not shown in the chat transcript.)"
+            ),
+        ));
+    }
+
+    run_chat_completion(app, state, conversation_id, &engine, messages, options).await
 }
 
 #[tauri::command]
@@ -1061,6 +1142,7 @@ pub async fn chat_send_message(
         &message,
         pid,
         pending_image,
+        ChatTurnOptions::interactive(),
     )
     .await?;
 

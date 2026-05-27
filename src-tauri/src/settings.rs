@@ -67,6 +67,8 @@ pub struct SettingsFile {
     pub openai_base_url: String,
     #[serde(default)]
     pub ollama_model: String,
+    #[serde(default = "default_ollama_cloud_model")]
+    pub ollama_cloud_model: String,
     #[serde(default)]
     pub ollama_base_url: String,
     #[serde(default)]
@@ -118,6 +120,9 @@ pub struct SettingsFile {
     /// First-run setup wizard in the UI (provider + API keys).
     #[serde(default)]
     pub onboarding_completed: bool,
+    /// App version for which the user dismissed the “What’s new” dialog (empty = never shown).
+    #[serde(default)]
+    pub whats_new_seen_version: String,
 }
 
 fn default_memory_llm_extraction() -> bool {
@@ -184,6 +189,10 @@ fn default_gemini_model() -> String {
     "gemini-2.5-flash".into()
 }
 
+fn default_ollama_cloud_model() -> String {
+    "gpt-oss:120b-cloud".into()
+}
+
 fn default_gemini_base_url() -> String {
     "https://generativelanguage.googleapis.com/v1beta".into()
 }
@@ -204,6 +213,7 @@ impl Default for SettingsFile {
             openai_model: "gpt-4o-mini".into(),
             openai_base_url: "https://api.openai.com/v1".into(),
             ollama_model: "llama3.2".into(),
+            ollama_cloud_model: default_ollama_cloud_model(),
             ollama_base_url: "http://127.0.0.1:11434".into(),
             anthropic_model: "claude-3-5-sonnet-20241022".into(),
             gemini_model: default_gemini_model(),
@@ -229,6 +239,7 @@ impl Default for SettingsFile {
             embedding_model: String::new(),
             encrypted_api_keys: HashMap::new(),
             onboarding_completed: false,
+            whats_new_seen_version: String::new(),
         }
     }
 }
@@ -241,6 +252,7 @@ pub struct SettingsView {
     pub openai_model: String,
     pub openai_base_url: String,
     pub ollama_model: String,
+    pub ollama_cloud_model: String,
     pub ollama_base_url: String,
     pub anthropic_model: String,
     pub gemini_model: String,
@@ -270,6 +282,7 @@ pub struct SettingsView {
     pub has_gemini_api_key: bool,
     pub has_xai_api_key: bool,
     pub onboarding_completed: bool,
+    pub whats_new_seen_version: String,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -279,6 +292,7 @@ pub struct SettingsUpdatePayload {
     pub openai_model: Option<String>,
     pub openai_base_url: Option<String>,
     pub ollama_model: Option<String>,
+    pub ollama_cloud_model: Option<String>,
     pub ollama_base_url: Option<String>,
     pub anthropic_model: Option<String>,
     pub gemini_model: Option<String>,
@@ -305,6 +319,7 @@ pub struct SettingsUpdatePayload {
     pub memory_semantic_enabled: Option<bool>,
     pub embedding_model: Option<String>,
     pub onboarding_completed: Option<bool>,
+    pub whats_new_seen_version: Option<String>,
 }
 
 // --- Crypto ------------------------------------------------------------------
@@ -561,6 +576,10 @@ impl SettingsManager {
             .preference_set("nova.openai.base_url", inner.openai_base_url.trim())?;
         self.memory
             .preference_set("nova.ollama.model", inner.ollama_model.trim())?;
+        self.memory.preference_set(
+            "persistent_sage.ollama_cloud.model",
+            inner.ollama_cloud_model.trim(),
+        )?;
         self.memory
             .preference_set("nova.ollama.base_url", inner.ollama_base_url.trim())?;
         self.memory
@@ -617,6 +636,7 @@ impl SettingsManager {
             openai_model: inner.openai_model.clone(),
             openai_base_url: inner.openai_base_url.clone(),
             ollama_model: inner.ollama_model.clone(),
+            ollama_cloud_model: inner.ollama_cloud_model.clone(),
             ollama_base_url: inner.ollama_base_url.clone(),
             anthropic_model: inner.anthropic_model.clone(),
             gemini_model: inner.gemini_model.clone(),
@@ -661,6 +681,7 @@ impl SettingsManager {
                 inner.encrypted_api_keys.get("xai"),
             ),
             onboarding_completed: inner.onboarding_completed,
+            whats_new_seen_version: inner.whats_new_seen_version.clone(),
         })
     }
 
@@ -754,6 +775,13 @@ impl SettingsManager {
             .read()
             .map(|g| g.ollama_model.clone())
             .unwrap_or_else(|_| "llama3.2".into())
+    }
+
+    pub fn ollama_cloud_model(&self) -> String {
+        self.inner
+            .read()
+            .map(|g| g.ollama_cloud_model.clone())
+            .unwrap_or_else(|_| default_ollama_cloud_model())
     }
 
     pub fn ollama_base_url(&self) -> String {
@@ -886,6 +914,9 @@ impl SettingsManager {
         if let Some(s) = patch.ollama_model {
             inner.ollama_model = s;
         }
+        if let Some(s) = patch.ollama_cloud_model {
+            inner.ollama_cloud_model = s;
+        }
         if let Some(s) = patch.ollama_base_url {
             inner.ollama_base_url = s.trim_end_matches('/').to_string();
         }
@@ -988,6 +1019,9 @@ impl SettingsManager {
         if let Some(b) = patch.onboarding_completed {
             inner.onboarding_completed = b;
         }
+        if let Some(s) = patch.whats_new_seen_version {
+            inner.whats_new_seen_version = s;
+        }
         inner.version = SETTINGS_VERSION;
         drop(inner);
         self.persist()
@@ -1053,10 +1087,36 @@ impl SettingsManager {
 fn normalize_key_slot(provider: &str) -> Result<String, SettingsError> {
     let s = provider.trim().to_lowercase();
     match s.as_str() {
-        "openai" | "anthropic" | "ollama" | "ollama_cloud" => Ok("ollama".into()),
+        "openai" => Ok("openai".into()),
+        "anthropic" => Ok("anthropic".into()),
+        "ollama" | "ollama_cloud" => Ok("ollama".into()),
         "gemini" | "google" => Ok("gemini".into()),
         "xai" | "grok" => Ok("xai".into()),
         _ => Err(SettingsError::InvalidKeySlot(provider.to_string())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_key_slot;
+
+    #[test]
+    fn normalizes_api_key_slots_by_provider() {
+        let cases = [
+            ("openai", "openai"),
+            (" OpenAI ", "openai"),
+            ("anthropic", "anthropic"),
+            ("ollama", "ollama"),
+            ("ollama_cloud", "ollama"),
+            ("gemini", "gemini"),
+            ("google", "gemini"),
+            ("xai", "xai"),
+            ("grok", "xai"),
+        ];
+
+        for (provider, slot) in cases {
+            assert_eq!(normalize_key_slot(provider).unwrap(), slot);
+        }
     }
 }
 
@@ -1090,6 +1150,11 @@ fn migrate_sqlite_into_file(
     if let Ok(Some(v)) = memory.preference_get("nova.ollama.model") {
         if !v.trim().is_empty() {
             file.ollama_model = v;
+        }
+    }
+    if let Ok(Some(v)) = memory.preference_get("persistent_sage.ollama_cloud.model") {
+        if !v.trim().is_empty() {
+            file.ollama_cloud_model = v;
         }
     }
     if let Ok(Some(v)) = memory.preference_get("nova.ollama.base_url") {

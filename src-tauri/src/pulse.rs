@@ -1,4 +1,4 @@
-//! Scheduled Pulse: injects settings instructions as a normal user message on the bound conversation.
+//! Scheduled Pulse: background check-in using the bound conversation's context (not shown in chat).
 
 use std::time::Duration;
 
@@ -22,18 +22,30 @@ pub struct PulseTickEvent {
     pub error: Option<String>,
 }
 
-async fn run_pulse_tick(app: &AppHandle, state: &NovaState) {
+async fn run_pulse_tick(app: &AppHandle, state: &NovaState, manual: bool) {
     let at = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
 
     let view = match state.settings.view() {
         Ok(v) => v,
         Err(e) => {
             eprintln!("persistent-sage: pulse skipped — settings: {e}");
+            if manual {
+                let _ = app.emit(
+                    "pulse:tick",
+                    PulseTickEvent {
+                        ok: false,
+                        at,
+                        conversation_id: None,
+                        summary: None,
+                        error: Some(e.to_string()),
+                    },
+                );
+            }
             return;
         }
     };
 
-    if !view.pulse_enabled {
+    if !manual && !view.pulse_enabled {
         return;
     }
 
@@ -74,14 +86,26 @@ async fn run_pulse_tick(app: &AppHandle, state: &NovaState) {
 
     let instructions = view.pulse_instructions.trim();
     let message = if instructions.is_empty() {
-        format!("(scheduled reminder · {at})")
+        "Brief background check-in: note any reminders, open loops, or a short useful thought for the user.".into()
     } else {
-        format!("{instructions}\n\n(scheduled · {at})")
+        instructions.to_string()
     };
 
     let pid = state.personality.active_profile_id();
 
-    match chat::execute_chat_turn(app, state, &cid, &message, &pid, None).await {
+    let pulse_label = format!("Pulse Response : {at} - ");
+
+    match chat::execute_chat_turn(
+        app,
+        state,
+        &cid,
+        &message,
+        &pid,
+        None,
+        chat::ChatTurnOptions::pulse(pulse_label),
+    )
+    .await
+    {
         Ok(reply) => {
             let summary = reply.trim().to_string();
             let ok = !summary.is_empty();
@@ -143,9 +167,16 @@ pub fn spawn_pulse_loop(app_handle: AppHandle) {
                     {
                         continue;
                     }
-                    run_pulse_tick(&app_handle, &state).await;
+                    run_pulse_tick(&app_handle, &state, false).await;
                 }
             }
         }
     });
+}
+
+/// Run one Pulse check-in immediately (Settings → Send Pulse now). Does not require Pulse to be enabled.
+#[tauri::command]
+pub async fn pulse_run_now(app: AppHandle, state: tauri::State<'_, NovaState>) -> Result<(), String> {
+    run_pulse_tick(&app, &state, true).await;
+    Ok(())
 }

@@ -161,7 +161,7 @@ export function useChat() {
     });
   }, [activeConversationId]);
 
-  /** Stream events for the active thread (user sends and background Pulse share this path). */
+  /** Stream events for manual sends on the active thread (Pulse does not stream into chat). */
   useEffect(() => {
     let unlistenStart: (() => void) | undefined;
     let unlistenStream: (() => void) | undefined;
@@ -212,7 +212,9 @@ export function useChat() {
       const cid = e.payload.conversationId;
       if (!cid || cid !== activeConversationIdRef.current) return;
       setStreamAssistant(null);
-      void loadActiveThread(cid);
+      if (e.payload.ok) {
+        void loadActiveThread(cid);
+      }
     }).then((fn) => {
       unlistenPulse = fn;
     });

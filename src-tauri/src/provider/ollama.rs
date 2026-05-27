@@ -48,7 +48,7 @@ impl OllamaProvider {
             .decrypt_api_key("ollama")?
             .filter(|s| !s.trim().is_empty())
             .ok_or(ProviderError::MissingApiKey("ollama"))?;
-        let model = settings.ollama_model();
+        let model = settings.ollama_cloud_model();
         Ok(Self {
             client: http.clone(),
             base_url: "https://ollama.com".to_string(),

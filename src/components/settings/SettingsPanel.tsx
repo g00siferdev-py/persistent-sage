@@ -37,7 +37,8 @@ type Props = {
 
 const TOOLS_SECTION_INFO = (
   <>
-    Chat-only options for OpenAI, Ollama, and Anthropic. Background Pulse never uses tools. Tool names below are what
+    Chat-only options for OpenAI, Ollama, and Anthropic. Pulse uses the same toggles when it runs in the background.
+    Tool names below are what
     your companion sees in plain language; the app still uses internal ids for API calls.
   </>
 );
@@ -151,6 +152,7 @@ type SettingsView = {
   openaiModel: string;
   openaiBaseUrl: string;
   ollamaModel: string;
+  ollamaCloudModel: string;
   ollamaBaseUrl: string;
   anthropicModel: string;
   geminiModel: string;
@@ -194,6 +196,7 @@ type SettingsPatch = {
   openaiModel?: string;
   openaiBaseUrl?: string;
   ollamaModel?: string;
+  ollamaCloudModel?: string;
   ollamaBaseUrl?: string;
   anthropicModel?: string;
   geminiModel?: string;
@@ -443,8 +446,9 @@ function modelForProvider(settings: SettingsView | null): string {
     case "openai":
       return settings.openaiModel || "unknown";
     case "ollama":
-    case "ollama_cloud":
       return settings.ollamaModel || "unknown";
+    case "ollama_cloud":
+      return settings.ollamaCloudModel || "unknown";
     case "anthropic":
       return settings.anthropicModel || "unknown";
     case "gemini":
@@ -541,6 +545,7 @@ export function SettingsPanel({
   const [dataPaths, setDataPaths] = useState<AppDataPaths | null>(null);
   const [revealPathError, setRevealPathError] = useState<string | null>(null);
   const [lastPulse, setLastPulse] = useState<PulseTickPayload | null>(null);
+  const [pulseNowLoading, setPulseNowLoading] = useState(false);
   const [updateBusy, setUpdateBusy] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<string | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null);
@@ -642,7 +647,7 @@ export function SettingsPanel({
   );
 
   const applyModelPatchImmediate = useCallback(
-    async (patch: Pick<SettingsPatch, "openaiModel" | "ollamaModel" | "anthropicModel" | "geminiModel" | "xaiModel">) => {
+    async (patch: Pick<SettingsPatch, "openaiModel" | "ollamaModel" | "ollamaCloudModel" | "anthropicModel" | "geminiModel" | "xaiModel">) => {
       try {
         setError(null);
         flushDebounce();
@@ -671,8 +676,8 @@ export function SettingsPanel({
 
   const cloudOllamaModelOptions = useMemo(
     () =>
-      mergeModelOptions(DEFAULT_OLLAMA_CLOUD_MODELS, cloudModelTags, settings?.ollamaModel ?? ""),
-    [cloudModelTags, settings?.ollamaModel],
+      mergeModelOptions(DEFAULT_OLLAMA_CLOUD_MODELS, cloudModelTags, settings?.ollamaCloudModel ?? ""),
+    [cloudModelTags, settings?.ollamaCloudModel],
   );
 
   const anthropicModelOptions = useMemo(
@@ -1242,11 +1247,11 @@ export function SettingsPanel({
                   <ModelPickRow
                     htmlFor="ollama-cloud-model"
                     label="Model"
-                    value={settings?.ollamaModel ?? ""}
+                    value={settings?.ollamaCloudModel ?? ""}
                     optionIds={cloudOllamaModelOptions}
                     disabled={!settings}
                     loading={cloudTagsLoading}
-                    onChangeModel={(v) => void applyModelPatchImmediate({ ollamaModel: v })}
+                    onChangeModel={(v) => void applyModelPatchImmediate({ ollamaCloudModel: v })}
                     onRefresh={refreshOllamaCloudModels}
                     refreshLabel="Refresh Models"
                   />
@@ -1255,12 +1260,12 @@ export function SettingsPanel({
                     <input
                       type="text"
                       placeholder={OLLAMA_CLOUD_MODEL_PLACEHOLDER}
-                      value={settings?.ollamaModel ?? ""}
+                      value={settings?.ollamaCloudModel ?? ""}
                       disabled={!settings}
                       onChange={(e) => {
                         const v = e.target.value;
-                        setSettings((s) => (s ? { ...s, ollamaModel: v } : s));
-                        schedulePatch({ ollamaModel: v });
+                        setSettings((s) => (s ? { ...s, ollamaCloudModel: v } : s));
+                        schedulePatch({ ollamaCloudModel: v });
                       }}
                       className="mt-2 w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-sky-500/50"
                     />
@@ -1997,9 +2002,12 @@ export function SettingsPanel({
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-violet-200/90">Pulse</h3>
             </div>
             <p className="text-[11px] leading-relaxed text-slate-500">
-              On a timer, Persistent Sage posts your instructions as a <strong className="font-medium text-slate-700 dark:text-slate-300">normal user
-              message</strong> in the chat you have open — same session, history, tools, and reply stream as if you
-              typed it. Keep that thread selected in the sidebar while Pulse is on.
+              On a timer, Persistent Sage runs a <strong className="font-medium text-slate-700 dark:text-slate-300">background check-in</strong> using
+              the chat thread you have open for context. Your Pulse instructions are <strong className="font-medium text-slate-700 dark:text-slate-300">not</strong> shown
+              in chat; the assistant reply appears there as <span className="font-mono text-slate-600 dark:text-slate-400">Pulse Response : [time] - …</span>.
+              A copy also appears below under <strong className="font-medium text-slate-700 dark:text-slate-300">Last result</strong>.
+              Keep that thread selected in the sidebar while Pulse is on. Enable tools under the <strong className="font-medium text-slate-700 dark:text-slate-300">Tools</strong> tab
+              (for example workspace writes to <span className="font-mono text-slate-600 dark:text-slate-400">Journal.md</span> or web fetch) if your Pulse instructions need them.
             </p>
             {settings?.pulseConversationId ? (
               <p className="font-mono text-[10px] text-slate-500" title={settings.pulseConversationId}>
@@ -2083,6 +2091,36 @@ export function SettingsPanel({
                 placeholder="What should the model focus on when Pulse fires?"
               />
             </div>
+            <button
+              type="button"
+              disabled={
+                !settings ||
+                pulseNowLoading ||
+                settings.selectedProvider === "placeholder" ||
+                !settings.pulseConversationId?.trim()
+              }
+              onClick={() => {
+                void (async () => {
+                  try {
+                    setPulseNowLoading(true);
+                    setError(null);
+                    await invoke("pulse_run_now");
+                  } catch (err) {
+                    setError(String(err));
+                  } finally {
+                    setPulseNowLoading(false);
+                  }
+                })();
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-700/50 bg-violet-900/30 px-3 py-2 text-xs font-semibold text-violet-100 hover:bg-violet-900/50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {pulseNowLoading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+              Send Pulse now
+            </button>
+            <p className="text-[10px] text-slate-600">
+              Runs one check-in immediately using the bound thread. Pulse does not need to be enabled. Result appears
+              below.
+            </p>
             <div className="space-y-1.5 border-t border-slate-200 dark:border-slate-800/70 pt-3">
               <p className="text-[11px] font-medium text-slate-600 dark:text-slate-400">Last result (this session)</p>
               {lastPulse ? (
@@ -2107,7 +2145,7 @@ export function SettingsPanel({
                   ) : null}
                 </div>
               ) : (
-                <p className="text-[11px] text-slate-600">No tick yet — enable Pulse and wait for an interval.</p>
+                <p className="text-[11px] text-slate-600">No tick yet — use Send Pulse now or enable the timer.</p>
               )}
             </div>
           </section>

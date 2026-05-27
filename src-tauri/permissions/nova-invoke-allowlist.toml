@@ -43,4 +43,5 @@ commands.allow = [
   "memory_reindex_embeddings",
   "memory_list_anchors",
   "memory_list_projects",
+  "pulse_run_now",
 ]
