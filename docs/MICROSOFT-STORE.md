@@ -41,7 +41,7 @@ Use this path when a local Windows machine does not have enough RAM to build the
 1. Push the `store-msix` branch.
 2. The **Build MSIX** workflow runs automatically after the push.
 3. Download the `persistent-sage-msix-<sha>` artifact when the workflow completes.
-4. Upload the generated `.msix` to Partner Center.
+4. Upload `PersistentSage_0.2.8.0_x64.msix` to Partner Center.
 
 If the workflow is later merged into `main`, it can also be started manually from **Actions → Build MSIX → Run workflow**.
 
@@ -59,9 +59,9 @@ The script:
 2. Builds the Tauri backend without NSIS bundling.
 3. Copies Store/MSIX assets from `src-tauri/icons/` into `Assets/`.
 4. Stages `persistent-sage.exe` in `msix-dist/`.
-5. Runs `winapp pack ./msix-dist`.
+5. Runs `winapp pack ./msix-dist` with an explicit MSIX output filename.
 
-The generated `.msix` should appear in the repository root.
+The generated `PersistentSage_0.2.8.0_x64.msix` should appear in the repository root.
 
 ## Local Test Install
 
@@ -73,8 +73,6 @@ winapp cert install .\devcert.pfx
 npm run msix:pack
 Add-AppxPackage .\PersistentSage_0.2.8.0_x64.msix
 ```
-
-If the generated package is not named `PersistentSage_0.2.8.0_x64.msix`, use the actual `.msix` filename printed by `winapp pack`.
 
 ## Submit to Microsoft Store
 

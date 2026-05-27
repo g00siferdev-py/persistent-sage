@@ -47,14 +47,17 @@ jobs:
         env:
           CARGO_BUILD_JOBS: 2
 
+      - name: List generated package
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse -File -Include *.msix,*.msixbundle,*.appx,*.appxbundle |
+            Select-Object FullName, Length |
+            Format-Table -AutoSize
+
       - name: Upload MSIX artifact
         uses: actions/upload-artifact@v4
         with:
           name: persistent-sage-msix-${{ github.sha }}
           retention-days: 30
           if-no-files-found: error
-          path: |
-            *.msix
-            *.msixbundle
-            *.appx
-            *.appxbundle
+          path: PersistentSage_0.2.8.0_x64.msix

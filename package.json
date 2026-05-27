@@ -13,7 +13,7 @@
     "branding:icons": "npx tauri icon packaging/branding/SageIcon1024.png -o src-tauri/icons",
     "updater:manifest": "node scripts/generate-updater-manifest.mjs",
     "msix:assets": "node scripts/prepare-msix-assets.mjs",
-    "msix:pack": "npm run build && npm run tauri -- build --no-bundle && npm run msix:assets && pwsh -NoProfile -ExecutionPolicy Bypass -Command \"New-Item -ItemType Directory -Force msix-dist | Out-Null; Copy-Item -Force src-tauri/target/release/persistent-sage.exe msix-dist/; winapp pack ./msix-dist\"",
+    "msix:pack": "npm run build && npm run tauri -- build --no-bundle && npm run msix:assets && pwsh -NoProfile -ExecutionPolicy Bypass -Command \"New-Item -ItemType Directory -Force msix-dist | Out-Null; Copy-Item -Force src-tauri/target/release/persistent-sage.exe msix-dist/; winapp pack ./msix-dist --manifest Package.appxmanifest --output PersistentSage_0.2.8.0_x64.msix\"",
     "build:windows-installer": "npm run build && tauri build -- --bundles nsis",
     "package:portable": "node scripts/package-portable.mjs"
   },
