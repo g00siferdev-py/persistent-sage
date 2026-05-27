@@ -1,0 +1,30 @@
+# Keep `store-msix` identical to `main` so Store packaging and GitHub releases
+# always ship the same code. Develop on `main`; this job mirrors it after each push.
+
+name: Sync store-msix branch
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-store-msix
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fast-forward store-msix to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git push origin "HEAD:refs/heads/store-msix"

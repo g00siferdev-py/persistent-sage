@@ -38,16 +38,18 @@ npm install
 
 Use this path when a local Windows machine does not have enough RAM to build the app.
 
-1. Push the `store-msix` branch.
-2. The **Build MSIX** workflow runs automatically after the push.
+**Branch policy:** develop and release on `main` only. The `store-msix` branch is an automatic mirror of `main` (see `.github/workflows/sync-store-msix.yml`) so Store and GitHub-release builds always share the same commit.
+
+1. Push to `main` (merge your PR, or push a patch branch into `main`).
+2. **Build MSIX** runs on that push; **Sync store-msix branch** updates `store-msix` to the same commit.
 3. Download the `persistent-sage-msix-<sha>` artifact when the workflow completes.
 4. Upload `PersistentSage_0.2.8.0_x64.msix` to Partner Center.
 
-If the workflow is later merged into `main`, it can also be started manually from **Actions → Build MSIX → Run workflow**.
+You can also start a build manually from **Actions → Build MSIX → Run workflow** (uses the selected branch; prefer `main`).
 
 ### Local Windows build
 
-From the repository root on the `store-msix` branch:
+From the repository root on `main` (or `store-msix` after sync — same tree):
 
 ```powershell
 npm run msix:pack

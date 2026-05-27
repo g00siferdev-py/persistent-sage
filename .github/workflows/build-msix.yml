@@ -1,7 +1,7 @@
 # Build a Microsoft Store MSIX package on GitHub-hosted Windows runners.
 #
-# This workflow is intentionally manual and branch-friendly. It does not publish
-# a GitHub Release or affect the normal NSIS updater release workflow.
+# Runs on every push to `main` (same code as `store-msix`, kept in sync by
+# sync-store-msix.yml). Does not publish a GitHub Release or affect the NSIS updater.
 
 name: Build MSIX
 
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - store-msix
+      - main
 
 concurrency:
   group: build-msix-${{ github.ref }}
