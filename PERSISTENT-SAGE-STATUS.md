@@ -1,6 +1,6 @@
 # Persistent Sage — project status
 
-**Version:** 0.2.0-beta.8 (**open beta**)
+**Version:** 0.2.0-beta.9 (**open beta**)
 **Repository:** [g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage)  
 **Maintainer:** [g00siferdev-py](https://github.com/g00siferdev-py)
 
@@ -105,4 +105,4 @@ npm run tauri dev   # manual smoke test
 
 ---
 
-*Last updated for **0.2.0-beta.8** — open beta feedback flow, issue templates, privacy policy, and signing/update documentation.*
+*Last updated for **0.2.0-beta.9** — Pulse improvements, What's new dialog, provider fixes, and Microsoft Store MSIX workflow.*

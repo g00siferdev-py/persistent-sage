@@ -14,7 +14,7 @@ These values come from Partner Center and must match `Package.appxmanifest`.
 | `Package/Identity/Publisher` | `CN=68E2BD37-83E1-49F0-9D7C-8CE0D54A4A45` |
 | `Package/Properties/PublisherDisplayName` | `g00sifer Development Lab` |
 
-MSIX requires numeric package versions. The app release `0.2.0-beta.8` maps to MSIX version `0.2.8.0`.
+MSIX requires numeric package versions. The app release `0.2.0-beta.9` maps to MSIX version `0.2.9.0`.
 
 ## Prerequisites
 
@@ -43,7 +43,7 @@ Use this path when a local Windows machine does not have enough RAM to build the
 1. Push to `main` (merge your PR, or push a patch branch into `main`).
 2. **Build MSIX** runs on that push; **Sync store-msix branch** updates `store-msix` to the same commit.
 3. Download the `persistent-sage-msix-<sha>` artifact when the workflow completes.
-4. Upload `PersistentSage_0.2.8.0_x64.msix` to Partner Center.
+4. Upload `PersistentSage_0.2.9.0_x64.msix` to Partner Center.
 
 You can also start a build manually from **Actions → Build MSIX → Run workflow** (uses the selected branch; prefer `main`).
 
@@ -63,7 +63,7 @@ The script:
 4. Stages `persistent-sage.exe` in `msix-dist/`.
 5. Runs `winapp pack ./msix-dist` with an explicit MSIX output filename.
 
-The generated `PersistentSage_0.2.8.0_x64.msix` should appear in the repository root.
+The generated `PersistentSage_0.2.9.0_x64.msix` should appear in the repository root.
 
 ## Local Test Install
 
@@ -73,7 +73,7 @@ For local testing, MSIX packages need a trusted development certificate.
 winapp cert generate --if-exists skip
 winapp cert install .\devcert.pfx
 npm run msix:pack
-Add-AppxPackage .\PersistentSage_0.2.8.0_x64.msix
+Add-AppxPackage .\PersistentSage_0.2.9.0_x64.msix
 ```
 
 ## Submit to Microsoft Store

@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.2.0-beta.9] — 2026-05-27
+
+### Added
+
+- **Pulse improvements** — background check-ins run without posting your instructions in chat; replies are saved with a `Pulse Response : [timestamp]` prefix. **Send Pulse now** in Settings runs a check-in immediately.
+- **What's new dialog** — one-time highlights after the app version changes (e.g. after an in-app update).
+
+### Changed
+
+- **Ollama Cloud models** — separate model selection from local Ollama in Settings.
+- **Privacy policy** — expanded `PRIVACY.md` for Microsoft Store compliance.
+- **Release workflow** — `main` is the single development branch; MSIX builds on `main` pushes and `store-msix` stays mirrored automatically.
+
+### Fixed
+
+- **OpenAI API key save** — keys for OpenAI no longer overwrite the Ollama slot in settings.
+- **Pulse IPC** — `pulse_run_now` is allowed through the Tauri invoke allowlist.
+
+---
+
 ## [0.2.0-beta.8] — 2026-05-25
 
 ### Fixed

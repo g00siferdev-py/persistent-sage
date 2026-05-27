@@ -6,8 +6,8 @@ export type WhatsNewContent = {
 
 /** Release notes shown once after the app version changes (e.g. in-app updater restart). */
 const RELEASES: Record<string, WhatsNewContent> = {
-  "0.2.0-beta.8": {
-    version: "0.2.0-beta.8",
+  "0.2.0-beta.9": {
+    version: "0.2.0-beta.9",
     title: "What's new!",
     highlights: [
       "Pulse — scheduled background check-ins using your open chat thread, with tools when enabled in Settings.",

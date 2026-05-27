@@ -11,7 +11,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
 **Repository:** [github.com/g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage)  
-**Status:** **Open beta** (`0.2.0-beta.8`) — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues)
+**Status:** **Open beta** (`0.2.0-beta.9`) — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues)
 
 ---
 
@@ -166,7 +166,7 @@ More: **[docs/INSTALL.md § Troubleshooting](./docs/INSTALL.md#10-troubleshootin
 
 ## Project status
 
-Persistent Sage **0.2.0-beta.8** is in **open beta**: core chat, memory, personalities, Pulse, vision, agent tools, in-app updater support, and GitHub-based feedback are usable; migration UX and hardening continue. See [PERSISTENT-SAGE-STATUS.md](./PERSISTENT-SAGE-STATUS.md) and [CHANGELOG.md](./CHANGELOG.md).
+Persistent Sage **0.2.0-beta.9** is in **open beta**: core chat, memory, personalities, Pulse, vision, agent tools, in-app updater support, and GitHub-based feedback are usable; migration UX and hardening continue. See [PERSISTENT-SAGE-STATUS.md](./PERSISTENT-SAGE-STATUS.md) and [CHANGELOG.md](./CHANGELOG.md).
 
 <img width="261" height="389" alt="IMG_2515" src="https://github.com/user-attachments/assets/7f7731f4-5c19-44b4-b86f-bc7c101df250" />
 
