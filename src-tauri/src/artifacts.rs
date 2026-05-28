@@ -171,7 +171,20 @@ fn vega_spec_has_remote_data(value: &Value) -> bool {
     match value {
         Value::Object(map) => {
             for (k, v) in map {
-                if k == "url" || k == "data" && v.get("url").is_some() {
+                // Disallow remote dataset loading (data.url), but allow schema URLs and other metadata.
+                if k == "data" {
+                    if v.get("url").is_some() {
+                        return true;
+                    }
+                    // If data is an array of named datasets, ensure none contain url.
+                    if let Some(arr) = v.as_array() {
+                        if arr.iter().any(|x| x.get("url").is_some()) {
+                            return true;
+                        }
+                    }
+                }
+                // Also disallow any direct url fields on transforms/marks, etc.
+                if k == "url" {
                     return true;
                 }
                 if vega_spec_has_remote_data(v) {
@@ -181,7 +194,6 @@ fn vega_spec_has_remote_data(value: &Value) -> bool {
             false
         }
         Value::Array(arr) => arr.iter().any(vega_spec_has_remote_data),
-        Value::String(s) if s.starts_with("http://") || s.starts_with("https://") => true,
         _ => false,
     }
 }
