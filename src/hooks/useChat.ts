@@ -565,12 +565,9 @@ export function useChat() {
           imageMime: image?.mime ?? null,
         });
 
-        const assistantId = `local-a-${Date.now()}`;
-        setMessages((prev) => [
-          ...prev,
-          { id: assistantId, role: "assistant", content: result.reply },
-        ]);
-
+        // Reload from SQLite so artifacts (artifactJson) render consistently.
+        // This also avoids showing raw ```artifact blocks in the optimistic message.
+        await loadActiveThread(convId);
         void refreshSidebarContext(convId);
         await refreshConversations();
         await refreshVisionSupported();
