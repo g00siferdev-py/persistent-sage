@@ -24,7 +24,10 @@
     "@tauri-apps/plugin-updater": "^2",
     "lucide-react": "^1.14.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "vega": "^6.2.0",
+    "vega-embed": "^7.1.0",
+    "vega-lite": "^6.4.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.0",

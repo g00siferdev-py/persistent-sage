@@ -44,4 +44,8 @@ commands.allow = [
   "memory_list_anchors",
   "memory_list_projects",
   "pulse_run_now",
+  "open_path",
+  "browser_detect_chromium",
+  "recipe_list",
+  "recipe_run",
 ]

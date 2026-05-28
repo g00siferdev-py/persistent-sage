@@ -15,6 +15,9 @@ import type { ChatMessage } from "@/types/chat";
 import type { StreamAssistantState } from "@/hooks/useChat";
 import { readImageFileAsDataUrl } from "@/lib/chatAttachments";
 import { settingsLayoutLabel, type SettingsLayoutMode } from "@/lib/settingsLayout";
+import { artifactBodyString, parseArtifactJson } from "@/lib/artifacts";
+import vegaEmbed from "vega-embed";
+import { invoke } from "@tauri-apps/api/core";
 
 export type CompanionHeaderOption = {
   id: string;
@@ -39,6 +42,8 @@ type Props = {
   sending: boolean;
   streamAssistant: StreamAssistantState;
   error: string | null;
+  recipes: { id: string; name: string; description?: string }[];
+  onRunRecipe: (id: string) => void;
   settingsLayoutMode: SettingsLayoutMode;
   onCycleSettingsLayout: () => void;
   onSendMessage: (text: string, image?: PendingComposerImage | null) => void;
@@ -64,6 +69,120 @@ function messageImageSrc(m: ChatMessage): string | null {
   }
 }
 
+function truncateArtifactCaption(s: string, max: number): string {
+  const t = s.trim().replace(/\s+/g, " ");
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1)}…`;
+}
+
+function sanitizeArtifactHtml(raw: string): string {
+  // Conservative, dependency-free sanitizer:
+  // - removes script blocks
+  // - removes inline event handlers
+  // - strips remote src/href
+  let s = raw;
+  s = s.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "");
+  s = s.replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, "");
+  s = s.replace(/\s(href|src)\s*=\s*(['"])\s*https?:\/\/.*?\2/gi, "");
+  return s;
+}
+
+function artifactIframeSrcDoc(title: string, html: string): string {
+  const safe = sanitizeArtifactHtml(html);
+  // No scripts, no external resources, no network.
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title.replace(/</g, "&lt;")}</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { margin: 0; padding: 12px; font: 13px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif; }
+      h1,h2,h3 { margin: 0.6rem 0 0.4rem; }
+      p { margin: 0.4rem 0; }
+      pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace; }
+      pre { white-space: pre-wrap; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid rgba(100,116,139,0.35); padding: 6px 8px; vertical-align: top; }
+    </style>
+  </head>
+  <body>${safe}</body>
+</html>`;
+}
+
+function VegaLiteArtifact({ spec }: { spec: unknown }) {
+  const elRef = useRef<HTMLDivElement | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    const el = elRef.current;
+    if (!el) return;
+    let disposed = false;
+    setErr(null);
+    el.replaceChildren();
+    void (async () => {
+      try {
+        // vegaEmbed will render SVG by default; keep actions off.
+        await vegaEmbed(el, spec as any, { actions: false, renderer: "svg" });
+      } catch (e) {
+        if (!disposed) setErr(String(e));
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [spec]);
+
+  if (err) {
+    return (
+      <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-200">
+        Could not render chart: {err}
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-950/30">
+      <div ref={elRef} className="w-full overflow-x-auto p-2" />
+    </div>
+  );
+}
+
+function ArtifactCitations({
+  citations,
+}: {
+  citations: { path: string; lineStart?: number; lineEnd?: number; label?: string }[];
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {citations.slice(0, 8).map((c) => {
+        const range =
+          typeof c.lineStart === "number" && typeof c.lineEnd === "number"
+            ? `:${c.lineStart}-${c.lineEnd}`
+            : typeof c.lineStart === "number"
+              ? `:${c.lineStart}`
+              : "";
+        const text = c.label?.trim() || `${c.path}${range}`;
+        return (
+          <button
+            key={`${c.path}${range}${text}`}
+            type="button"
+            onClick={() => {
+              void invoke("open_path", { path: c.path });
+            }}
+            className="rounded-full border border-slate-200 dark:border-slate-800/80 bg-white/70 dark:bg-slate-950/30 px-2.5 py-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900"
+            title={c.path}
+          >
+            {text}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ChatMain({
   title,
   subtitle,
@@ -73,6 +192,8 @@ export function ChatMain({
   sending,
   streamAssistant,
   error,
+  recipes,
+  onRunRecipe,
   settingsLayoutMode,
   onCycleSettingsLayout,
   onSendMessage,
@@ -116,6 +237,8 @@ export function ChatMain({
     setDraft("");
     clearPendingImage();
   };
+
+  const canRunRecipe = hasActiveConversation && !threadLoading && !sending;
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -285,7 +408,84 @@ export function ChatMain({
                     className="mb-2 max-h-64 max-w-full rounded-lg border border-slate-300 dark:border-slate-700/80 object-contain"
                   />
                 ) : null}
-                {m.content ? (
+                {m.role === "assistant" && m.artifactJson ? (
+                  (() => {
+                    const artifact = parseArtifactJson(m.artifactJson);
+                    if (!artifact) {
+                      return m.content ? <p className="whitespace-pre-wrap">{m.content}</p> : null;
+                    }
+                    if (artifact.type === "vegaLite") {
+                      return (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                              {artifact.title}
+                            </p>
+                            {artifact.caption ? (
+                              <p className="text-[11px] text-slate-500">
+                                {truncateArtifactCaption(artifact.caption, 80)}
+                              </p>
+                            ) : null}
+                          </div>
+                          <VegaLiteArtifact spec={artifact.body} />
+                          {artifact.citations?.length ? (
+                            <ArtifactCitations citations={artifact.citations} />
+                          ) : null}
+                          {m.content ? <p className="whitespace-pre-wrap">{m.content}</p> : null}
+                        </div>
+                      );
+                    }
+                    if (artifact.type !== "html") {
+                      return (
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                            Artifact: {artifact.title}
+                          </p>
+                          <pre className="whitespace-pre-wrap rounded-lg border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-950/30 p-2 text-xs">
+                            {artifactBodyString(artifact.body)}
+                          </pre>
+                          {artifact.citations?.length ? (
+                            <ArtifactCitations citations={artifact.citations} />
+                          ) : null}
+                          {m.content ? <p className="whitespace-pre-wrap">{m.content}</p> : null}
+                        </div>
+                      );
+                    }
+
+                    const html =
+                      typeof artifact.body === "string"
+                        ? artifact.body
+                        : artifactBodyString(artifact.body);
+
+                    return (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                            {artifact.title}
+                          </p>
+                          {artifact.caption ? (
+                            <p className="text-[11px] text-slate-500">
+                              {truncateArtifactCaption(artifact.caption, 80)}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-950/30">
+                          <iframe
+                            title={artifact.title}
+                            sandbox=""
+                            referrerPolicy="no-referrer"
+                            className="h-80 w-full"
+                            srcDoc={artifactIframeSrcDoc(artifact.title, html)}
+                          />
+                        </div>
+                        {artifact.citations?.length ? (
+                          <ArtifactCitations citations={artifact.citations} />
+                        ) : null}
+                        {m.content ? <p className="whitespace-pre-wrap">{m.content}</p> : null}
+                      </div>
+                    );
+                  })()
+                ) : m.content ? (
                   <p className="whitespace-pre-wrap">{m.content}</p>
                 ) : null}
               </article>
@@ -315,6 +515,23 @@ export function ChatMain({
           onSubmit={handleSubmit}
           className="mx-auto flex max-w-3xl flex-col gap-2"
         >
+          {recipes.length ? (
+            <div className="flex flex-wrap gap-2">
+              {recipes.slice(0, 4).map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  disabled={!canRunRecipe}
+                  onClick={() => onRunRecipe(r.id)}
+                  title={r.description || r.name}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-slate-800/80 bg-white/70 dark:bg-slate-950/30 px-3 py-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Sparkles className="size-3 text-indigo-400" aria-hidden />
+                  {r.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {pendingImage ? (
             <div className="relative inline-flex w-fit max-w-full items-start gap-2 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-900/60 p-2">
               <img

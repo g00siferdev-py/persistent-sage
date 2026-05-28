@@ -177,6 +177,8 @@ export function ChatLayout() {
     sendMessage,
     visionSupported,
     refreshVisionSupported,
+    recipes,
+    runRecipe,
     applyActivePersonality,
     activePersonalityId,
     activeCompanionLabel,
@@ -267,6 +269,8 @@ export function ChatLayout() {
           sending={sending}
           streamAssistant={streamAssistant}
           error={error}
+          recipes={recipes}
+          onRunRecipe={(id) => void runRecipe(id)}
           settingsLayoutMode={settingsLayoutMode}
           onCycleSettingsLayout={() => cycleSettingsLayout()}
           onSendMessage={(text, image) =>

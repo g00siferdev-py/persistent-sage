@@ -9,6 +9,7 @@
 //! `main.rs` delegates here so the same setup runs everywhere.
 
 mod agent_tools;
+mod artifacts;
 mod attachments;
 mod browser_fetch;
 mod chat;
@@ -21,6 +22,7 @@ mod personality;
 mod personality_tools;
 mod provider;
 mod pulse;
+mod recipes;
 mod settings;
 
 use std::path::PathBuf;
@@ -169,6 +171,47 @@ fn app_data_paths() -> Result<AppDataPaths, String> {
 fn reveal_data_directory() -> Result<(), String> {
     let dir = memory::default_data_dir().map_err(|e| e.to_string())?;
     opener::open(&dir).map_err(|e| format!("open data folder: {e}"))
+}
+
+/// Open a workspace-relative or absolute file path in the system default app.
+#[tauri::command]
+fn open_path(path: String, state: State<'_, NovaState>) -> Result<(), String> {
+    let raw = path.trim();
+    if raw.is_empty() {
+        return Err("path is empty".into());
+    }
+    let p = std::path::Path::new(raw);
+    let abs = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        let stripped = raw.strip_prefix("workspace/").unwrap_or(raw);
+        state.workspace_root.join(stripped)
+    };
+    if !abs.exists() {
+        return Err(format!("path not found: {}", abs.display()));
+    }
+    opener::open(&abs).map_err(|e| format!("open path: {e}"))
+}
+
+#[tauri::command]
+fn browser_detect_chromium() -> Result<Option<String>, String> {
+    Ok(crate::browser_fetch::find_chrome_executable()
+        .map(|p| p.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+fn recipe_list(state: State<'_, NovaState>) -> Result<Vec<recipes::Recipe>, String> {
+    recipes::load_recipes(&state.data_directory)
+}
+
+#[tauri::command]
+async fn recipe_run(
+    app: tauri::AppHandle,
+    state: State<'_, NovaState>,
+    recipe_id: String,
+    conversation_id: String,
+) -> Result<recipes::RecipeRunResult, String> {
+    Ok(recipes::run_recipe(&app, &state, &recipe_id, &conversation_id).await)
 }
 
 #[tauri::command]
@@ -437,7 +480,7 @@ fn memory_store_message(
 ) -> Result<(), String> {
     state
         .memory
-        .store_message(&conversation_id, role, &content, None, None)
+        .store_message(&conversation_id, role, &content, None, None, None)
         .map_err(|e| e.to_string())
 }
 
@@ -736,6 +779,10 @@ pub fn run() {
             memory_list_anchors,
             memory_list_projects,
             pulse::pulse_run_now,
+            open_path,
+            browser_detect_chromium,
+            recipe_list,
+            recipe_run,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Persistent Sage (Tauri application)");

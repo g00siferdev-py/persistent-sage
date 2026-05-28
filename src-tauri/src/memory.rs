@@ -105,6 +105,9 @@ pub struct StoredMessage {
     /// Absolute path for the webview (`convertFileSrc`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_display_path: Option<String>,
+    /// Serialized [`crate::artifacts::ChatArtifact`] JSON when the assistant returned an artifact block.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_json: Option<String>,
     /// Set when a row is returned from cross-thread recall (`memory_recall` with global scope).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation_id: Option<String>,
@@ -199,6 +202,7 @@ pub trait ConversationMemory: Send + Sync {
         content: &str,
         image_attachment: Option<&str>,
         image_mime: Option<&str>,
+        artifact_json: Option<&str>,
     ) -> Result<(), MemoryError>;
 
     fn get_recent(
@@ -324,7 +328,7 @@ pub trait ConversationMemory: Send + Sync {
 
 // --- Schema / migration -------------------------------------------------------
 
-const SCHEMA_VERSION: i32 = 6;
+const SCHEMA_VERSION: i32 = 7;
 
 /// SQLite value for legacy rows and the built-in profile id in `personality.json`.
 pub const DEFAULT_PERSONALITY_ID: &str = "default";
@@ -411,8 +415,8 @@ fn migrate_schema(conn: &Connection) -> Result<(), MemoryError> {
     let mut ver: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
 
     if ver >= SCHEMA_VERSION {
-        // Idempotent — added after v6 shipped; must run on every open for existing DBs.
         migrate_message_image_columns(conn)?;
+        migrate_message_artifact_column(conn)?;
         ensure_seed_conversation(conn)?;
         return Ok(());
     }
@@ -453,8 +457,16 @@ fn migrate_schema(conn: &Connection) -> Result<(), MemoryError> {
         migrate_personality_isolation(conn)?;
     }
     migrate_message_image_columns(conn)?;
+    migrate_message_artifact_column(conn)?;
     ensure_seed_conversation(conn)?;
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    Ok(())
+}
+
+fn migrate_message_artifact_column(conn: &Connection) -> Result<(), MemoryError> {
+    if table_exists(conn, "messages")? && !column_exists(conn, "messages", "artifact_json")? {
+        conn.execute("ALTER TABLE messages ADD COLUMN artifact_json TEXT", [])?;
+    }
     Ok(())
 }
 
@@ -1541,6 +1553,7 @@ impl MemoryAnchor {
                 image_attachment: None,
                 image_mime: None,
                 image_display_path: None,
+                artifact_json: None,
                 conversation_id: None,
                 conversation_title: None,
             });
@@ -1624,6 +1637,7 @@ impl MemoryAnchor {
                 image_attachment: None,
                 image_mime: None,
                 image_display_path: None,
+                artifact_json: None,
                 conversation_id: row.get(4)?,
                 conversation_title: row.get(5)?,
             });
@@ -1882,20 +1896,22 @@ impl ConversationMemory for MemoryAnchor {
         content: &str,
         image_attachment: Option<&str>,
         image_mime: Option<&str>,
+        artifact_json: Option<&str>,
     ) -> Result<(), MemoryError> {
         self.assert_conversation_exists(conversation_id)?;
         let pid = self.active_personality()?;
         let conn = self.conn()?;
         conn.execute(
-            "INSERT INTO messages (conversation_id, role, content, personality_id, image_attachment, image_mime)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO messages (conversation_id, role, content, personality_id, image_attachment, image_mime, artifact_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 conversation_id,
                 role.as_db_str(),
                 content,
                 pid,
                 image_attachment,
-                image_mime
+                image_mime,
+                artifact_json
             ],
         )?;
         conn.execute(
@@ -1915,7 +1931,7 @@ impl ConversationMemory for MemoryAnchor {
         let limit_i: i64 = limit.try_into().unwrap_or(i64::MAX);
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, role, content, created_at, image_attachment, image_mime FROM messages
+            "SELECT id, role, content, created_at, image_attachment, image_mime, artifact_json FROM messages
              WHERE conversation_id = ?1 AND personality_id = ?2
              ORDER BY id DESC LIMIT ?3",
         )?;
@@ -1931,6 +1947,7 @@ impl ConversationMemory for MemoryAnchor {
                 image_attachment: row.get(4)?,
                 image_mime: row.get(5)?,
                 image_display_path: None,
+                artifact_json: row.get(6)?,
                 conversation_id: None,
                 conversation_title: None,
             };
@@ -2487,6 +2504,7 @@ mod anchor_storage_tests {
             &conv,
             MessageRole::User,
             "I am colorblind and prefer high-contrast themes for all UI work.",
+            None,
             None,
             None,
         )

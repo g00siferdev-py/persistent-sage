@@ -123,6 +123,13 @@ pub struct SettingsFile {
     /// App version for which the user dismissed the “What’s new” dialog (empty = never shown).
     #[serde(default)]
     pub whats_new_seen_version: String,
+    /// When true, assistant replies may include renderable chat artifacts (OpenSage).
+    #[serde(default = "default_artifacts_enabled")]
+    pub artifacts_enabled: bool,
+}
+
+fn default_artifacts_enabled() -> bool {
+    true
 }
 
 fn default_memory_llm_extraction() -> bool {
@@ -240,6 +247,7 @@ impl Default for SettingsFile {
             encrypted_api_keys: HashMap::new(),
             onboarding_completed: false,
             whats_new_seen_version: String::new(),
+            artifacts_enabled: default_artifacts_enabled(),
         }
     }
 }
@@ -283,6 +291,7 @@ pub struct SettingsView {
     pub has_xai_api_key: bool,
     pub onboarding_completed: bool,
     pub whats_new_seen_version: String,
+    pub artifacts_enabled: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -320,6 +329,7 @@ pub struct SettingsUpdatePayload {
     pub embedding_model: Option<String>,
     pub onboarding_completed: Option<bool>,
     pub whats_new_seen_version: Option<String>,
+    pub artifacts_enabled: Option<bool>,
 }
 
 // --- Crypto ------------------------------------------------------------------
@@ -682,7 +692,15 @@ impl SettingsManager {
             ),
             onboarding_completed: inner.onboarding_completed,
             whats_new_seen_version: inner.whats_new_seen_version.clone(),
+            artifacts_enabled: inner.artifacts_enabled,
         })
+    }
+
+    pub fn artifacts_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.artifacts_enabled)
+            .unwrap_or(true)
     }
 
     pub fn temperature(&self) -> f32 {
@@ -1021,6 +1039,9 @@ impl SettingsManager {
         }
         if let Some(s) = patch.whats_new_seen_version {
             inner.whats_new_seen_version = s;
+        }
+        if let Some(b) = patch.artifacts_enabled {
+            inner.artifacts_enabled = b;
         }
         inner.version = SETTINGS_VERSION;
         drop(inner);

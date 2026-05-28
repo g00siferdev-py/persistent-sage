@@ -35,6 +35,7 @@ export interface StoredMessage {
   imageAttachment?: string;
   imageMime?: string;
   imageDisplayPath?: string;
+  artifactJson?: string;
   /** Present when returned from cross-thread `memory_recall`. */
   conversationId?: string;
   conversationTitle?: string;
@@ -54,6 +55,7 @@ export interface ChatMessage {
   /** Local file URL from `convertFileSrc` when the message has an image attachment. */
   imageDisplayPath?: string;
   imageMime?: string;
+  artifactJson?: string;
 }
 
 /** Result of `chat_send_message` (camelCase from Rust). */
@@ -77,5 +79,6 @@ export function storedToChatMessage(m: StoredMessage): ChatMessage {
     content: m.content,
     imageDisplayPath: m.imageDisplayPath,
     imageMime: m.imageMime,
+    artifactJson: m.artifactJson,
   };
 }

@@ -189,6 +189,7 @@ type SettingsView = {
   hasGeminiApiKey: boolean;
   hasXaiApiKey: boolean;
   onboardingCompleted: boolean;
+  artifactsEnabled: boolean;
 };
 
 type SettingsPatch = {
@@ -221,6 +222,7 @@ type SettingsPatch = {
   memorySemanticEnabled?: boolean;
   embeddingModel?: string;
   onboardingCompleted?: boolean;
+  artifactsEnabled?: boolean;
 };
 
 const MEMORY_LLM_INFO = (
@@ -1666,6 +1668,34 @@ export function SettingsPanel({
                 ])}
               </p>
             </div>
+            <SettingsToggleCard
+              id="artifacts-enabled"
+              title="Enable chat artifacts (experimental)"
+              compact
+              info={
+                <>
+                  Allows OpenSage to render structured assistant outputs (HTML cards and Vega-Lite charts) inside the chat window.
+                  Artifacts are rendered locally with no JavaScript execution.
+                </>
+              }
+              checked={settings?.artifactsEnabled ?? true}
+              onChange={(artifactsEnabled) => {
+                setSettings((s) => (s ? { ...s, artifactsEnabled } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { artifactsEnabled },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+            />
             <SettingsToggleCard
               id="agent-web-tools"
               title="Allow web tools for the assistant"

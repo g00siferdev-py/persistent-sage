@@ -65,6 +65,9 @@ export function useChat() {
   /** When true, the sidebar shows no threads and the main pane has no selection — SQLite is unchanged. */
   const [threadListHiddenFromSidebar, setThreadListHiddenFromSidebar] = useState(false);
   const [visionSupported, setVisionSupported] = useState(false);
+  const [recipes, setRecipes] = useState<
+    { id: string; name: string; description?: string; requiresBrowserFetch?: boolean }[]
+  >([]);
 
   const loadSeq = useRef(0);
   const activeConversationIdRef = useRef<string | null>(null);
@@ -85,6 +88,17 @@ export function useChat() {
       setVisionSupported(ok);
     } catch {
       setVisionSupported(false);
+    }
+  }, []);
+
+  const refreshRecipes = useCallback(async () => {
+    try {
+      const list = await invoke<
+        { id: string; name: string; description?: string; requiresBrowserFetch?: boolean }[]
+      >("recipe_list");
+      setRecipes(list ?? []);
+    } catch {
+      setRecipes([]);
     }
   }, []);
 
@@ -304,6 +318,7 @@ export function useChat() {
         setActivePersonalityId(pid);
         const list = await refreshConversations();
         await refreshVisionSupported();
+        await refreshRecipes();
         if (cancelled) return;
         setListLoading(false);
         if (list.length === 0) {
@@ -327,7 +342,7 @@ export function useChat() {
     return () => {
       cancelled = true;
     };
-  }, [refreshConversations, refreshVisionSupported]);
+  }, [refreshConversations, refreshVisionSupported, refreshRecipes]);
 
   useEffect(() => {
     if (!activeConversationId) {
@@ -582,6 +597,27 @@ export function useChat() {
     ],
   );
 
+  const runRecipe = useCallback(
+    async (recipeId: string) => {
+      const convId = activeConversationIdRef.current;
+      if (!convId) return;
+      if (sending) return;
+      try {
+        setSending(true);
+        setError(null);
+        await invoke("recipe_run", { recipeId, conversationId: convId });
+        await loadActiveThread(convId);
+        await refreshConversations();
+      } catch (e) {
+        setError(String(e));
+        await loadActiveThread(convId);
+      } finally {
+        setSending(false);
+      }
+    },
+    [loadActiveThread, refreshConversations, sending],
+  );
+
   const sidebarConversations = threadListHiddenFromSidebar ? [] : conversations;
 
   return {
@@ -612,6 +648,9 @@ export function useChat() {
     sendMessage,
     visionSupported,
     refreshVisionSupported,
+    recipes,
+    refreshRecipes,
+    runRecipe,
     refreshConversations,
     applyActivePersonality,
   };

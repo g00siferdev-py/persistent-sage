@@ -856,19 +856,23 @@ async fn run_chat_completion(
     }
 
     if options.persist_assistant_message {
-        let stored = if let Some(prefix) = &options.assistant_reply_prefix {
-            format!("{prefix}{reply}")
+        let (mut body, artifact_json) = if state.settings.artifacts_enabled() {
+            crate::artifacts::split_assistant_reply(&reply)
         } else {
-            reply.clone()
+            (reply.clone(), None)
         };
+        if let Some(prefix) = &options.assistant_reply_prefix {
+            body = format!("{prefix}{body}");
+        }
         state
             .memory
             .store_message(
                 conversation_id,
                 MessageRole::Assistant,
-                &stored,
+                &body,
                 None,
                 None,
+                artifact_json.as_deref(),
             )
             .map_err(|e| e.to_string())?;
     }
@@ -969,6 +973,7 @@ pub async fn execute_chat_turn(
                         &user_text,
                         img_rel.as_deref(),
                         img_mime.as_deref(),
+                        None,
                     )
                     .map_err(|e| e.to_string())?;
             }
@@ -1039,7 +1044,7 @@ pub async fn execute_chat_turn(
     }
 
     let persona = state.personality.system_prompt_prefix();
-    let system_content = {
+    let mut system_content = {
         let p = persona.trim();
         if p.is_empty() {
             briefing.clone()
@@ -1047,6 +1052,9 @@ pub async fn execute_chat_turn(
             format!("{p}\n\n---\n\n# Memory & session context\n\n{briefing}")
         }
     };
+    if state.settings.artifacts_enabled() {
+        system_content.push_str(crate::artifacts::ARTIFACT_SYSTEM_APPENDIX);
+    }
 
     let provider_id = engine.provider_id().to_string();
     let data_dir = state.data_directory.as_path();
