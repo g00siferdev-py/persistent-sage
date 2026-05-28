@@ -557,7 +557,7 @@ export function useChat() {
           conversationId: convId,
           hasImage: Boolean(image),
         });
-        const result = await invoke<ChatSendResult>("chat_send_message", {
+        await invoke<ChatSendResult>("chat_send_message", {
           conversationId: convId,
           message: trimmed,
           personalityId: personalityIdForSend,
