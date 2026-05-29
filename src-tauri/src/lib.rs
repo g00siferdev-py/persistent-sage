@@ -216,8 +216,8 @@ async fn recipe_run(
 }
 
 #[tauri::command]
-fn project_list(state: State<'_, NovaState>) -> Result<Vec<projects::ProjectMeta>, String> {
-    projects::list_projects(&state.workspace_root)
+fn project_list(state: State<'_, NovaState>) -> Result<projects::ProjectListView, String> {
+    projects::list_projects_view(&state.workspace_root)
 }
 
 #[derive(serde::Serialize)]

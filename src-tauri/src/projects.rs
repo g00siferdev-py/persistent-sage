@@ -149,8 +149,24 @@ For budgets, plans, audits, and reports: **proactively** use a polished **`html`
 
 "#;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectListView {
+    pub projects: Vec<ProjectMeta>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_project_id: Option<String>,
+}
+
 pub fn list_projects(workspace_root: &Path) -> Result<Vec<ProjectMeta>, String> {
     Ok(load_index(workspace_root)?.projects)
+}
+
+pub fn list_projects_view(workspace_root: &Path) -> Result<ProjectListView, String> {
+    let index = load_index(workspace_root)?;
+    Ok(ProjectListView {
+        projects: index.projects,
+        active_project_id: index.active_project_id,
+    })
 }
 
 pub fn get_project(workspace_root: &Path, id: &str) -> Result<Option<ProjectMeta>, String> {

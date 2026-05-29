@@ -3,6 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   Brain,
   ChevronDown,
+  FolderOpen,
   ImagePlus,
   Loader2,
   PanelRightOpen,
@@ -50,6 +51,10 @@ type Props = {
     projectId: string | undefined,
     values: Record<string, unknown>,
   ) => void;
+  openSageProjects: { id: string; title: string; kind?: string }[];
+  activeOpenSageProjectId: string | null;
+  onContinueProject: (id: string, title: string) => void;
+  onOpenProjectWorkspace: () => void;
   settingsLayoutMode: SettingsLayoutMode;
   onCycleSettingsLayout: () => void;
   onSendMessage: (text: string, image?: PendingComposerImage | null) => void;
@@ -201,6 +206,10 @@ export function ChatMain({
   recipes,
   onRunRecipe,
   onSubmitArtifactForm,
+  openSageProjects,
+  activeOpenSageProjectId,
+  onContinueProject,
+  onOpenProjectWorkspace,
   settingsLayoutMode,
   onCycleSettingsLayout,
   onSendMessage,
@@ -540,6 +549,37 @@ export function ChatMain({
           onSubmit={handleSubmit}
           className="mx-auto flex max-w-3xl flex-col gap-2"
         >
+          {openSageProjects.length ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                Projects
+              </span>
+              {openSageProjects.slice(0, 6).map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={!canRunRecipe}
+                  onClick={() => onContinueProject(p.id, p.title)}
+                  title={`Continue ${p.title}`}
+                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${
+                    p.id === activeOpenSageProjectId
+                      ? "border-indigo-500/50 bg-indigo-500/15 text-indigo-800 dark:text-indigo-200"
+                      : "border-slate-200 dark:border-slate-800/80 bg-white/70 dark:bg-slate-950/30 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900"
+                  }`}
+                >
+                  {p.title}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={onOpenProjectWorkspace}
+                className="inline-flex items-center gap-1 rounded-full border border-slate-200 dark:border-slate-800/80 px-2.5 py-1 text-[10px] font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-900"
+              >
+                <FolderOpen className="size-3" aria-hidden />
+                Workspace
+              </button>
+            </div>
+          ) : null}
           {recipes.length ? (
             <div className="flex flex-wrap gap-2">
               {recipes.slice(0, 4).map((r) => (
