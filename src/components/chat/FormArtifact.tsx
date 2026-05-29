@@ -167,10 +167,8 @@ export function FormArtifact({
     );
   }
 
-  const customLabel = parsed.submitLabel?.trim();
-  const sendLabel =
-    customLabel && !/send to sage/i.test(customLabel) ? customLabel : defaultSendLabel;
-  const buttonLabel = submittedFlash ? "Submitted" : sendLabel;
+  // Always use the active companion name — models often hardcode "Sage" in submitLabel.
+  const buttonLabel = submittedFlash ? "Submitted" : defaultSendLabel;
 
   const handleSubmit = () => {
     for (const f of parsed.fields) {

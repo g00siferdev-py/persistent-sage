@@ -1289,7 +1289,7 @@ pub async fn run_builtin_tool(
         }
         "project_list" | "project_create" | "project_read" | "project_write" | "project_set_active" => {
             let root = workspace_root.ok_or_else(|| tool_err("project tools are not available"))?;
-            crate::projects::run_project_tool(root, n, arguments_json, None).await
+            crate::projects::run_project_tool(root, n, arguments_json, memory_tools, None).await
         }
         "memory_search" => {
             let (settings, memory) = memory_tools

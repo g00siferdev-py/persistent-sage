@@ -322,6 +322,9 @@ pub trait ConversationMemory: Send + Sync {
     /// Scope subsequent list/create/recall operations to this companion profile id (`default` if empty).
     fn set_active_personality(&self, personality_id: &str);
 
+    /// Upsert a global project anchor visible to all companion profiles.
+    fn upsert_project_anchor(&self, project_id: &str, title: &str) -> Result<String, MemoryError>;
+
     /// Deletes all conversations, messages, anchors, projects, and preferences; re-seeds the default thread.
     fn wipe_all_user_data(&self) -> Result<(), MemoryError>;
 }
@@ -332,6 +335,23 @@ const SCHEMA_VERSION: i32 = 7;
 
 /// SQLite value for legacy rows and the built-in profile id in `personality.json`.
 pub const DEFAULT_PERSONALITY_ID: &str = "default";
+
+/// Cross-companion anchors (OpenSage projects, shared facts). Visible to every personality at recall.
+pub const SHARED_PERSONALITY_ID: &str = "__shared__";
+
+fn is_global_anchor_content(content: &str) -> bool {
+    let t = content.trim();
+    t.starts_with("[project:") || t.starts_with("[shared]")
+}
+
+fn resolve_anchor_personality_and_content(active_pid: &str, content: &str) -> (String, String) {
+    let trimmed = content.trim().to_string();
+    if is_global_anchor_content(&trimmed) {
+        (SHARED_PERSONALITY_ID.to_string(), trimmed)
+    } else {
+        (active_pid.to_string(), trimmed)
+    }
+}
 
 const BRIEFING_MESSAGE_WINDOW: usize = 24;
 const BRIEFING_SNIPPET_CHARS: usize = 280;
@@ -1213,11 +1233,11 @@ impl MemoryAnchor {
         if let Some(cid) = scope {
             let mut stmt = conn.prepare(
                 "SELECT id, embedding FROM anchors
-                 WHERE personality_id = ?1 AND embedding IS NOT NULL AND length(embedding) > 4
-                   AND (conversation_id IS NULL OR conversation_id = ?2)
-                 LIMIT ?3",
+                 WHERE personality_id IN (?1, ?2) AND embedding IS NOT NULL AND length(embedding) > 4
+                   AND (conversation_id IS NULL OR conversation_id = ?3)
+                 LIMIT ?4",
             )?;
-            let rows = stmt.query_map(params![personality_id, cid, lim], |row| {
+            let rows = stmt.query_map(params![personality_id, SHARED_PERSONALITY_ID, cid, lim], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, Option<Vec<u8>>>(1)?))
             })?;
             for row in rows {
@@ -1234,10 +1254,10 @@ impl MemoryAnchor {
         } else {
             let mut stmt = conn.prepare(
                 "SELECT id, embedding FROM anchors
-                 WHERE personality_id = ?1 AND embedding IS NOT NULL AND length(embedding) > 4
-                 LIMIT ?2",
+                 WHERE personality_id IN (?1, ?2) AND embedding IS NOT NULL AND length(embedding) > 4
+                 LIMIT ?3",
             )?;
-            let rows = stmt.query_map(params![personality_id, lim], |row| {
+            let rows = stmt.query_map(params![personality_id, SHARED_PERSONALITY_ID, lim], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, Option<Vec<u8>>>(1)?))
             })?;
             for row in rows {
@@ -1433,9 +1453,9 @@ impl MemoryAnchor {
     ) -> Result<Option<StoredAnchor>, MemoryError> {
         let mut stmt = conn.prepare(
             "SELECT id, conversation_id, anchor_type, content, importance, embedding, created_at
-             FROM anchors WHERE id = ?1 AND personality_id = ?2",
+             FROM anchors WHERE id = ?1 AND personality_id IN (?2, ?3)",
         )?;
-        let mut rows = stmt.query(params![id, personality_id])?;
+        let mut rows = stmt.query(params![id, personality_id, SHARED_PERSONALITY_ID])?;
         if let Some(row) = rows.next()? {
             Ok(Some(MemoryAnchor::row_to_anchor(&row)?))
         } else {
@@ -1457,13 +1477,14 @@ impl MemoryAnchor {
                     "SELECT anchor_id, bm25(anchors_fts) AS r
                      FROM anchors_fts
                      WHERE anchors_fts MATCH ?1
-                       AND anchors_fts.personality_id = ?4
+                       AND anchors_fts.personality_id IN (?4, ?5)
                        AND (conversation_id IS NULL OR conversation_id = ?2)
                      ORDER BY r ASC
                      LIMIT ?3",
                 )?;
-                let rows = stmt
-                    .query_map(params![match_expr, cid, take, personality_id], |row| {
+                let rows = stmt.query_map(
+                    params![match_expr, cid, take, personality_id, SHARED_PERSONALITY_ID],
+                    |row| {
                         Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
                     })?;
                 rows.collect::<Result<Vec<_>, _>>()?
@@ -1473,11 +1494,13 @@ impl MemoryAnchor {
                     "SELECT anchor_id, bm25(anchors_fts) AS r
                      FROM anchors_fts
                      WHERE anchors_fts MATCH ?1
-                       AND anchors_fts.personality_id = ?3
+                       AND anchors_fts.personality_id IN (?3, ?4)
                      ORDER BY r ASC
                      LIMIT ?2",
                 )?;
-                let rows = stmt.query_map(params![match_expr, take, personality_id], |row| {
+                let rows = stmt.query_map(
+                    params![match_expr, take, personality_id, SHARED_PERSONALITY_ID],
+                    |row| {
                     Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
                 })?;
                 rows.collect::<Result<Vec<_>, _>>()?
@@ -1499,13 +1522,13 @@ impl MemoryAnchor {
                     "SELECT id, conversation_id, anchor_type, content, importance, embedding, created_at
                      FROM anchors
                      WHERE content LIKE ?1 ESCAPE '\\'
-                       AND personality_id = ?4
+                       AND personality_id IN (?4, ?5)
                        AND (conversation_id IS NULL OR conversation_id = ?2)
                      ORDER BY importance DESC, datetime(created_at) DESC
                      LIMIT ?3",
                 )?;
                 let rows = stmt.query_map(
-                    params![pat, cid, take, personality_id],
+                    params![pat, cid, take, personality_id, SHARED_PERSONALITY_ID],
                     MemoryAnchor::row_to_anchor,
                 )?;
                 rows.collect::<Result<Vec<_>, _>>()?
@@ -1515,12 +1538,12 @@ impl MemoryAnchor {
                     "SELECT id, conversation_id, anchor_type, content, importance, embedding, created_at
                      FROM anchors
                      WHERE content LIKE ?1 ESCAPE '\\'
-                       AND personality_id = ?3
+                       AND personality_id IN (?3, ?4)
                      ORDER BY importance DESC, datetime(created_at) DESC
                      LIMIT ?2",
                 )?;
                 let rows = stmt.query_map(
-                    params![pat, take, personality_id],
+                    params![pat, take, personality_id, SHARED_PERSONALITY_ID],
                     MemoryAnchor::row_to_anchor,
                 )?;
                 rows.collect::<Result<Vec<_>, _>>()?
@@ -2056,15 +2079,48 @@ impl ConversationMemory for MemoryAnchor {
         if let Some(cid) = conversation_id {
             self.assert_conversation_exists(cid)?;
         }
-        let pid = self.active_personality()?;
+        let active = self.active_personality()?;
+        let (pid, body) = resolve_anchor_personality_and_content(&active, content);
         let conn = self.conn()?;
         Self::insert_anchor_row(
             &conn,
             conversation_id,
             anchor_type,
-            content,
+            &body,
             importance,
             &pid,
+        )
+    }
+
+    fn upsert_project_anchor(&self, project_id: &str, title: &str) -> Result<String, MemoryError> {
+        let id = project_id.trim();
+        let title = title.trim();
+        if id.is_empty() || title.is_empty() {
+            return Err(MemoryError::InvalidAnchorType(
+                "project id and title required".into(),
+            ));
+        }
+        let body = format!(
+            "[project:{id}] Collaborative project \"{title}\". Living document: workspace/projects/{id}/document.md"
+        );
+        let conn = self.conn()?;
+        if let Some(existing) =
+            Self::anchor_id_for_content(&conn, None, &body, SHARED_PERSONALITY_ID)?
+        {
+            let imp = 4_i32;
+            conn.execute(
+                "UPDATE anchors SET importance = MAX(importance, ?1), content = ?2 WHERE id = ?3 AND personality_id = ?4",
+                params![imp, body, existing, SHARED_PERSONALITY_ID],
+            )?;
+            return Ok(existing);
+        }
+        Self::insert_anchor_row(
+            &conn,
+            None,
+            AnchorType::Curated,
+            &body,
+            4,
+            SHARED_PERSONALITY_ID,
         )
     }
 
@@ -2198,10 +2254,10 @@ impl ConversationMemory for MemoryAnchor {
                 "anchor content is empty".into(),
             ));
         }
-        let pid = self.active_personality()?;
+        let active = self.active_personality()?;
+        let (pid, body) = resolve_anchor_personality_and_content(&active, trimmed);
         let conn = self.conn()?;
-        if let Some(existing) = Self::anchor_id_for_content(&conn, conversation_id, trimmed, &pid)?
-        {
+        if let Some(existing) = Self::anchor_id_for_content(&conn, conversation_id, &body, &pid)? {
             let imp = importance.clamp(1, 5);
             conn.execute(
                 "UPDATE anchors SET importance = MAX(importance, ?1) WHERE id = ?2 AND personality_id = ?3",
@@ -2213,7 +2269,7 @@ impl ConversationMemory for MemoryAnchor {
             &conn,
             conversation_id,
             anchor_type,
-            trimmed,
+            &body,
             importance.clamp(1, 5),
             &pid,
         )
@@ -2292,12 +2348,12 @@ impl ConversationMemory for MemoryAnchor {
         let mut stmt = conn.prepare(
             "SELECT id, conversation_id, anchor_type, content, importance, embedding, created_at
              FROM anchors
-             WHERE personality_id = ?1 AND (conversation_id IS NULL OR conversation_id = ?2)
+             WHERE personality_id IN (?1, ?2) AND (conversation_id IS NULL OR conversation_id = ?3)
              ORDER BY importance DESC, datetime(created_at) DESC
-             LIMIT ?3",
+             LIMIT ?4",
         )?;
         let rows = stmt.query_map(
-            params![pid, conversation_id, lim],
+            params![pid, SHARED_PERSONALITY_ID, conversation_id, lim],
             MemoryAnchor::row_to_anchor,
         )?;
         rows.collect::<Result<Vec<_>, _>>()

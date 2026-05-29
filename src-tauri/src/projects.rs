@@ -139,6 +139,11 @@ When the user asks for help with a plan, budget, report, or similar:
 ```
 Field kinds: `text`, `textarea`, `number`, `checkbox`, `select`, `radio`.
 
+### Cross-companion memory
+- Project facts use global anchors prefixed `[project:<slug>]` (created automatically on `project_create` / `project_write`).
+- Any companion can recall these via memory_search — they are not isolated per personality.
+- When storing manual anchors about a project, prefix with `[project:<slug>]`.
+
 ### User form submissions
 The user may submit forms silently (not shown in chat). You receive structured JSON starting with `[OpenSage form submission]`. Parse values, update the project via `project_write`, then reply with:
 - A short plain-text summary (2–4 sentences max, no large tables).
@@ -369,6 +374,10 @@ pub async fn run_project_tool(
     workspace_root: &Path,
     name: &str,
     arguments_json: &str,
+    memory_tools: Option<(
+        &crate::settings::SettingsManager,
+        &dyn crate::memory::ConversationMemory,
+    )>,
     conversation_id: Option<&str>,
 ) -> Result<String, ProviderError> {
     let v: Value = serde_json::from_str(arguments_json)
@@ -392,6 +401,9 @@ pub async fn run_project_tool(
                 initial,
             )
             .map_err(|e| tool_err(e))?;
+            if let Some((_, memory)) = memory_tools {
+                let _ = memory.upsert_project_anchor(&meta.id, &meta.title);
+            }
             Ok(format!("Created project `{}` at {}", meta.id, meta.doc_path))
         }
         "project_read" => {
@@ -404,6 +416,13 @@ pub async fn run_project_tool(
             write_document(workspace_root, id, content).map_err(|e| tool_err(e))?;
             if let Some(cid) = conversation_id {
                 let _ = touch_conversation(workspace_root, id, cid);
+            }
+            if let Some((_, memory)) = memory_tools {
+                if let Ok(list) = list_projects(workspace_root) {
+                    if let Some(p) = list.iter().find(|p| p.id == id) {
+                        let _ = memory.upsert_project_anchor(&p.id, &p.title);
+                    }
+                }
             }
             Ok(format!("Updated project `{id}` document."))
         }

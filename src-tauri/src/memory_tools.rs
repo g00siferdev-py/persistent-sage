@@ -59,7 +59,8 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
 
 pub fn memory_system_hint() -> &'static str {
     "\n\n**Memory:** For questions about the user's past facts, preferences, or earlier conversations, \
-     use **Memory Search** (invoke as `memory_search`) with a focused query before answering. Do not guess if memory may contain the answer."
+     use **Memory Search** (invoke as `memory_search`) with a focused query before answering. Do not guess if memory may contain the answer. \
+     OpenSage **project** anchors (`[project:slug] …`) are shared across all companion profiles."
 }
 
 #[must_use]
