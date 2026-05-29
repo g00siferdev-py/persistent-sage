@@ -48,4 +48,6 @@ commands.allow = [
   "browser_detect_chromium",
   "recipe_list",
   "recipe_run",
+  "project_list",
+  "project_format_form_submission",
 ]

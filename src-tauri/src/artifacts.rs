@@ -31,6 +31,9 @@ pub struct ChatArtifact {
     pub caption: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub citations: Option<Vec<ArtifactCitation>>,
+    /// Links artifact to a collaborative project slug under `workspace/projects/`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
 }
 
 /// Instructions appended to the system prompt when artifacts are enabled.
@@ -42,9 +45,10 @@ When a visual report, chart, or formatted layout would help the user, append exa
 
 ```artifact
 {
-  "type": "html" | "vegaLite" | "markdown",
+  "type": "html" | "vegaLite" | "markdown" | "form",
   "title": "Short title",
-  "body": "<for html: sanitized HTML string; for vegaLite: Vega-Lite spec object with inline data.values only; for markdown: markdown string>",
+  "projectId": "optional-project-slug",
+  "body": "<html string | vega spec | markdown | form field defs>",
   "caption": "optional one-line note",
   "citations": [{"path": "workspace/relative/path", "lineStart": 1, "lineEnd": 10, "label": "optional"}]
 }
@@ -53,8 +57,10 @@ When a visual report, chart, or formatted layout would help the user, append exa
 Rules:
 - Keep conversational text outside the fence; the fence holds only valid JSON.
 - For vegaLite: use only inline `"data": {"values": [...]}` — no URLs or remote datasets.
-- For html: no `<script>`, no inline event handlers, no external resources.
+- For html: no `<script>`, no inline event handlers, no external resources. Use html for polished reports (budgets, plans, dashboards) — not plain markdown tables in chat.
+- For form: `body.fields` array with stable `id`, `label`, `kind` (text|textarea|number|checkbox|select|radio); user submits via UI (button label is set by the app).
 - Do not include secrets or API keys in artifacts.
+- When delivering a substantial report after intake or edits, default to **html** (one artifact) plus a short conversational summary outside the fence.
 "#;
 
 /// Split assistant text into display content + optional serialized artifact JSON for storage.
@@ -158,6 +164,12 @@ fn validate_artifact(a: &ChatArtifact) -> Result<(), String> {
             if vega_spec_has_remote_data(&a.body) {
                 return Err("vegaLite spec must use inline data.values only (no URLs)".into());
             }
+        }
+        "form" => {
+            if !a.body.is_object() {
+                return Err("form artifact body must be a JSON object".to_string());
+            }
+            crate::projects::validate_form_body(&a.body)?;
         }
         _ => return Err(format!("unsupported artifact type: {}", a.artifact_type)),
     }

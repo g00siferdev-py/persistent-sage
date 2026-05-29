@@ -8,11 +8,12 @@ export type ArtifactCitation = {
 };
 
 export type ChatArtifact = {
-  type: "html" | "vegaLite" | "markdown" | string;
+  type: "html" | "vegaLite" | "markdown" | "form" | string;
   title: string;
   body: string | Record<string, unknown>;
   caption?: string;
   citations?: ArtifactCitation[];
+  projectId?: string;
 };
 
 export function parseArtifactJson(json: string | undefined | null): ChatArtifact | null {
@@ -21,7 +22,11 @@ export function parseArtifactJson(json: string | undefined | null): ChatArtifact
     const raw = JSON.parse(json) as ChatArtifact & { artifactType?: string };
     const type = (raw.type ?? raw.artifactType ?? "").toString();
     if (!type || !raw.title) return null;
-    return { ...raw, type };
+    const projectId =
+      typeof raw.projectId === "string" && raw.projectId.trim()
+        ? raw.projectId.trim()
+        : undefined;
+    return { ...raw, type, projectId };
   } catch {
     return null;
   }

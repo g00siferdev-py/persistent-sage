@@ -1287,6 +1287,10 @@ pub async fn run_builtin_tool(
             let p = v["path"].as_str().unwrap_or("").trim();
             workspace_list_directory(root, p)
         }
+        "project_list" | "project_create" | "project_read" | "project_write" | "project_set_active" => {
+            let root = workspace_root.ok_or_else(|| tool_err("project tools are not available"))?;
+            crate::projects::run_project_tool(root, n, arguments_json, None).await
+        }
         "memory_search" => {
             let (settings, memory) = memory_tools
                 .ok_or_else(|| tool_err("memory_search is not available (no memory context)"))?;

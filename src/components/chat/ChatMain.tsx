@@ -16,6 +16,7 @@ import type { StreamAssistantState } from "@/hooks/useChat";
 import { readImageFileAsDataUrl } from "@/lib/chatAttachments";
 import { settingsLayoutLabel, type SettingsLayoutMode } from "@/lib/settingsLayout";
 import { artifactBodyString, parseArtifactJson } from "@/lib/artifacts";
+import { FormArtifact } from "@/components/chat/FormArtifact";
 import vegaEmbed from "vega-embed";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -44,6 +45,11 @@ type Props = {
   error: string | null;
   recipes: { id: string; name: string; description?: string }[];
   onRunRecipe: (id: string) => void;
+  onSubmitArtifactForm: (
+    artifactTitle: string,
+    projectId: string | undefined,
+    values: Record<string, unknown>,
+  ) => void;
   settingsLayoutMode: SettingsLayoutMode;
   onCycleSettingsLayout: () => void;
   onSendMessage: (text: string, image?: PendingComposerImage | null) => void;
@@ -194,6 +200,7 @@ export function ChatMain({
   error,
   recipes,
   onRunRecipe,
+  onSubmitArtifactForm,
   settingsLayoutMode,
   onCycleSettingsLayout,
   onSendMessage,
@@ -239,6 +246,7 @@ export function ChatMain({
   };
 
   const canRunRecipe = hasActiveConversation && !threadLoading && !sending;
+  const canSubmitForm = hasActiveConversation && !threadLoading && !sending;
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -413,6 +421,23 @@ export function ChatMain({
                     const artifact = parseArtifactJson(m.artifactJson);
                     if (!artifact) {
                       return m.content ? <p className="whitespace-pre-wrap">{m.content}</p> : null;
+                    }
+                    if (artifact.type === "form") {
+                      return (
+                        <div className="space-y-2">
+                          <FormArtifact
+                            title={artifact.title}
+                            body={artifact.body}
+                            projectId={artifact.projectId}
+                            companionName={activeCompanionLabel}
+                            disabled={!canSubmitForm}
+                            onSubmit={(values) =>
+                              onSubmitArtifactForm(artifact.title, artifact.projectId, values)
+                            }
+                          />
+                          {m.content ? <p className="whitespace-pre-wrap">{m.content}</p> : null}
+                        </div>
+                      );
                     }
                     if (artifact.type === "vegaLite") {
                       return (

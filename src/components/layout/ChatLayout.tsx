@@ -179,6 +179,7 @@ export function ChatLayout() {
     refreshVisionSupported,
     recipes,
     runRecipe,
+    submitArtifactForm,
     applyActivePersonality,
     activePersonalityId,
     activeCompanionLabel,
@@ -271,6 +272,9 @@ export function ChatLayout() {
           error={error}
           recipes={recipes}
           onRunRecipe={(id) => void runRecipe(id)}
+          onSubmitArtifactForm={(title, projectId, values) =>
+            void submitArtifactForm(title, projectId, values)
+          }
           settingsLayoutMode={settingsLayoutMode}
           onCycleSettingsLayout={() => cycleSettingsLayout()}
           onSendMessage={(text, image) =>

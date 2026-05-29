@@ -518,6 +518,7 @@ export function useChat() {
     async (
       text: string,
       image?: { base64: string; mime: string; previewUrl?: string } | null,
+      opts?: { silent?: boolean },
     ) => {
       const trimmed = text.trim();
       const convId = activeConversationId;
@@ -529,17 +530,20 @@ export function useChat() {
         return;
       }
 
-      const tempUserId = `local-${Date.now()}`;
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: tempUserId,
-          role: "user",
-          content: trimmed || "(photo)",
-          imageDisplayPath: image?.previewUrl,
-          imageMime: image?.mime,
-        },
-      ]);
+      const silent = opts?.silent === true;
+      if (!silent) {
+        const tempUserId = `local-${Date.now()}`;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: tempUserId,
+            role: "user",
+            content: trimmed || "(photo)",
+            imageDisplayPath: image?.previewUrl,
+            imageMime: image?.mime,
+          },
+        ]);
+      }
       setSending(true);
       setStreamAssistant({ thinking: true, text: "" });
       setError(null);
@@ -563,6 +567,7 @@ export function useChat() {
           personalityId: personalityIdForSend,
           imageBase64: image?.base64 ?? null,
           imageMime: image?.mime ?? null,
+          silentUserMessage: silent,
         });
 
         // Reload from SQLite so artifacts (artifactJson) render consistently.
@@ -592,6 +597,26 @@ export function useChat() {
       refreshConversations,
       refreshSidebarContext,
     ],
+  );
+
+  const submitArtifactForm = useCallback(
+    async (
+      artifactTitle: string,
+      projectId: string | undefined,
+      values: Record<string, unknown>,
+    ) => {
+      try {
+        const { message } = await invoke<{ message: string }>("project_format_form_submission", {
+          artifactTitle,
+          projectId: projectId ?? null,
+          values,
+        });
+        await sendMessage(message, null, { silent: true });
+      } catch (e) {
+        setError(String(e));
+      }
+    },
+    [sendMessage],
   );
 
   const runRecipe = useCallback(
@@ -648,6 +673,7 @@ export function useChat() {
     recipes,
     refreshRecipes,
     runRecipe,
+    submitArtifactForm,
     refreshConversations,
     applyActivePersonality,
   };

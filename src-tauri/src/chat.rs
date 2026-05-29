@@ -550,6 +550,17 @@ pub struct ChatTurnOptions {
     pub enable_tools: bool,
     /// Prepended to the assistant message when saved (Pulse labels in chat).
     pub assistant_reply_prefix: Option<String>,
+    /// When `persist_user_message` is false, how to label the ephemeral user turn for the model.
+    pub ephemeral_user_note: EphemeralUserNote,
+}
+
+/// Ephemeral user text is sent to the model but not stored in SQLite / chat UI.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EphemeralUserNote {
+    #[default]
+    None,
+    Pulse,
+    FormSubmission,
 }
 
 impl ChatTurnOptions {
@@ -560,6 +571,19 @@ impl ChatTurnOptions {
             persist_assistant_message: true,
             enable_tools: true,
             assistant_reply_prefix: None,
+            ephemeral_user_note: EphemeralUserNote::None,
+        }
+    }
+
+    /// User message is not saved to the transcript (e.g. form submit); assistant reply is.
+    pub fn silent_user_turn() -> Self {
+        Self {
+            emit_stream: true,
+            persist_user_message: false,
+            persist_assistant_message: true,
+            enable_tools: true,
+            assistant_reply_prefix: None,
+            ephemeral_user_note: EphemeralUserNote::FormSubmission,
         }
     }
 
@@ -571,6 +595,7 @@ impl ChatTurnOptions {
             persist_assistant_message: true,
             enable_tools: true,
             assistant_reply_prefix: Some(assistant_reply_prefix),
+            ephemeral_user_note: EphemeralUserNote::Pulse,
         }
     }
 }
@@ -605,6 +630,9 @@ async fn run_chat_completion(
     if options.enable_tools && state.settings.agent_workspace_enabled() {
         tool_definitions.extend(crate::agent_tools::workspace_tool_definitions());
     }
+    if options.enable_tools && state.settings.artifacts_enabled() {
+        tool_definitions.extend(crate::projects::project_tool_definitions());
+    }
     let database_tools_enabled = options.enable_tools
         && (state.settings.agent_workspace_enabled() || state.settings.database_app_data_enabled());
     if database_tools_enabled {
@@ -626,10 +654,13 @@ async fn run_chat_completion(
             state.memory.as_ref() as &dyn ConversationMemory,
         )
     });
-    let workspace_root_for_tools = state
-        .settings
-        .agent_workspace_enabled()
-        .then_some(state.workspace_root.as_path());
+    let workspace_root_for_tools = if state.settings.agent_workspace_enabled()
+        || state.settings.artifacts_enabled()
+    {
+        Some(state.workspace_root.as_path())
+    } else {
+        None
+    };
     let database_app_data_enabled = state.settings.database_app_data_enabled();
     let database_allow_write = state.settings.database_allow_write();
     let browser_ignore_robots = state.settings.agent_browser_ignore_robots();
@@ -1054,6 +1085,7 @@ pub async fn execute_chat_turn(
     };
     if state.settings.artifacts_enabled() {
         system_content.push_str(crate::artifacts::ARTIFACT_SYSTEM_APPENDIX);
+        system_content.push_str(crate::projects::PROJECT_SYSTEM_APPENDIX);
     }
 
     let provider_id = engine.provider_id().to_string();
@@ -1089,13 +1121,19 @@ pub async fn execute_chat_turn(
     }
 
     if !options.persist_user_message && !text.is_empty() {
-        messages.push(ChatTurn::text(
-            "user",
-            format!(
+        let content = match options.ephemeral_user_note {
+            EphemeralUserNote::Pulse => format!(
                 "{text}\n\n\
                  (Background Pulse check-in. Reply briefly for the user. This turn is not shown in the chat transcript.)"
             ),
-        ));
+            EphemeralUserNote::FormSubmission => format!(
+                "{text}\n\n\
+                 (The user submitted a form in the UI. This turn is not shown in the chat transcript. \
+                 Do not echo raw JSON in plain chat. Prefer updating the project document and replying with a polished **html** artifact.)"
+            ),
+            EphemeralUserNote::None => text.to_string(),
+        };
+        messages.push(ChatTurn::text("user", content));
     }
 
     run_chat_completion(app, state, conversation_id, &engine, messages, options).await
@@ -1110,6 +1148,7 @@ pub async fn chat_send_message(
     personality_id: Option<String>,
     image_base64: Option<String>,
     image_mime: Option<String>,
+    silent_user_message: Option<bool>,
 ) -> Result<ChatSendResult, String> {
     let pid = personality_id
         .as_deref()
@@ -1143,6 +1182,12 @@ pub async fn chat_send_message(
         _ => None,
     };
 
+    let turn_options = if silent_user_message == Some(true) {
+        ChatTurnOptions::silent_user_turn()
+    } else {
+        ChatTurnOptions::interactive()
+    };
+
     let reply = execute_chat_turn(
         &app,
         &state,
@@ -1150,7 +1195,7 @@ pub async fn chat_send_message(
         &message,
         pid,
         pending_image,
-        ChatTurnOptions::interactive(),
+        turn_options,
     )
     .await?;
 

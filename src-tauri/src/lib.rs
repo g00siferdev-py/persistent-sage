@@ -20,6 +20,7 @@ mod memory_extract;
 mod memory_tools;
 mod personality;
 mod personality_tools;
+mod projects;
 mod provider;
 mod pulse;
 mod recipes;
@@ -212,6 +213,32 @@ async fn recipe_run(
     conversation_id: String,
 ) -> Result<recipes::RecipeRunResult, String> {
     Ok(recipes::run_recipe(&app, &state, &recipe_id, &conversation_id).await)
+}
+
+#[tauri::command]
+fn project_list(state: State<'_, NovaState>) -> Result<Vec<projects::ProjectMeta>, String> {
+    projects::list_projects(&state.workspace_root)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FormSubmissionMessage {
+    message: String,
+}
+
+#[tauri::command]
+fn project_format_form_submission(
+    artifact_title: String,
+    project_id: Option<String>,
+    values: serde_json::Value,
+) -> Result<FormSubmissionMessage, String> {
+    Ok(FormSubmissionMessage {
+        message: projects::format_form_submission_message(
+            &artifact_title,
+            project_id.as_deref(),
+            &values,
+        ),
+    })
 }
 
 #[tauri::command]
@@ -705,6 +732,7 @@ pub fn run() {
     }
     workspace_root = std::fs::canonicalize(&workspace_root).unwrap_or(workspace_root);
     ensure_workspace_guide(&workspace_root);
+    projects::ensure_projects_tree(&workspace_root);
     eprintln!(
         "persistent-sage: agent workspace directory {}",
         workspace_root.display()
@@ -783,6 +811,8 @@ pub fn run() {
             browser_detect_chromium,
             recipe_list,
             recipe_run,
+            project_list,
+            project_format_form_submission,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Persistent Sage (Tauri application)");

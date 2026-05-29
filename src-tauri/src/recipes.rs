@@ -49,8 +49,19 @@ pub fn default_recipes() -> Vec<Recipe> {
             id: "weekly-plan".into(),
             name: "Weekly plan".into(),
             description: "Draft a weekly plan from memory and recent chat.".into(),
-            prompt: "Using memory anchors and recent messages, draft a weekly plan. \
-                      Prefer a vegaLite chart or html artifact if numbers or structure help."
+            prompt: "Draft a weekly plan that fits the user’s real constraints.\n\n\
+                     Output requirements:\n\
+                     - Do NOT dump a large markdown table into the plain-text chat.\n\
+                     - Always include exactly ONE artifact block.\n\
+                     - Use type \"html\" for the artifact.\n\
+                     - The HTML artifact must include:\n\
+                       1) A clean, readable weekly schedule table (days x categories)\n\
+                       2) A compact visual summary (no JS). Use simple HTML+CSS bars for weekly totals by category.\n\
+                     - Keep the non-artifact chat text to a short explanation + 3–6 bullet next steps.\n\n\
+                     Data guidance:\n\
+                     - If the user has not provided hour allocations, propose reasonable defaults and label them as placeholders.\n\
+                     - Ensure daily totals are sane (e.g. <= 24) and note assumptions.\n\
+                     - Use consistent category names across the table and bars."
                 .into(),
             requires_browser_fetch: false,
         },
@@ -60,6 +71,18 @@ pub fn default_recipes() -> Vec<Recipe> {
             description: "Scan the agent workspace and return a cited report artifact.".into(),
             prompt: "Audit files in the agent workspace. List findings with file citations in the artifact \
                       citations array. Use type markdown or html for the report body."
+                .into(),
+            requires_browser_fetch: false,
+        },
+        Recipe {
+            id: "start-project".into(),
+            name: "Start a project".into(),
+            description: "Begin a flexible collaborative project (budget, plan, report).".into(),
+            prompt: "The user wants to start a new collaborative project. Ask what they are working on \
+                      (budget, marketing plan, audit, etc.) and offer two intake paths:\n\
+                      (A) upload/reference files in the agent workspace, or (B) a `form` artifact to collect details.\n\
+                      Do not build the full deliverable until they choose and provide input. \
+                      When creating a project, use project_create with a clear id slug."
                 .into(),
             requires_browser_fetch: false,
         },
@@ -74,12 +97,35 @@ pub fn load_recipes(data_dir: &Path) -> Result<Vec<Recipe>, String> {
         return Ok(defaults);
     }
     let raw = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let file: RecipesFile = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    let mut file: RecipesFile = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
     if file.recipes.is_empty() {
         let defaults = default_recipes();
         save_recipes(data_dir, &defaults)?;
         return Ok(defaults);
     }
+
+    // Light-touch “defaults drift” updater:
+    // - Add missing default recipes
+    // - Update known-bad legacy prompts when they match older shipped text
+    let defaults = default_recipes();
+    for def in defaults {
+        match file.recipes.iter_mut().find(|r| r.id == def.id) {
+            None => file.recipes.push(def),
+            Some(existing) => {
+                if existing.id == "weekly-plan"
+                    && existing
+                        .prompt
+                        .contains("Using memory anchors and recent messages, draft a weekly plan")
+                {
+                    existing.prompt = def.prompt;
+                    existing.description = def.description;
+                }
+            }
+        }
+    }
+    // Persist only if we actually changed anything (simple heuristic).
+    // If serialization fails, still return the in-memory list.
+    let _ = save_recipes(data_dir, &file.recipes);
     Ok(file.recipes)
 }
 
@@ -156,6 +202,7 @@ pub async fn run_recipe(
             persist_assistant_message: true,
             enable_tools: true,
             assistant_reply_prefix: Some(format!("Recipe: {} — ", recipe.name)),
+            ephemeral_user_note: crate::chat::EphemeralUserNote::None,
         },
     )
     .await
