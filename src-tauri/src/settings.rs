@@ -23,7 +23,7 @@ use thiserror::Error;
 use crate::database_query::{PREF_DATABASE_ALLOW_WRITE, PREF_DATABASE_APP_DATA};
 use crate::memory::{ConversationMemory, MemoryError};
 
-const KEYRING_SERVICE: &str = "OpenSage";
+const KEYRING_SERVICE: &str = "Persistent Sage";
 const LEGACY_KEYRING_SERVICE: &str = "Nova";
 const KEYRING_USER: &str = "settings_master_ikm";
 const SETTINGS_VERSION: u32 = 1;

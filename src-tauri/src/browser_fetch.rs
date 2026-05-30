@@ -281,11 +281,11 @@ pub fn ensure_browser_directories(data_directory: &Path) {
 }
 
 fn cache_browser_profile_dir() -> PathBuf {
-    directories::ProjectDirs::from("app", "OpenSage", "OpenSage")
+    directories::ProjectDirs::from("app", "Persistent Sage", "Persistent Sage")
         .map(|d| d.cache_dir().join("browser_profile"))
         .unwrap_or_else(|| {
             std::env::temp_dir()
-                .join("opensage")
+                .join("persistent-sage")
                 .join("browser_profile")
         })
 }
@@ -294,7 +294,7 @@ fn browser_profile_candidates(data_directory: &Path) -> Vec<PathBuf> {
     let mut candidates = vec![
         cache_browser_profile_dir(),
         std::env::temp_dir()
-            .join("opensage")
+            .join("persistent-sage")
             .join("browser_profile"),
     ];
     let legacy = data_directory.join("browser_profile");

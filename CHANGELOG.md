@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`main` release line** — Reverted accidental OpenSage shell branding from PR #2 (`tauri.conf.json`, data directory, keyring service, browser profile paths). Store and GitHub release builds track **Persistent Sage** again. OpenSage experiments stay on the `opensage-experimental` branch.
+
 ---
 
 ## [0.2.0-beta.9] — 2026-05-27
