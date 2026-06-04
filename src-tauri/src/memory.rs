@@ -2471,7 +2471,7 @@ pub fn default_db_path() -> Result<PathBuf, MemoryError> {
         return Ok(data.join("nova_memory.sqlite"));
     }
 
-    let dirs = directories::ProjectDirs::from("app", "OpenSage", "OpenSage")
+    let dirs = directories::ProjectDirs::from("app", "Persistent Sage", "Persistent Sage")
         .ok_or(MemoryError::NoDataDir)?;
     std::fs::create_dir_all(dirs.data_dir())?;
     Ok(dirs.data_dir().join("nova_memory.sqlite"))

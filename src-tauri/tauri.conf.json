@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OpenSage",
+  "productName": "Persistent Sage",
   "version": "0.2.0-beta.9",
-  "identifier": "app.opensage.desktop",
+  "identifier": "app.persistentsage.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "OpenSage",
+        "title": "Persistent Sage",
         "width": 960,
         "height": 640,
         "minWidth": 640,
@@ -24,7 +24,7 @@
       },
       {
         "label": "splashscreen",
-        "title": "OpenSage",
+        "title": "Persistent Sage",
         "url": "splashscreen.html",
         "width": 520,
         "height": 410,
@@ -38,6 +38,7 @@
     ],
     "security": {
       "csp": null,
+      "capabilities": ["default", "github-updater"],
       "assetProtocol": {
         "enable": true,
         "scope": ["$HOME/**", "$DATA/**", "$APPDATA/**", "$APPLOCALDATA/**"]
@@ -60,7 +61,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDREODEwMUZDNDA4OEQ1RTAKUldUZzFZaEEvQUdCVFhKNHdGQ1MzdTlRSE1oQ3o0b2ZyUXYzOFNTMUdoa0MrZXA1WmwyWjkyOE0K",
       "endpoints": [
-        "https://github.com/g00siferdev-py/opensage/releases/latest/download/latest.json"
+        "https://github.com/g00siferdev-py/persistent-sage/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

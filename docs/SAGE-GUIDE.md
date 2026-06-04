@@ -283,9 +283,11 @@ Portable:
 
 ## GitHub Releases and Updates
 
-Beta builds are published through GitHub Releases. GitHub Actions builds the Windows NSIS installer and portable zip. Manual workflow artifacts expire and are not the public download page; Releases are the correct distribution channel.
+Beta builds for **direct download** (NSIS installer, portable zip) are published through GitHub Releases. GitHub Actions builds the Windows NSIS installer and portable zip. Manual workflow artifacts expire and are not the public download page; Releases are the correct distribution channel.
 
-For maintainers:
+**Microsoft Store installs** do not use GitHub for app updates. Store users should open the Microsoft Store → **Library** → **Get updates**. Settings → General shows Store guidance instead of **Check for updates** when Persistent Sage was installed from the Store.
+
+For maintainers (GitHub channel only):
 
 1. Bump versions.
 2. Update changelog/release notes.

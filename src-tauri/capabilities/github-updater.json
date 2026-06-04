@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "github-updater",
+  "description": "GitHub Releases in-app updater (direct-download installs only; omitted from Microsoft Store MSIX builds).",
+  "windows": ["main"],
+  "permissions": ["updater:default"]
+}

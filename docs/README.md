@@ -16,8 +16,10 @@ Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rus
 | [**DATA-AND-PRIVACY.md**](./DATA-AND-PRIVACY.md) | Security-conscious users | What stays on disk, what is encrypted, what is **not** encrypted |
 | [**SIGNING-AND-UPDATES.md**](./SIGNING-AND-UPDATES.md) | Maintainers and testers | Tauri updater, release assets, SignPath readiness |
 | [**USER-GUIDE.md**](./USER-GUIDE.md) | Daily users | UI layout, chat, memory, settings, Pulse, OpenClaw migration |
+| [**PRODUCT-KNOWLEDGE-BASE.md**](./PRODUCT-KNOWLEDGE-BASE.md) | Marketing & support agents | Full product KB: positioning, features, FAQ, troubleshooting, copy blocks |
 | [**ARCHITECTURE.md**](./ARCHITECTURE.md) | Developers | Stack, data flow, key modules, IPC surface |
 | [**DEVELOPMENT.md**](./DEVELOPMENT.md) | Contributors | Dev workflow, tests, pre-push checklist |
+| [**BRANCHING.md**](./BRANCHING.md) | Contributors | `main` vs `opensage-experimental`, two-folder dev layout |
 
 ## Repository root files
 

@@ -15,15 +15,17 @@ Only download installers from the official release page:
 
 https://github.com/g00siferdev-py/persistent-sage/releases
 
-## In-App Updates
+## In-App Updates (direct download only)
 
-The Tauri updater checks this public metadata endpoint:
+The Tauri updater applies to **GitHub Releases installs** (NSIS installer and portable zip). It checks:
 
 ```text
 https://github.com/g00siferdev-py/persistent-sage/releases/latest/download/latest.json
 ```
 
-For that endpoint to work, beta releases must be published as normal GitHub releases, not GitHub prereleases. The version number and release notes still identify the build as beta, for example `0.2.0-beta.8`.
+**Microsoft Store installs do not use this path.** Store builds omit the Tauri updater plugin and Settings → General → Updates directs users to the Microsoft Store (**Library → Get updates**). Submit new `.msix` packages through Partner Center to ship Store updates.
+
+For GitHub `latest.json` to work, beta releases must be published as normal GitHub releases, not GitHub prereleases. The version number and release notes still identify the build as beta, for example `0.2.0-beta.8`.
 
 Each updater-enabled release must include:
 
@@ -47,16 +49,6 @@ Current readiness items:
 
 Do not claim a build is SignPath-signed until the release artifact is actually signed and the release notes identify it as such.
 
-## Microsoft Store Later
+## Microsoft Store
 
-The no-cost open beta path is GitHub Releases for downloads, Tauri updater for patches, and GitHub Issues for feedback.
-
-Microsoft Store distribution is a later milestone because it can require:
-
-- A Microsoft Partner Center developer account.
-- Store listing assets, screenshots, category, age rating, support, and privacy URLs.
-- Certification review.
-- A Store-appropriate installer/package strategy.
-- For Tauri's official EXE/MSI Store path, an offline WebView2 installer mode, hosted installer URL, auto-update support, and code signing.
-
-If Persistent Sage pursues Microsoft Store distribution later, start with the official Tauri EXE/MSI Store guidance before adding community MSIX tooling.
+Store distribution uses MSIX packages built on `main` (see [MICROSOFT-STORE.md](./MICROSOFT-STORE.md)). Store users update through Partner Center submissions—not the GitHub Tauri updater. GitHub Releases remain the update path for direct-download (NSIS/portable) installs.

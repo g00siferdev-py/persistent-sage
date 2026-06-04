@@ -14,6 +14,7 @@ mod attachments;
 mod browser_fetch;
 mod chat;
 mod database_query;
+mod distribution;
 mod embedding;
 mod memory;
 mod memory_extract;
@@ -25,6 +26,7 @@ mod provider;
 mod pulse;
 mod recipes;
 mod settings;
+mod store_updates;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -110,6 +112,28 @@ fn parse_anchor_type(s: &str) -> Result<AnchorType, String> {
 #[tauri::command]
 fn app_version() -> String {
     format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
+}
+
+#[tauri::command]
+fn app_distribution_info() -> distribution::DistributionInfo {
+    distribution::distribution_info()
+}
+
+#[tauri::command]
+fn open_store_updates() -> Result<(), String> {
+    distribution::open_microsoft_store_updates()
+}
+
+#[tauri::command]
+fn check_store_updates(app: tauri::AppHandle) -> Result<store_updates::StoreUpdateCheckResult, String> {
+    store_updates::check_store_updates(&app)
+}
+
+#[tauri::command]
+fn install_store_updates(
+    app: tauri::AppHandle,
+) -> Result<store_updates::StoreUpdateInstallResult, String> {
+    store_updates::install_store_updates(&app)
 }
 
 /// Where SQLite and `settings.json` live (per machine). Helps debug “works on my other computer”.
@@ -738,10 +762,18 @@ pub fn run() {
         workspace_root.display()
     );
 
-    tauri::Builder::default()
+    let distribution = distribution::distribution_info();
+    eprintln!(
+        "persistent-sage: update channel {:?} (via Microsoft Store: {})",
+        distribution.channel, distribution.updates_via_microsoft_store
+    );
+
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build());
+
+    builder
         .manage(NovaState::new(
             memory,
             settings,
@@ -768,6 +800,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             read_text_files,
             app_version,
+            app_distribution_info,
+            open_store_updates,
+            check_store_updates,
+            install_store_updates,
             app_data_paths,
             reveal_data_directory,
             open_feedback_issue,
