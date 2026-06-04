@@ -38,3 +38,13 @@ hex = "0.4"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 scraper = "0.22"
 which = "7"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+  "Foundation",
+  "Foundation_Collections",
+  "Services_Store",
+  "Win32_Foundation",
+  "Win32_UI_Shell",
+] }
+

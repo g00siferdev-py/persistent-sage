@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "default",
-  "description": "Main Persistent Sage window: explicit custom IPC allowlist, minimal core plugins (no core:default), and listen/unlisten only for chat streaming (chat:stream-start, chat:stream, chat:stream-error — Tauri core:event has no per-event name ACL; only emit is omitted from the webview).",
+  "identifier": "store-msix",
+  "description": "Microsoft Store MSIX build: same IPC as default, without Tauri GitHub updater.",
   "windows": ["main"],
   "permissions": [
     "nova-invoke-allowlist",

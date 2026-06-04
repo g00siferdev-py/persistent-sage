@@ -89,6 +89,17 @@ Keep the Store listing:
 - Privacy URL: `https://github.com/g00siferdev-py/persistent-sage/blob/main/PRIVACY.md`.
 - Support URL: `https://github.com/g00siferdev-py/persistent-sage/issues`.
 
+## Microsoft Store updates
+
+Store users receive updates **only through the Microsoft Store** (Partner Center submission → certification → Store rollout). Persistent Sage does **not** install Store updates from GitHub.
+
+| Install source | How to update |
+|----------------|---------------|
+| **Microsoft Store** | Store app → **Library** → **Get updates** (or use **Open Microsoft Store updates** in Settings → General) |
+| **GitHub NSIS / portable** | Settings → General → **Check for updates** (Tauri updater) or download from [Releases](https://github.com/g00siferdev-py/persistent-sage/releases) |
+
+MSIX builds use `npm run msix:pack` with `tauri.store.conf.json` and the `store` Cargo feature so the GitHub updater is not bundled.
+
 ## Notes
 
 - The normal GitHub Releases workflow still builds NSIS installers for non-Store beta users.

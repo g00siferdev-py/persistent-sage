@@ -38,6 +38,7 @@
     ],
     "security": {
       "csp": null,
+      "capabilities": ["default", "github-updater"],
       "assetProtocol": {
         "enable": true,
         "scope": ["$HOME/**", "$DATA/**", "$APPDATA/**", "$APPLOCALDATA/**"]

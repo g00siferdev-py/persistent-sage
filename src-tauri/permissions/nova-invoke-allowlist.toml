@@ -5,6 +5,10 @@ description = "Custom invoke commands used by the Persistent Sage UI (see genera
 commands.allow = [
   "read_text_files",
   "app_version",
+  "app_distribution_info",
+  "open_store_updates",
+  "check_store_updates",
+  "install_store_updates",
   "app_data_paths",
   "reveal_data_directory",
   "open_feedback_issue",

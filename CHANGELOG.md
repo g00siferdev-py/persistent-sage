@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Microsoft Store update channel** — Store (MSIX) builds detect packaged installation. **Check for updates** queries the Microsoft Store (not GitHub); **Download & install** uses Store package update APIs. GitHub NSIS/portable/source installs keep the Tauri updater unchanged.
+
 ### Fixed
 
 - **`main` release line** — Reverted accidental OpenSage shell branding from PR #2 (`tauri.conf.json`, data directory, keyring service, browser profile paths). Store and GitHub release builds track **Persistent Sage** again. OpenSage experiments stay on the `opensage-experimental` branch.

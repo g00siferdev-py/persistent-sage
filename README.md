@@ -41,6 +41,7 @@ Persistent Sage is in **open beta**. **Windows users** can install from **[GitHu
 | **[docs/PUBLISH.md](./docs/PUBLISH.md)** | **Maintainers** — publish beta builds to GitHub Releases |
 | **[docs/BUILD-CI.md](./docs/BUILD-CI.md)** | CI Windows builds (Actions) |
 | **[docs/USER-GUIDE.md](./docs/USER-GUIDE.md)** | Day-to-day usage — chat, memory, settings, Pulse, OpenClaw migration |
+| **[docs/PRODUCT-KNOWLEDGE-BASE.md](./docs/PRODUCT-KNOWLEDGE-BASE.md)** | Full product KB for marketing & support agents |
 | **[docs/DATA-AND-PRIVACY.md](./docs/DATA-AND-PRIVACY.md)** | What is stored locally; **API keys encrypted**, **database not encrypted** |
 | **[PRIVACY.md](./PRIVACY.md)** | Public privacy policy |
 | **[docs/SIGNING-AND-UPDATES.md](./docs/SIGNING-AND-UPDATES.md)** | Updater behavior and SignPath readiness |

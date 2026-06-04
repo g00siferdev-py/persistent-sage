@@ -235,7 +235,7 @@ const MEMORY_SEMANTIC_INFO = (
   <>
     Embeds anchor text in the background (small batches). During chat, your companion can use{" "}
     <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("memory_search")}</strong> for semantic lookup — not a blocking
-    network call on every message. Requires OpenAI, Ollama/Ollama Cloud, or local Ollama when using Anthropic chat.
+    network call on every message. Requires OpenAI, <strong>local</strong> Ollama (<code className="font-mono text-[10px]">ollama pull nomic-embed-text</code>), or local Ollama when chat uses Anthropic or Ollama Cloud.
   </>
 );
 
@@ -431,6 +431,19 @@ type AppDataPaths = {
   novaPortableEnv: boolean;
 };
 
+type StoreUpdateCheckResult = {
+  upToDate: boolean;
+  updateAvailable: boolean;
+  packageCount: number;
+  message: string;
+};
+
+type DistributionInfo = {
+  channel: "microsoft_store" | "direct_download";
+  updatesViaMicrosoftStore: boolean;
+  storeLibraryUri: string;
+};
+
 type PendingUpdate = {
   version: string;
   date?: string;
@@ -550,6 +563,8 @@ export function SettingsPanel({
   const [updateStatus, setUpdateStatus] = useState<string | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null);
   const [updateProgress, setUpdateProgress] = useState<string | null>(null);
+  const [distributionInfo, setDistributionInfo] = useState<DistributionInfo | null>(null);
+  const [storeUpdateAvailable, setStoreUpdateAvailable] = useState(false);
 
   const loadVersion = useCallback(async () => {
     try {
@@ -588,12 +603,22 @@ export function SettingsPanel({
     }
   }, []);
 
+  const refreshDistributionInfo = useCallback(async () => {
+    try {
+      const info = await invoke<DistributionInfo>("app_distribution_info");
+      setDistributionInfo(info);
+    } catch {
+      setDistributionInfo(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     void refreshSettings();
     void loadProviders();
     void refreshDataPaths();
-  }, [open, refreshSettings, loadProviders, refreshDataPaths]);
+    void refreshDistributionInfo();
+  }, [open, refreshSettings, loadProviders, refreshDataPaths, refreshDistributionInfo]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -850,6 +875,15 @@ export function SettingsPanel({
       setUpdateStatus(null);
       setUpdateProgress(null);
       setPendingUpdate(null);
+      setStoreUpdateAvailable(false);
+
+      if (distributionInfo?.updatesViaMicrosoftStore) {
+        const result = await invoke<StoreUpdateCheckResult>("check_store_updates");
+        setUpdateStatus(result.message);
+        setStoreUpdateAvailable(result.updateAvailable);
+        return;
+      }
+
       const { check } = await import("@tauri-apps/plugin-updater");
       const update = (await check({ timeout: 30_000 })) as PendingUpdate | null;
       if (!update) {
@@ -863,9 +897,28 @@ export function SettingsPanel({
     } finally {
       setUpdateBusy(false);
     }
-  }, []);
+  }, [distributionInfo?.updatesViaMicrosoftStore]);
 
   const installPendingUpdate = useCallback(async () => {
+    if (distributionInfo?.updatesViaMicrosoftStore) {
+      if (!storeUpdateAvailable) return;
+      try {
+        setUpdateBusy(true);
+        setUpdateStatus("Starting Microsoft Store update…");
+        setUpdateProgress(null);
+        const result = await invoke<{ message: string; restartRequired: boolean }>("install_store_updates");
+        setUpdateStatus(result.message);
+        if (result.restartRequired) {
+          setUpdateProgress("If Windows does not restart the app automatically, close and reopen Persistent Sage after the Store finishes.");
+        }
+      } catch (e) {
+        setUpdateStatus(`Could not install update: ${String(e)}`);
+      } finally {
+        setUpdateBusy(false);
+      }
+      return;
+    }
+
     if (!pendingUpdate) return;
     try {
       setUpdateBusy(true);
@@ -892,7 +945,7 @@ export function SettingsPanel({
       setUpdateStatus(`Could not install update: ${String(e)}`);
       setUpdateBusy(false);
     }
-  }, [pendingUpdate]);
+  }, [distributionInfo?.updatesViaMicrosoftStore, pendingUpdate, storeUpdateAvailable]);
 
   const openFeedback = useCallback(
     async (kind: FeedbackKind) => {
@@ -1894,7 +1947,11 @@ export function SettingsPanel({
 
           <SettingsSection
             title="Updates"
-            description="Check GitHub Releases for signed Tauri updater packages. This does not require Windows code signing."
+            description={
+              distributionInfo?.updatesViaMicrosoftStore
+                ? "Checks the Microsoft Store for package updates (same button as GitHub installs—different source)."
+                : "Checks GitHub Releases for signed update packages (NSIS installer, portable, or build from source)."
+            }
           >
             <div className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-800/70 bg-slate-50 dark:bg-slate-950/35 p-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -1904,7 +1961,9 @@ export function SettingsPanel({
                   onClick={() => void checkForUpdates()}
                   className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {updateBusy && !pendingUpdate ? (
+                  {updateBusy &&
+                  !pendingUpdate &&
+                  !storeUpdateAvailable ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden />
                   ) : (
                     <RefreshCw className="size-4" aria-hidden />
@@ -1913,11 +1972,17 @@ export function SettingsPanel({
                 </button>
                 <button
                   type="button"
-                  disabled={updateBusy || !pendingUpdate}
+                  disabled={
+                    updateBusy ||
+                    (distributionInfo?.updatesViaMicrosoftStore
+                      ? !storeUpdateAvailable
+                      : !pendingUpdate)
+                  }
                   onClick={() => void installPendingUpdate()}
                   className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {updateBusy && pendingUpdate ? (
+                  {updateBusy &&
+                  (pendingUpdate || storeUpdateAvailable) ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden />
                   ) : (
                     <Download className="size-4" aria-hidden />
@@ -1929,7 +1994,9 @@ export function SettingsPanel({
                 <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">{updateStatus}</p>
               ) : (
                 <p className="text-[11px] leading-relaxed text-slate-500">
-                  Updates are verified with Persistent Sage&apos;s Tauri updater key before installation.
+                  {distributionInfo?.updatesViaMicrosoftStore
+                    ? "Microsoft Store installs never download updates from GitHub."
+                    : "GitHub installs are verified with Persistent Sage&apos;s Tauri updater key before installation."}
                 </p>
               )}
               {pendingUpdate?.body ? (
@@ -2206,6 +2273,13 @@ export function SettingsPanel({
                 })();
               }}
             />
+            {settings?.selectedProvider === "ollama_cloud" ? (
+              <p className="text-[11px] leading-relaxed text-amber-800/90 dark:text-amber-200/80">
+                Ollama Cloud has no embedding API. Re-index uses your <strong>local</strong> Ollama URL (
+                {settings.ollamaBaseUrl || "http://127.0.0.1:11434"}) — run Ollama locally and{" "}
+                <span className="font-mono">ollama pull nomic-embed-text</span>, or switch chat provider to OpenAI for embeddings.
+              </p>
+            ) : null}
             <div className="space-y-1.5">
               <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="embedding-model">
                 Embedding model (optional)

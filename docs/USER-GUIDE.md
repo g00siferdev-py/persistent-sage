@@ -158,7 +158,7 @@ For migrating a long-running OpenClaw agent with maximum fidelity, see [§ 11 Mi
 | **Generation** | Temperature, max output tokens |
 | **Memory** | LLM extraction, semantic recall, optional embedding model override, re-index embeddings |
 | **Pulse** | Enable timer, interval (minutes), instructions; runs in **sidebar-selected** thread |
-| **Updates** | Check GitHub Releases for signed Tauri updater packages |
+| **Updates** | **Store installs:** Microsoft Store (Library → Get updates). **GitHub installs:** Tauri updater checks GitHub Releases |
 | **Open beta feedback** | Open prefilled GitHub Issues for bugs, ideas, or general beta notes |
 | **Data** | Reveal data folder, wipe memories, factory reset |
 | **About** | Backend version |
