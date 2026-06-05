@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Browser fetch on Windows** — `fetch_browser` no longer fails with Chrome exit 13 (“Multiple targets”) when launching headless Chrome.
 - **Form artifacts** — select/radio options accept `{label, value}` objects (fixes `[object Object]` in dropdowns).
 - **Settings tooltips** — info tips render via portal so they are not clipped by scroll panels.
+- **Sidebar layout** — Memory Anchor section no longer clips off the bottom when the window is maximized.
 
 ---
 

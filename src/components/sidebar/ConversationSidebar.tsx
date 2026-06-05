@@ -131,7 +131,7 @@ export function ConversationSidebar({
 
   return (
     <aside className="flex h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-r border-slate-200 dark:border-slate-800/80 bg-slate-100 dark:bg-slate-900/40">
-      <div className="flex items-center gap-3 border-b border-slate-200 dark:border-slate-800/80 px-4 py-3">
+      <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 dark:border-slate-800/80 px-4 py-3">
         <img
           src="/persistent-sage-plate.png"
           alt="Persistent Sage"
@@ -148,7 +148,7 @@ export function ConversationSidebar({
         </div>
       </div>
 
-      <div className="p-3">
+      <div className="shrink-0 p-3">
         <button
           type="button"
           onClick={() => onNewChat()}
@@ -159,7 +159,8 @@ export function ConversationSidebar({
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-1 px-2 pb-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden px-2 pb-2">
+        <div className="flex max-h-[40%] min-h-0 shrink-0 flex-col">
         <div className="flex items-center justify-between gap-2 px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
           <span className="flex items-center gap-2">
             <MessageSquare className="size-3.5" aria-hidden />
@@ -177,7 +178,7 @@ export function ConversationSidebar({
             </button>
           ) : null}
         </div>
-        <nav className="max-h-[28vh] min-h-0 space-y-0.5 overflow-y-auto pr-1">
+        <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain pr-1">
           {listLoading ? (
             <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
               <Loader2 className="size-4 animate-spin text-indigo-400" aria-hidden />
@@ -286,14 +287,15 @@ export function ConversationSidebar({
             })
           )}
         </nav>
+        </div>
 
-        <div className="mt-1 min-h-0 flex-1 space-y-3 border-t border-slate-200 dark:border-slate-800/80 pt-3">
-          <div className="flex items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+        <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-slate-200 dark:border-slate-800/80 pt-3">
+          <div className="flex shrink-0 items-center gap-2 px-2 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             <Brain className="size-3.5" aria-hidden />
             Memory Anchor
           </div>
 
-          <div className="space-y-2 px-1">
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-1 pb-1">
             <div className="space-y-1 px-0.5 text-[10px] leading-snug text-slate-500">
               <p className="flex items-center gap-1.5">
                 <Sparkles className="size-3 shrink-0 text-indigo-400" aria-hidden />
@@ -306,7 +308,7 @@ export function ConversationSidebar({
               </p>
             </div>
 
-            <div className="max-h-36 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 px-2.5 py-2">
+            <div className="max-h-32 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 px-2.5 py-2">
               {briefingLoading ? (
                 <div className="flex items-center gap-2 py-4 text-xs text-slate-500">
                   <Loader2 className="size-4 animate-spin text-indigo-400" aria-hidden />
@@ -339,7 +341,7 @@ export function ConversationSidebar({
               <p className="mb-1 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
                 Recent anchors
               </p>
-              <ul className="max-h-28 space-y-1 overflow-y-auto">
+              <ul className="space-y-1">
                 {anchors.length === 0 ? (
                   <li className="px-1 text-[11px] text-slate-600">No anchors for this thread.</li>
                 ) : (
@@ -397,7 +399,7 @@ export function ConversationSidebar({
               ) : null}
               {recallBundle &&
               (recallBundle.anchors.length > 0 || recallBundle.messages.length > 0) ? (
-                <div className="mt-2 max-h-36 space-y-2 overflow-y-auto">
+                <div className="mt-2 space-y-2">
                   {recallBundle.anchors.length > 0 ? (
                     <ul className="space-y-1">
                       {recallBundle.anchors.map((a) => (

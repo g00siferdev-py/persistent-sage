@@ -9,6 +9,11 @@
     @apply h-full min-h-0 antialiased;
   }
 
+  html,
+  body {
+    @apply h-screen;
+  }
+
   body {
     @apply overflow-hidden bg-slate-100 text-slate-900;
   }
