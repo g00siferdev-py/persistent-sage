@@ -1120,6 +1120,18 @@ pub async fn execute_chat_turn(
         messages.push(turn);
     }
 
+    if state.settings.artifacts_enabled() && !text.is_empty() {
+        if let Some(turn) = messages.iter_mut().rev().find(|t| t.role == "user") {
+            if crate::artifacts::user_requests_chart(text) {
+                turn.content
+                    .push_str(crate::artifacts::USER_CHART_DELIVERABLE_HINT);
+            } else if crate::artifacts::user_requests_visual_deliverable(text) {
+                turn.content
+                    .push_str(crate::artifacts::USER_VISUAL_DELIVERABLE_HINT);
+            }
+        }
+    }
+
     if !options.persist_user_message && !text.is_empty() {
         let content = match options.ephemeral_user_note {
             EphemeralUserNote::Pulse => format!(

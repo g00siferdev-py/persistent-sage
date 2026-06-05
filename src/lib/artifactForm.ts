@@ -1,4 +1,4 @@
-/** Form artifact field definitions (mirrors OpenSage backend validation). */
+/** Form artifact field definitions (mirrors Persistent Sage backend validation). */
 
 export type FormFieldKind =
   | "text"
@@ -8,6 +8,11 @@ export type FormFieldKind =
   | "select"
   | "radio";
 
+export type FormOption = {
+  value: string;
+  label: string;
+};
+
 export type FormFieldDef = {
   id: string;
   label: string;
@@ -15,13 +20,43 @@ export type FormFieldDef = {
   default?: string | number | boolean;
   required?: boolean;
   placeholder?: string;
-  options?: string[];
+  /** Normalized select/radio choices (value + display label). */
+  options?: FormOption[];
 };
 
 export type FormArtifactBody = {
   submitLabel?: string;
   fields: FormFieldDef[];
 };
+
+/** Accept strings or `{ label, value }` objects from the model. */
+export function normalizeFormOptions(options: unknown[]): FormOption[] {
+  const out: FormOption[] = [];
+  for (let i = 0; i < options.length; i += 1) {
+    const opt = options[i];
+    if (typeof opt === "string" && opt.trim()) {
+      const s = opt.trim();
+      out.push({ value: s, label: s });
+      continue;
+    }
+    if (typeof opt === "number" && !Number.isNaN(opt)) {
+      const s = String(opt);
+      out.push({ value: s, label: s });
+      continue;
+    }
+    if (opt && typeof opt === "object") {
+      const o = opt as Record<string, unknown>;
+      const value = String(o.value ?? o.id ?? o.key ?? o.label ?? o.text ?? `option-${i + 1}`).trim();
+      const label = String(
+        o.label ?? o.text ?? o.title ?? o.name ?? o.value ?? value,
+      ).trim();
+      if (value && label) {
+        out.push({ value, label });
+      }
+    }
+  }
+  return out;
+}
 
 export function parseFormArtifactBody(body: unknown): FormArtifactBody | null {
   if (!body || typeof body !== "object") return null;
@@ -35,6 +70,10 @@ export function parseFormArtifactBody(body: unknown): FormArtifactBody | null {
     const label = String(o.label ?? id).trim();
     if (!id) return null;
     const kind = (o.kind ? String(o.kind) : "text") as FormFieldKind;
+    const options = Array.isArray(o.options) ? normalizeFormOptions(o.options) : undefined;
+    if ((kind === "select" || kind === "radio") && (!options || options.length === 0)) {
+      return null;
+    }
     fields.push({
       id,
       label,
@@ -42,7 +81,7 @@ export function parseFormArtifactBody(body: unknown): FormArtifactBody | null {
       default: o.default as string | number | boolean | undefined,
       required: Boolean(o.required),
       placeholder: o.placeholder ? String(o.placeholder) : undefined,
-      options: Array.isArray(o.options) ? o.options.map(String) : undefined,
+      options,
     });
   }
   return {

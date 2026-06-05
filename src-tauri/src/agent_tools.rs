@@ -85,6 +85,13 @@ pub fn tools_system_appendix(tools: &[ToolDefinition]) -> String {
     out.push_str(
         "\nAfter tools run, you receive results in follow-up messages. Summarize for the user in natural language.\n",
     );
+    if tools.iter().any(|t| t.name == "fetch_browser") {
+        out.push_str(
+            "\n**News homepages (CNN, MSNBC, BBC):** call `fetch_browser` with the site URL and \
+             `wait_until` `networkidle`. Summarize `headlines`, `headings`, or `links` from the JSON — \
+             do not tell the user you cannot browse. If the tool errors, try `web_search`.\n",
+        );
+    }
     out
 }
 

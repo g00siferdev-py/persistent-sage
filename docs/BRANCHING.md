@@ -7,7 +7,7 @@ Persistent Sage and OpenSage share one GitHub repository but use **separate bran
 | Branch | Purpose |
 |--------|---------|
 | **`main`** | **Persistent Sage** — beta releases, Windows installer CI, Microsoft Store MSIX (`store-msix` mirrors this). |
-| **`opensage-experimental`** | **OpenSage** — projects, forms, shared anchors, and other in-progress features. Merge to `main` only when intentionally shipping. |
+| **`opensage-experimental`** | Feature integration branch (historical). **1.0** features (artifacts, projects) ship on **`main`**. |
 | **`store-msix`** | Auto-synced from `main`; do not develop here. |
 
 ## Recommended local folders (Windows)

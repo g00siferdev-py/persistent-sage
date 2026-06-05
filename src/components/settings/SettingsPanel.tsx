@@ -54,8 +54,9 @@ const WEB_TOOLS_WHEN_ENABLED = (
 const WEB_TOOLS_INFO = (
   <>
     When enabled, your companion may use: <strong className="font-medium text-slate-700 dark:text-slate-300">{toolLabelList(["web_search", "fetch_url", "http_request"])}</strong>.
-    Web Search uses DuckDuckGo; Fetch URL loads public pages as plain text. Requests leave this device; local and
-    private URLs are blocked. Requires a tool-capable model. Off by default.
+    Web Search uses DuckDuckGo; Fetch URL loads public pages as plain text. For JS-heavy news homepages (CNN, BBC), also turn on{" "}
+    <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("fetch_browser")}</strong> below.
+    Requests leave this device; local and private URLs are blocked. Requires a tool-capable model. Off by default.
   </>
 );
 
@@ -70,7 +71,9 @@ const PERSONALITY_EDIT_INFO = (
 const BROWSER_FETCH_INFO = (
   <>
     Uses system Chrome, Chromium, or Edge to load pages with JavaScript, a normal browser user-agent, and a
-    persistent cookie profile. Better for news sites and bot-protected pages. Requires a browser install or{" "}
+    persistent cookie profile. Better for news sites and bot-protected pages. Requires{" "}
+    <strong className="font-medium text-slate-700 dark:text-slate-300">Allow web tools</strong> to be on as well.
+    Needs a browser install or{" "}
     <span className="font-mono text-slate-600 dark:text-slate-400">PERSISTENT_SAGE_CHROME_PATH</span>. In Docker, install{" "}
     <span className="font-mono text-slate-600 dark:text-slate-400">ca-certificates</span> and set{" "}
     <span className="font-mono text-slate-600 dark:text-slate-400">PERSISTENT_SAGE_CHROME_NO_SANDBOX=1</span> if needed. Off by default.
@@ -1727,7 +1730,7 @@ export function SettingsPanel({
               compact
               info={
                 <>
-                  Allows OpenSage to render structured assistant outputs (HTML cards and Vega-Lite charts) inside the chat window.
+                  Allows Persistent Sage to render structured assistant outputs (HTML pages, charts, tables, and forms) inside the chat window.
                   Artifacts are rendered locally with no JavaScript execution.
                 </>
               }

@@ -1,4 +1,4 @@
-//! OpenSage collaborative **projects**: living documents under `workspace/projects/`.
+//! Persistent Sage collaborative **projects**: living documents under `workspace/projects/`.
 //!
 //! Each project has metadata in `workspace/projects/_index.json` and a canonical
 //! `document.md` file the agent can read/write via tools or conversation.
@@ -99,10 +99,10 @@ pub fn ensure_projects_tree(workspace_root: &Path) {
     let _ = std::fs::create_dir_all(workspace_root.join(PROJECTS_DIR));
 }
 
-/// Instructions for collaborative projects (OpenSage experimental).
+/// Instructions for collaborative projects (Persistent Sage).
 pub const PROJECT_SYSTEM_APPENDIX: &str = r#"
 
-## Collaborative projects (OpenSage)
+## Collaborative projects (Persistent Sage)
 
 You can help the user with **ongoing work** (budgets, marketing plans, audits, etc.) using **projects** — not a single-purpose budget feature.
 
@@ -139,13 +139,19 @@ When the user asks for help with a plan, budget, report, or similar:
 ```
 Field kinds: `text`, `textarea`, `number`, `checkbox`, `select`, `radio`.
 
+For `select` / `radio`, `options` must be a **non-empty array** of either:
+- plain strings: `["Paris", "London"]`, or
+- objects: `[{"label": "Paris", "value": "paris"}, {"label": "London", "value": "london"}]`
+
+For quizzes, use one `select` or `radio` field per question; put the **question** in `label` and **answer choices** in `options` (never empty objects).
+
 ### Cross-companion memory
 - Project facts use global anchors prefixed `[project:<slug>]` (created automatically on `project_create` / `project_write`).
 - Any companion can recall these via memory_search — they are not isolated per personality.
 - When storing manual anchors about a project, prefix with `[project:<slug>]`.
 
 ### User form submissions
-The user may submit forms silently (not shown in chat). You receive structured JSON starting with `[OpenSage form submission]`. Parse values, update the project via `project_write`, then reply with:
+The user may submit forms silently (not shown in chat). You receive structured JSON starting with `[Persistent Sage form submission]`. Parse values, update the project via `project_write`, then reply with:
 - A short plain-text summary (2–4 sentences max, no large tables).
 - Exactly one **`html` artifact** for the main deliverable (clean sections, tables, simple CSS bars/charts — no scripts).
 
@@ -299,7 +305,7 @@ pub fn format_form_submission_message(
         .unwrap_or_default();
     let json = serde_json::to_string_pretty(values).unwrap_or_else(|_| "{}".into());
     format!(
-        "[OpenSage form submission]\nartifactTitle: {artifact_title}{pid}\nvalues:\n{json}\n\n\
+        "[Persistent Sage form submission]\nartifactTitle: {artifact_title}{pid}\nvalues:\n{json}\n\n\
          Update the living project (project_read / project_write). Reply with a brief summary in plain text \
          and exactly one **html** artifact containing the full visual report (tables, sections, simple CSS). \
          Do not put large tables only in plain chat."
@@ -314,7 +320,7 @@ pub fn project_tool_definitions() -> Vec<crate::provider::ToolDefinition> {
         ToolDefinition {
             name: "project_list".into(),
             description: Some(
-                "List collaborative OpenSage projects (living documents under workspace/projects/).".into(),
+                "List collaborative Persistent Sage projects (living documents under workspace/projects/).".into(),
             ),
             parameters: json!({ "type": "object", "properties": {} }),
         },

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   Brain,
@@ -16,9 +16,12 @@ import type { ChatMessage } from "@/types/chat";
 import type { StreamAssistantState } from "@/hooks/useChat";
 import { readImageFileAsDataUrl } from "@/lib/chatAttachments";
 import { settingsLayoutLabel, type SettingsLayoutMode } from "@/lib/settingsLayout";
-import { artifactBodyString, parseArtifactJson } from "@/lib/artifacts";
+import {
+  artifactBodyString,
+  buildChartHtmlFromArtifactBody,
+  parseArtifactJson,
+} from "@/lib/artifacts";
 import { FormArtifact } from "@/components/chat/FormArtifact";
-import vegaEmbed from "vega-embed";
 import { invoke } from "@tauri-apps/api/core";
 
 export type CompanionHeaderOption = {
@@ -51,8 +54,8 @@ type Props = {
     projectId: string | undefined,
     values: Record<string, unknown>,
   ) => void;
-  openSageProjects: { id: string; title: string; kind?: string }[];
-  activeOpenSageProjectId: string | null;
+  projectList: { id: string; title: string; kind?: string }[];
+  activeProjectId: string | null;
   onContinueProject: (id: string, title: string) => void;
   onOpenProjectWorkspace: () => void;
   settingsLayoutMode: SettingsLayoutMode;
@@ -78,6 +81,15 @@ function messageImageSrc(m: ChatMessage): string | null {
   } catch {
     return m.imageDisplayPath;
   }
+}
+
+/** Hide raw ``` fences while the model is still streaming a visual deliverable. */
+function streamingAssistantDisplay(text: string): string {
+  const fence = text.indexOf("```");
+  if (fence < 0) return text;
+  const before = text.slice(0, fence).trim();
+  if (before) return `${before}\n\n(Preparing report…)`;
+  return "(Preparing report…)";
 }
 
 function truncateArtifactCaption(s: string, max: number): string {
@@ -115,48 +127,47 @@ function artifactIframeSrcDoc(title: string, html: string): string {
       p { margin: 0.4rem 0; }
       pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace; }
       pre { white-space: pre-wrap; }
-      table { border-collapse: collapse; width: 100%; }
+      table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; font-size: 12px; }
       th, td { border: 1px solid rgba(100,116,139,0.35); padding: 6px 8px; vertical-align: top; }
+      th { background: rgba(148,163,184,0.15); font-weight: 600; }
+      svg { max-width: 100%; height: auto; display: block; margin: 0.75rem 0; }
+      .chart, .chart-wrap, .card { margin: 0.5rem 0; }
     </style>
   </head>
   <body>${safe}</body>
 </html>`;
 }
 
-function VegaLiteArtifact({ spec }: { spec: unknown }) {
-  const elRef = useRef<HTMLDivElement | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+/** Charts render as HTML (iframe) built from `data.values` — avoids fragile Vega embed. */
+function ChartArtifact({ body, title }: { body: unknown; title: string }) {
+  const chartHtml = useMemo(
+    () => buildChartHtmlFromArtifactBody(body, title),
+    [body, title],
+  );
 
-  useEffect(() => {
-    const el = elRef.current;
-    if (!el) return;
-    let disposed = false;
-    setErr(null);
-    el.replaceChildren();
-    void (async () => {
-      try {
-        // vegaEmbed will render SVG by default; keep actions off.
-        await vegaEmbed(el, spec as any, { actions: false, renderer: "svg" });
-      } catch (e) {
-        if (!disposed) setErr(String(e));
-      }
-    })();
-    return () => {
-      disposed = true;
-    };
-  }, [spec]);
-
-  if (err) {
+  if (chartHtml) {
     return (
-      <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-200">
-        Could not render chart: {err}
+      <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-950/30">
+        <iframe
+          title={title}
+          sandbox=""
+          referrerPolicy="no-referrer"
+          className="h-[22rem] w-full"
+          srcDoc={chartHtml}
+        />
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-950/30">
-      <div ref={elRef} className="w-full overflow-x-auto p-2" />
+    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-3 text-xs text-amber-950 dark:text-amber-100">
+      <p className="font-semibold">Chart could not be drawn</p>
+      <p className="mt-1 text-amber-900/90 dark:text-amber-100/90">
+        The assistant did not include readable chart data (numeric values in{" "}
+        <code className="rounded bg-black/10 px-1">data.values</code>). Ask again and
+        mention you want a chart with explicit numbers, or request an HTML report with an
+        inline chart.
+      </p>
     </div>
   );
 }
@@ -206,8 +217,8 @@ export function ChatMain({
   recipes,
   onRunRecipe,
   onSubmitArtifactForm,
-  openSageProjects,
-  activeOpenSageProjectId,
+  projectList,
+  activeProjectId,
   onContinueProject,
   onOpenProjectWorkspace,
   settingsLayoutMode,
@@ -448,7 +459,11 @@ export function ChatMain({
                         </div>
                       );
                     }
-                    if (artifact.type === "vegaLite") {
+                    if (
+                      artifact.type === "vegaLite" ||
+                      artifact.type.toLowerCase() === "vegalite" ||
+                      artifact.type === "chart"
+                    ) {
                       return (
                         <div className="space-y-2">
                           <div className="flex items-center justify-between gap-2">
@@ -461,7 +476,7 @@ export function ChatMain({
                               </p>
                             ) : null}
                           </div>
-                          <VegaLiteArtifact spec={artifact.body} />
+                          <ChartArtifact body={artifact.body} title={artifact.title} />
                           {artifact.citations?.length ? (
                             <ArtifactCitations citations={artifact.citations} />
                           ) : null}
@@ -536,7 +551,9 @@ export function ChatMain({
                   <span>Thinking…</span>
                 </p>
               ) : (
-                <p className="whitespace-pre-wrap text-slate-900 dark:text-slate-100">{streamAssistant.text}</p>
+                <p className="whitespace-pre-wrap text-slate-900 dark:text-slate-100">
+                  {streamingAssistantDisplay(streamAssistant.text)}
+                </p>
               )}
             </article>
           ) : null}
@@ -549,12 +566,12 @@ export function ChatMain({
           onSubmit={handleSubmit}
           className="mx-auto flex max-w-3xl flex-col gap-2"
         >
-          {openSageProjects.length ? (
+          {projectList.length ? (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                 Projects
               </span>
-              {openSageProjects.slice(0, 6).map((p) => (
+              {projectList.slice(0, 6).map((p) => (
                 <button
                   key={p.id}
                   type="button"
@@ -562,7 +579,7 @@ export function ChatMain({
                   onClick={() => onContinueProject(p.id, p.title)}
                   title={`Continue ${p.title}`}
                   className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${
-                    p.id === activeOpenSageProjectId
+                    p.id === activeProjectId
                       ? "border-indigo-500/50 bg-indigo-500/15 text-indigo-800 dark:text-indigo-200"
                       : "border-slate-200 dark:border-slate-800/80 bg-white/70 dark:bg-slate-950/30 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900"
                   }`}

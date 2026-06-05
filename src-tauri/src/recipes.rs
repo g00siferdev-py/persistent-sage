@@ -1,4 +1,4 @@
-//! Saved one-click workflows (recipes) for OpenSage — stored in `{data_dir}/recipes.json`.
+//! Saved one-click workflows (recipes) for Persistent Sage — stored in `{data_dir}/recipes.json`.
 
 use std::path::{Path, PathBuf};
 

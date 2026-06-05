@@ -104,31 +104,36 @@ pub fn resolve_embedding_spec(settings: &SettingsManager) -> Result<EmbeddingSpe
                 ollama_bearer: None,
             })
         }
-        "ollama" | "ollama_cloud" => {
+        "ollama" => {
             let model = if custom.is_empty() {
                 "nomic-embed-text".into()
             } else {
                 custom
             };
-            let (base, bearer) = if provider == "ollama_cloud" {
-                let token = settings
-                    .decrypt_api_key("ollama")
-                    .map_err(|e| EmbeddingError::Provider(e.to_string()))?
-                    .filter(|s| !s.trim().is_empty())
-                    .ok_or_else(|| {
-                        EmbeddingError::Provider("Ollama Cloud API key required".into())
-                    })?;
-                ("https://ollama.com".to_string(), Some(token))
-            } else {
-                (settings.ollama_base_url(), None)
-            };
             Ok(EmbeddingSpec {
-                provider_id: provider,
+                provider_id: "ollama".into(),
+                model,
+                openai_base_url: None,
+                ollama_base_url: Some(settings.ollama_base_url()),
+                openai_api_key: None,
+                ollama_bearer: None,
+            })
+        }
+        "ollama_cloud" => {
+            // Ollama Cloud serves chat only — no /api/embed on ollama.com. Use local Ollama for vectors.
+            let model = if custom.is_empty() {
+                "nomic-embed-text".into()
+            } else {
+                custom
+            };
+            let base = settings.ollama_base_url();
+            Ok(EmbeddingSpec {
+                provider_id: "ollama".into(),
                 model,
                 openai_base_url: None,
                 ollama_base_url: Some(base),
                 openai_api_key: None,
-                ollama_bearer: bearer,
+                ollama_bearer: None,
             })
         }
         "anthropic" => {
@@ -161,7 +166,7 @@ pub async fn embed_texts(
     }
     match spec.provider_id.as_str() {
         "openai" => embed_openai(http, spec, texts).await,
-        "ollama" | "ollama_cloud" => embed_ollama(http, spec, texts).await,
+        "ollama" => embed_ollama(http, spec, texts).await,
         id => Err(EmbeddingError::UnsupportedProvider(id.to_string())),
     }
 }

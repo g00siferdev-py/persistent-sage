@@ -1,3 +1,5 @@
+import { prepareAssistantMessage } from "@/lib/artifacts";
+
 /** Thread row from `memory_list_conversations` / `memory_get_conversation`. */
 export interface StoredConversation {
   id: string;
@@ -73,6 +75,17 @@ export interface MemoryPin {
 }
 
 export function storedToChatMessage(m: StoredMessage): ChatMessage {
+  if (m.role === "assistant") {
+    const prepared = prepareAssistantMessage(m.content, m.artifactJson);
+    return {
+      id: String(m.id),
+      role: m.role,
+      content: prepared.content,
+      imageDisplayPath: m.imageDisplayPath,
+      imageMime: m.imageMime,
+      artifactJson: prepared.artifactJson,
+    };
+  }
   return {
     id: String(m.id),
     role: m.role,

@@ -15,6 +15,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -31,7 +32,7 @@ use crate::provider::ProviderError;
 
 pub const BROWSER_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
-const BROWSER_FETCH_TIMEOUT_SECS: u64 = 55;
+const BROWSER_FETCH_TIMEOUT_SECS: u64 = 120;
 const HOST_MIN_INTERVAL_SECS: u64 = 2;
 const ROBOTS_FETCH_TIMEOUT_SECS: u64 = 12;
 const MAX_HEADINGS: usize = 80;
@@ -281,12 +282,29 @@ pub fn ensure_browser_directories(data_directory: &Path) {
 }
 
 fn cache_browser_profile_dir() -> PathBuf {
+    // Release/Store builds and `tauri dev` must not share one Chrome profile (SingletonLock).
+    let profile_name = if cfg!(debug_assertions) {
+        "browser_profile_dev"
+    } else {
+        "browser_profile"
+    };
+    // Windows: avoid spaces in the default ProjectDirs cache path.
+    #[cfg(windows)]
+    {
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            if !local.trim().is_empty() {
+                return PathBuf::from(local)
+                    .join("persistent-sage")
+                    .join(profile_name);
+            }
+        }
+    }
     directories::ProjectDirs::from("app", "Persistent Sage", "Persistent Sage")
-        .map(|d| d.cache_dir().join("browser_profile"))
+        .map(|d| d.cache_dir().join(profile_name))
         .unwrap_or_else(|| {
             std::env::temp_dir()
                 .join("persistent-sage")
-                .join("browser_profile")
+                .join(profile_name)
         })
 }
 
@@ -466,6 +484,7 @@ fn chrome_error_is_profile_lock(err: &ProviderError) -> bool {
     msg.contains("SingletonLock")
         || (msg.contains("profile") && msg.contains("Permission denied"))
         || msg.contains("could not lock its profile")
+        || msg.contains("Multiple targets are not supported")
 }
 
 fn prepare_chrome_profile(dir: &Path) -> Result<(), ProviderError> {
@@ -647,7 +666,10 @@ async fn run_chrome(
         "--no-default-browser-check".into(),
         "--disable-dev-shm-usage".into(),
         "--disable-blink-features=AutomationControlled".into(),
+        "--window-size=1366,900".into(),
         format!("--user-agent={BROWSER_USER_AGENT}"),
+        // Windows headless Chrome requires `flag=value` for paths; separate `--user-data-dir` + path
+        // is parsed as an extra navigation target ("Multiple targets are not supported").
         format!("--user-data-dir={}", profile_dir.display()),
         format!("--virtual-time-budget={}", wait.virtual_time_budget_ms()),
     ];
@@ -660,8 +682,15 @@ async fn run_chrome(
     args.push("--dump-dom".into());
     args.push(url.to_string());
 
+    eprintln!(
+        "persistent-sage: fetch_browser launching Chrome for {url} (profile {}, {} args)",
+        profile_dir.display(),
+        args.len()
+    );
+
     let mut cmd = Command::new(chrome);
     cmd.args(&args);
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     apply_chrome_launch_env(&mut cmd);
     let fut = cmd.output();
     let output = tokio::time::timeout(Duration::from_secs(BROWSER_FETCH_TIMEOUT_SECS), fut)
@@ -672,6 +701,11 @@ async fn run_chrome(
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let hint = chrome_stderr_hint(&stderr);
+        eprintln!(
+            "persistent-sage: fetch_browser Chrome failed for {url}: status={} stderr={}",
+            output.status,
+            stderr.trim()
+        );
         return Err(tool_err(format!(
             "headless browser exited with {}: {}{}",
             output.status,
@@ -679,6 +713,10 @@ async fn run_chrome(
             hint
         )));
     }
+    eprintln!(
+        "persistent-sage: fetch_browser Chrome ok for {url} ({} bytes DOM)",
+        output.stdout.len()
+    );
     Ok(output.stdout)
 }
 

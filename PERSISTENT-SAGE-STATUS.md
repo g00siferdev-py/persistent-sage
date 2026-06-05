@@ -1,6 +1,6 @@
 # Persistent Sage — project status
 
-**Version:** 0.2.0-beta.9 (**open beta**)
+**Version:** 1.0.0
 **Repository:** [g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage)  
 **Maintainer:** [g00siferdev-py](https://github.com/g00siferdev-py)
 
@@ -10,7 +10,7 @@
 
 Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rust). Conversations and memory live in **SQLite on your machine**. **API keys are encrypted**; the **database file is not encrypted**. There is no Persistent Sage cloud for chat storage.
 
-**Beta:** We are inviting testers to install from source, use daily workflows, and file issues. See [README.md § Beta testing](./README.md#beta-testing) and [CONTRIBUTING.md](./CONTRIBUTING.md).
+**Release:** Persistent Sage **1.0** — artifacts, projects, agent tools, and dual update channels (Microsoft Store + GitHub). Feedback via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues).
 
 **Documentation:** See **[docs/README.md](./docs/README.md)** for the full guide index, including **[fresh install instructions](./docs/INSTALL.md)**.
 
@@ -25,12 +25,13 @@ Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rus
 | Providers | OpenAI, Google Gemini, xAI Grok, Ollama local, Ollama Cloud, Anthropic, placeholder |
 | Companion | Multi-profile `personality.json`, Persistent Sage JSON + OpenClaw markdown import, live prompt preview |
 | Personality agent tools | Opt-in `personality_get` / `personality_update` |
-| Agent tools | Web, `fetch_browser`, workspace, optional `database_query` (opt-in) |
+| Agent tools | Web, `fetch_browser`, workspace, projects (with artifacts), optional `database_query` (opt-in) |
+| Chat artifacts | HTML, charts, tables, forms (Settings → Tools) |
+| Updates | Microsoft Store (MSIX) **or** GitHub Tauri updater — auto-detected per install |
 | Pulse | Scheduled ticks in **open sidebar thread** |
 | Vision | Image attach + multimodal provider payloads |
 | Settings | Four tabs: Companion, Provider, Tools, General |
 | Data controls | Memory wipe, factory reset, `PERSISTENT_SAGE_DATA_DIR` / portable |
-| Updates | Tauri updater artifacts and in-app update check |
 | Feedback | Settings buttons open structured public GitHub Issues |
 | Docs | `docs/` install, privacy, user guide, architecture, development, signing/update notes |
 
@@ -105,4 +106,4 @@ npm run tauri dev   # manual smoke test
 
 ---
 
-*Last updated for **0.2.0-beta.9** — Pulse improvements, What's new dialog, provider fixes, and Microsoft Store MSIX workflow.*
+*Last updated for **1.0.0** — artifacts, projects, browser fetch fixes, Persistent Sage branding, dual update channels.*

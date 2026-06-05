@@ -541,10 +541,14 @@ fn memory_get_recent(
     conversation_id: String,
     limit: usize,
 ) -> Result<Vec<StoredMessage>, String> {
-    state
+    let mut recent = state
         .memory
         .get_recent(&conversation_id, limit)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    if state.settings.artifacts_enabled() {
+        artifacts::repair_assistant_messages(&mut recent);
+    }
+    Ok(recent)
 }
 
 /// Rich briefing: transcript + Memory Anchors + projects + preferences.

@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Info } from "lucide-react";
 
 /** Section heading used across Settings tabs. */
@@ -35,6 +36,24 @@ export function SettingsSection({
   );
 }
 
+const INFO_TIP_WIDTH_PX = 288;
+const INFO_TIP_MAX_HEIGHT_PX = 256;
+
+function computeInfoTipPosition(anchor: DOMRect): { top: number; left: number; width: number } {
+  const width = Math.min(INFO_TIP_WIDTH_PX, window.innerWidth - 16);
+  let left = anchor.right - width;
+  left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+
+  const gap = 6;
+  const spaceBelow = window.innerHeight - anchor.bottom - gap;
+  const spaceAbove = anchor.top - gap;
+  const preferBelow = spaceBelow >= Math.min(INFO_TIP_MAX_HEIGHT_PX, window.innerHeight * 0.5);
+  let top = preferBelow ? anchor.bottom + gap : anchor.top - Math.min(INFO_TIP_MAX_HEIGHT_PX, spaceAbove);
+  top = Math.max(8, Math.min(top, window.innerHeight - 8));
+
+  return { top, left, width };
+}
+
 /** (i) control — click to read full tool / setting description. */
 export function SettingsInfoTip({
   label,
@@ -46,15 +65,37 @@ export function SettingsInfoTip({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLSpanElement>(null);
+  const [position, setPosition] = useState<{ top: number; left: number; width: number } | null>(
+    null,
+  );
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
   const tipId = useId();
+
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current) {
+      setPosition(null);
+      return;
+    }
+    const update = () => {
+      if (!buttonRef.current) return;
+      setPosition(computeInfoTipPosition(buttonRef.current.getBoundingClientRect()));
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (buttonRef.current?.contains(target) || tipRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -67,27 +108,44 @@ export function SettingsInfoTip({
     };
   }, [open]);
 
+  const tipPanel =
+    open && position
+      ? createPortal(
+          <div
+            ref={tipRef}
+            id={tipId}
+            role="tooltip"
+            style={{
+              top: position.top,
+              left: position.left,
+              width: position.width,
+            }}
+            className="fixed z-[300] max-h-[min(16rem,50vh)] overflow-y-auto rounded-lg border border-slate-300 dark:border-slate-700/90 bg-slate-50 dark:bg-slate-950 px-3 py-2.5 text-[11px] leading-relaxed text-slate-700 dark:text-slate-300 shadow-xl ring-1 ring-slate-300/40 dark:ring-slate-600/40"
+          >
+            {children}
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
-    <span ref={rootRef} className={`relative inline-flex shrink-0 ${className}`.trim()}>
+    <span className={`inline-flex shrink-0 ${className}`.trim()}>
       <button
+        ref={buttonRef}
         type="button"
         className="inline-flex size-5 items-center justify-center rounded-full border border-slate-300 dark:border-slate-600/80 bg-white dark:bg-slate-900/90 text-slate-600 dark:text-slate-400 transition hover:border-indigo-500/50 hover:bg-slate-200 dark:bg-slate-800 hover:text-indigo-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-500"
         aria-label={`More about ${label}`}
         aria-expanded={open}
         aria-controls={open ? tipId : undefined}
-        onClick={() => setOpen((v) => !v)}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
       >
         <Info className="size-3" aria-hidden />
       </button>
-      {open ? (
-        <div
-          id={tipId}
-          role="tooltip"
-          className="absolute right-0 top-full z-[120] mt-1.5 max-h-[min(16rem,50vh)] w-[min(18rem,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-slate-300 dark:border-slate-700/90 bg-slate-50 dark:bg-slate-950 px-3 py-2.5 text-[11px] leading-relaxed text-slate-700 dark:text-slate-300 shadow-xl ring-1 ring-slate-300/40 dark:ring-slate-600/40"
-        >
-          {children}
-        </div>
-      ) : null}
+      {tipPanel}
     </span>
   );
 }

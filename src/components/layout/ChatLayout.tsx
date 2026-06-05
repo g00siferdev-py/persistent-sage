@@ -180,9 +180,9 @@ export function ChatLayout() {
     recipes,
     runRecipe,
     submitArtifactForm,
-    openSageProjects,
-    activeOpenSageProjectId,
-    continueOpenSageProject,
+    projectList,
+    activeProjectId,
+    continueProject,
     openProjectWorkspace,
     applyActivePersonality,
     activePersonalityId,
@@ -279,9 +279,9 @@ export function ChatLayout() {
           onSubmitArtifactForm={(title, projectId, values) =>
             void submitArtifactForm(title, projectId, values)
           }
-          openSageProjects={openSageProjects}
-          activeOpenSageProjectId={activeOpenSageProjectId}
-          onContinueProject={(id, title) => continueOpenSageProject(id, title)}
+          projectList={projectList}
+          activeProjectId={activeProjectId}
+          onContinueProject={(id, title) => continueProject(id, title)}
           onOpenProjectWorkspace={() => void openProjectWorkspace()}
           settingsLayoutMode={settingsLayoutMode}
           onCycleSettingsLayout={() => cycleSettingsLayout()}

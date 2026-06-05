@@ -6,13 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+---
+
+## [1.0.0] — 2026-06-05
+
 ### Added
 
+- **Chat artifacts** — HTML pages, inline SVG/CSS charts, markdown tables, and interactive **form** artifacts in the chat UI (`Settings → Tools → Enable chat artifacts`).
+- **Collaborative projects** — `project_list`, `project_create`, `project_read`, `project_write`, and `project_set_active` tools; living documents under `workspace/projects/`; project chips in the composer.
 - **Microsoft Store update channel** — Store (MSIX) builds detect packaged installation. **Check for updates** queries the Microsoft Store (not GitHub); **Download & install** uses Store package update APIs. GitHub NSIS/portable/source installs keep the Tauri updater unchanged.
+
+### Changed
+
+- **Persistent Sage 1.0** — unified product name and release line; experimental OpenSage features merged for general availability.
+- **Browser fetch** — Windows headless Chrome profile isolation for dev vs Store, longer timeouts, and fixed `--user-data-dir` argument passing.
 
 ### Fixed
 
-- **`main` release line** — Reverted accidental OpenSage shell branding from PR #2 (`tauri.conf.json`, data directory, keyring service, browser profile paths). Store and GitHub release builds track **Persistent Sage** again. OpenSage experiments stay on the `opensage-experimental` branch.
+- **Browser fetch on Windows** — `fetch_browser` no longer fails with Chrome exit 13 (“Multiple targets”) when launching headless Chrome.
+- **Form artifacts** — select/radio options accept `{label, value}` objects (fixes `[object Object]` in dropdowns).
+- **Settings tooltips** — info tips render via portal so they are not clipped by scroll panels.
 
 ---
 

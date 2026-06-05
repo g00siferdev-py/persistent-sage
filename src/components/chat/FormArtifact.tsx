@@ -78,16 +78,16 @@ function FieldInput({
             {field.required ? <span className="text-rose-500"> *</span> : null}
           </legend>
           {options.map((opt) => (
-            <label key={opt} className="flex items-center gap-2 text-sm">
+            <label key={opt.value} className="flex items-center gap-2 text-sm">
               <input
                 type="radio"
                 name={id}
-                value={opt}
-                checked={value === opt}
+                value={opt.value}
+                checked={value === opt.value}
                 disabled={disabled}
-                onChange={() => onChange(opt)}
+                onChange={() => onChange(opt.value)}
               />
-              {opt}
+              {opt.label}
             </label>
           ))}
         </fieldset>
@@ -108,8 +108,8 @@ function FieldInput({
         >
           <option value="">—</option>
           {options.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
             </option>
           ))}
         </select>

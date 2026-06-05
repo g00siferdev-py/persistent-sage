@@ -123,7 +123,7 @@ pub struct SettingsFile {
     /// App version for which the user dismissed the “What’s new” dialog (empty = never shown).
     #[serde(default)]
     pub whats_new_seen_version: String,
-    /// When true, assistant replies may include renderable chat artifacts (OpenSage).
+    /// When true, assistant replies may include renderable chat artifacts (HTML, charts, forms).
     #[serde(default = "default_artifacts_enabled")]
     pub artifacts_enabled: bool,
 }

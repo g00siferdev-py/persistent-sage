@@ -336,7 +336,7 @@ const SCHEMA_VERSION: i32 = 7;
 /// SQLite value for legacy rows and the built-in profile id in `personality.json`.
 pub const DEFAULT_PERSONALITY_ID: &str = "default";
 
-/// Cross-companion anchors (OpenSage projects, shared facts). Visible to every personality at recall.
+/// Cross-companion anchors (Persistent Sage projects, shared facts). Visible to every personality at recall.
 pub const SHARED_PERSONALITY_ID: &str = "__shared__";
 
 fn is_global_anchor_content(content: &str) -> bool {

@@ -68,10 +68,10 @@ export function useChat() {
   const [recipes, setRecipes] = useState<
     { id: string; name: string; description?: string; requiresBrowserFetch?: boolean }[]
   >([]);
-  const [openSageProjects, setOpenSageProjects] = useState<
+  const [projectList, setProjectList] = useState<
     { id: string; title: string; kind?: string }[]
   >([]);
-  const [activeOpenSageProjectId, setActiveOpenSageProjectId] = useState<string | null>(null);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
   const loadSeq = useRef(0);
   const activeConversationIdRef = useRef<string | null>(null);
@@ -106,17 +106,17 @@ export function useChat() {
     }
   }, []);
 
-  const refreshOpenSageProjects = useCallback(async () => {
+  const refreshProjectList = useCallback(async () => {
     try {
       const view = await invoke<{
         projects: { id: string; title: string; kind?: string }[];
         activeProjectId?: string | null;
       }>("project_list");
-      setOpenSageProjects(view.projects ?? []);
-      setActiveOpenSageProjectId(view.activeProjectId?.trim() || null);
+      setProjectList(view.projects ?? []);
+      setActiveProjectId(view.activeProjectId?.trim() || null);
     } catch {
-      setOpenSageProjects([]);
-      setActiveOpenSageProjectId(null);
+      setProjectList([]);
+      setActiveProjectId(null);
     }
   }, []);
 
@@ -337,7 +337,7 @@ export function useChat() {
         const list = await refreshConversations();
         await refreshVisionSupported();
         await refreshRecipes();
-        await refreshOpenSageProjects();
+        await refreshProjectList();
         if (cancelled) return;
         setListLoading(false);
         if (list.length === 0) {
@@ -361,7 +361,7 @@ export function useChat() {
     return () => {
       cancelled = true;
     };
-  }, [refreshConversations, refreshVisionSupported, refreshRecipes, refreshOpenSageProjects]);
+  }, [refreshConversations, refreshVisionSupported, refreshRecipes, refreshProjectList]);
 
   useEffect(() => {
     if (!activeConversationId) {
@@ -595,7 +595,7 @@ export function useChat() {
         void refreshSidebarContext(convId);
         await refreshConversations();
         await refreshVisionSupported();
-        await refreshOpenSageProjects();
+        await refreshProjectList();
       } catch (e) {
         const msg =
           e instanceof Error
@@ -616,7 +616,7 @@ export function useChat() {
       loadActiveThread,
       refreshConversations,
       refreshSidebarContext,
-      refreshOpenSageProjects,
+      refreshProjectList,
     ],
   );
 
@@ -633,12 +633,12 @@ export function useChat() {
           values,
         });
         await sendMessage(message, null, { silent: true });
-        await refreshOpenSageProjects();
+        await refreshProjectList();
       } catch (e) {
         setError(String(e));
       }
     },
-    [sendMessage, refreshOpenSageProjects],
+    [sendMessage, refreshProjectList],
   );
 
   const runRecipe = useCallback(
@@ -652,7 +652,7 @@ export function useChat() {
         await invoke("recipe_run", { recipeId, conversationId: convId });
         await loadActiveThread(convId);
         await refreshConversations();
-        await refreshOpenSageProjects();
+        await refreshProjectList();
       } catch (e) {
         setError(String(e));
         await loadActiveThread(convId);
@@ -660,10 +660,10 @@ export function useChat() {
         setSending(false);
       }
     },
-    [loadActiveThread, refreshConversations, refreshOpenSageProjects, sending],
+    [loadActiveThread, refreshConversations, refreshProjectList, sending],
   );
 
-  const continueOpenSageProject = useCallback(
+  const continueProject = useCallback(
     (projectId: string, title: string) => {
       void sendMessage(
         `Please continue my project "${title}" (id: ${projectId}). Use project_read, update the document if needed, and show me a polished html artifact if there is a report to review.`,
@@ -715,11 +715,11 @@ export function useChat() {
     refreshRecipes,
     runRecipe,
     submitArtifactForm,
-    openSageProjects,
-    activeOpenSageProjectId,
-    continueOpenSageProject,
+    projectList,
+    activeProjectId,
+    continueProject,
     openProjectWorkspace,
-    refreshOpenSageProjects,
+    refreshProjectList,
     refreshConversations,
     applyActivePersonality,
   };

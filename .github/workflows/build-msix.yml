@@ -60,4 +60,4 @@ jobs:
           name: persistent-sage-msix-${{ github.sha }}
           retention-days: 30
           if-no-files-found: error
-          path: PersistentSage_0.2.9.0_x64.msix
+          path: PersistentSage_1.0.0.0_x64.msix
