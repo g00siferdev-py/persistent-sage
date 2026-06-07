@@ -28,7 +28,7 @@ mod recipes;
 mod settings;
 mod store_updates;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use memory::{
@@ -125,7 +125,9 @@ fn open_store_updates() -> Result<(), String> {
 }
 
 #[tauri::command]
-fn check_store_updates(app: tauri::AppHandle) -> Result<store_updates::StoreUpdateCheckResult, String> {
+fn check_store_updates(
+    app: tauri::AppHandle,
+) -> Result<store_updates::StoreUpdateCheckResult, String> {
     store_updates::check_store_updates(&app)
 }
 
@@ -198,30 +200,38 @@ fn reveal_data_directory() -> Result<(), String> {
     opener::open(&dir).map_err(|e| format!("open data folder: {e}"))
 }
 
-/// Open a workspace-relative or absolute file path in the system default app.
+/// Open a workspace-relative file path in the system default app.
 #[tauri::command]
 fn open_path(path: String, state: State<'_, NovaState>) -> Result<(), String> {
-    let raw = path.trim();
-    if raw.is_empty() {
-        return Err("path is empty".into());
-    }
-    let p = std::path::Path::new(raw);
-    let abs = if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        let stripped = raw.strip_prefix("workspace/").unwrap_or(raw);
-        state.workspace_root.join(stripped)
-    };
+    let abs = resolve_open_path(&path, &state.workspace_root)?;
     if !abs.exists() {
         return Err(format!("path not found: {}", abs.display()));
     }
     opener::open(&abs).map_err(|e| format!("open path: {e}"))
 }
 
+fn resolve_open_path(path: &str, workspace_root: &Path) -> Result<PathBuf, String> {
+    let raw = path.trim();
+    if raw.is_empty() {
+        return Err("path is empty".into());
+    }
+    let rel = raw.strip_prefix("workspace/").unwrap_or(raw);
+    if rel.trim().is_empty() {
+        return Err("path is empty".into());
+    }
+    if Path::new(rel).is_absolute() || rel.contains('\\') || rel.contains(':') {
+        return Err("path must be workspace-relative".into());
+    }
+    let abs = crate::agent_tools::resolve_workspace_subpath(workspace_root, rel)
+        .map_err(|e| e.to_string())?;
+    crate::agent_tools::assert_path_in_workspace(workspace_root, &abs)
+        .map_err(|e| e.to_string())?;
+    Ok(abs)
+}
+
 #[tauri::command]
 fn browser_detect_chromium() -> Result<Option<String>, String> {
-    Ok(crate::browser_fetch::find_chrome_executable()
-        .map(|p| p.to_string_lossy().into_owned()))
+    Ok(crate::browser_fetch::find_chrome_executable().map(|p| p.to_string_lossy().into_owned()))
 }
 
 #[tauri::command]
@@ -856,4 +866,51 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Persistent Sage (Tauri application)");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_open_path;
+
+    #[test]
+    fn open_path_rejects_absolute_and_traversal_paths() {
+        let workspace = std::env::temp_dir().join("persistent-sage-open-path-rejects");
+        let _ = std::fs::remove_dir_all(&workspace);
+        std::fs::create_dir_all(&workspace).unwrap();
+
+        assert!(resolve_open_path("/etc/passwd", &workspace).is_err());
+        assert!(resolve_open_path("workspace/../../secret.txt", &workspace).is_err());
+
+        let _ = std::fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn open_path_resolves_workspace_prefixed_relative_paths() {
+        let workspace = std::env::temp_dir().join("persistent-sage-open-path-resolves");
+        let _ = std::fs::remove_dir_all(&workspace);
+        std::fs::create_dir_all(workspace.join("projects")).unwrap();
+
+        let resolved = resolve_open_path("workspace/projects", &workspace).unwrap();
+        assert_eq!(resolved, workspace.join("projects"));
+
+        let _ = std::fs::remove_dir_all(&workspace);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn open_path_rejects_symlink_escape() {
+        let root = std::env::temp_dir().join("persistent-sage-open-path-symlink");
+        let workspace = root.join("workspace");
+        let outside = root.join("outside");
+        let link = workspace.join("link");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&workspace).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, &link).unwrap();
+
+        let err = resolve_open_path("workspace/link", &workspace).unwrap_err();
+        assert!(err.contains("outside the workspace"), "{err}");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

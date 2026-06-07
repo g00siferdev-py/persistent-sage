@@ -1,5 +1,7 @@
 //! Chat artifacts: structured HTML / Vega-Lite / Markdown blocks embedded in assistant replies.
 
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -203,12 +205,7 @@ pub fn split_assistant_reply(text: &str) -> (String, Option<String>) {
     for lang in ["html", "htm", "xml"] {
         if let Some((before, html_body, after)) = extract_language_fence_ci(text, lang) {
             if looks_like_html(html_body) {
-                return finalize_split(
-                    text,
-                    before,
-                    after,
-                    html_artifact_from_body(html_body),
-                );
+                return finalize_split(text, before, after, html_artifact_from_body(html_body));
             }
         }
     }
@@ -431,10 +428,12 @@ fn looks_like_html(s: &str) -> bool {
 }
 
 fn parse_and_store_artifact(json_str: &str) -> Option<String> {
-    let artifact = parse_artifact_json(json_str).map_err(|e| {
-        eprintln!("persistent-sage: artifact parse failed: {e}");
-        e
-    }).ok()?;
+    let artifact = parse_artifact_json(json_str)
+        .map_err(|e| {
+            eprintln!("persistent-sage: artifact parse failed: {e}");
+            e
+        })
+        .ok()?;
     validate_and_serialize_artifact(artifact)
 }
 
@@ -601,7 +600,11 @@ fn extract_markdown_table(text: &str) -> Option<(String, String, Vec<Vec<String>
 
 fn markdown_table_to_html_document(rows: &[Vec<String>], title: &str) -> String {
     let header = rows.first().cloned().unwrap_or_default();
-    let body_rows = if rows.len() > 1 { &rows[1..] } else { &[] as &[Vec<String>] };
+    let body_rows = if rows.len() > 1 {
+        &rows[1..]
+    } else {
+        &[] as &[Vec<String>]
+    };
     let head_cells: String = header
         .iter()
         .map(|c| format!("<th>{}</th>", html_escape(c)))
@@ -691,8 +694,7 @@ fn extract_artifact_fence(text: &str) -> Option<(&str, &str, &str)> {
     let lower = text.to_ascii_lowercase();
     let marker = format!("```{ARTIFACT_FENCE}");
     let start = lower.find(&marker)?;
-    let after_marker = text[start + marker.len()..]
-        .trim_start_matches(['\r', '\n']);
+    let after_marker = text[start + marker.len()..].trim_start_matches(['\r', '\n']);
     let end_fence = after_marker.find("```")?;
     let json_str = after_marker[..end_fence].trim();
     let after = after_marker[end_fence + 3..].trim_start();
@@ -706,7 +708,11 @@ fn parse_artifact_json(json_str: &str) -> Result<ChatArtifact, String> {
     }
     let mut artifact: ChatArtifact =
         serde_json::from_str(json_str).map_err(|e| format!("invalid artifact JSON: {e}"))?;
-    if artifact.artifact_type.trim().eq_ignore_ascii_case("vegalite") {
+    if artifact
+        .artifact_type
+        .trim()
+        .eq_ignore_ascii_case("vegalite")
+    {
         let title = artifact.title.clone();
         artifact.body = enhance_vega_lite_spec(artifact.body.clone(), &title);
     }
@@ -761,7 +767,29 @@ fn validate_artifact(a: &ChatArtifact) -> Result<(), String> {
     if a.title.trim().is_empty() {
         return Err("artifact title is required".into());
     }
+    if let Some(citations) = &a.citations {
+        for citation in citations {
+            validate_citation_path(&citation.path)?;
+        }
+    }
     Ok(())
+}
+
+fn validate_citation_path(path: &str) -> Result<(), String> {
+    let raw = path.trim();
+    if raw.is_empty() {
+        return Err("citation path is required".into());
+    }
+    let rel = raw.strip_prefix("workspace/").unwrap_or(raw);
+    if rel.trim().is_empty() {
+        return Err("citation path is required".into());
+    }
+    if Path::new(rel).is_absolute() || rel.contains('\\') || rel.contains(':') {
+        return Err("citation path must be workspace-relative".into());
+    }
+    crate::agent_tools::resolve_workspace_subpath(Path::new("/"), rel)
+        .map(|_| ())
+        .map_err(|e| format!("invalid citation path: {e}"))
 }
 
 fn vega_spec_has_remote_data(value: &Value) -> bool {
@@ -833,5 +861,26 @@ mod tests {
         assert!(!user_requests_visual_deliverable(
             "write python code to parse csv"
         ));
+    }
+
+    #[test]
+    fn rejects_artifact_citations_outside_workspace() {
+        let absolute =
+            r#"{"type":"markdown","title":"Bad","body":"x","citations":[{"path":"/etc/passwd"}]}"#;
+        let traversal = r#"{"type":"markdown","title":"Bad","body":"x","citations":[{"path":"workspace/../../secret"}]}"#;
+
+        assert!(parse_artifact_json(absolute).is_err());
+        assert!(parse_artifact_json(traversal).is_err());
+    }
+
+    #[test]
+    fn accepts_workspace_relative_artifact_citation() {
+        let json = r#"{"type":"markdown","title":"Good","body":"x","citations":[{"path":"workspace/projects/demo/README.md"}]}"#;
+        let parsed = parse_artifact_json(json).unwrap();
+
+        assert_eq!(
+            parsed.citations.unwrap()[0].path,
+            "workspace/projects/demo/README.md"
+        );
     }
 }

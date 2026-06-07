@@ -600,6 +600,13 @@ impl ChatTurnOptions {
     }
 }
 
+fn workspace_root_for_tool_execution<'a>(
+    workspace_root: &'a Path,
+    agent_workspace_enabled: bool,
+) -> Option<&'a Path> {
+    agent_workspace_enabled.then_some(workspace_root)
+}
+
 /// Shared LLM path after `messages` (system + transcript) is built: tools or stream, then persist assistant.
 async fn run_chat_completion(
     app: &AppHandle,
@@ -627,10 +634,9 @@ async fn run_chat_completion(
             ));
         }
     }
-    if options.enable_tools && state.settings.agent_workspace_enabled() {
+    let workspace_tools_enabled = options.enable_tools && state.settings.agent_workspace_enabled();
+    if workspace_tools_enabled {
         tool_definitions.extend(crate::agent_tools::workspace_tool_definitions());
-    }
-    if options.enable_tools && state.settings.artifacts_enabled() {
         tool_definitions.extend(crate::projects::project_tool_definitions());
     }
     let database_tools_enabled = options.enable_tools
@@ -654,13 +660,8 @@ async fn run_chat_completion(
             state.memory.as_ref() as &dyn ConversationMemory,
         )
     });
-    let workspace_root_for_tools = if state.settings.agent_workspace_enabled()
-        || state.settings.artifacts_enabled()
-    {
-        Some(state.workspace_root.as_path())
-    } else {
-        None
-    };
+    let workspace_root_for_tools =
+        workspace_root_for_tool_execution(state.workspace_root.as_path(), workspace_tools_enabled);
     let database_app_data_enabled = state.settings.database_app_data_enabled();
     let database_allow_write = state.settings.database_allow_write();
     let browser_ignore_robots = state.settings.agent_browser_ignore_robots();
@@ -1226,4 +1227,20 @@ pub async fn chat_vision_supported(state: State<'_, NovaState>) -> Result<bool, 
     let engine = state.llm.read().await.clone();
     let info = engine.model_info();
     Ok(model_supports_vision(&info.provider_id, &info.model_id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::workspace_root_for_tool_execution;
+
+    #[test]
+    fn workspace_root_requires_workspace_tools_enabled() {
+        let workspace = std::env::temp_dir();
+
+        assert!(workspace_root_for_tool_execution(&workspace, false).is_none());
+        assert_eq!(
+            workspace_root_for_tool_execution(&workspace, true),
+            Some(workspace.as_path())
+        );
+    }
 }
