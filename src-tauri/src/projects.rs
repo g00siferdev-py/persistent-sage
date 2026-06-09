@@ -224,11 +224,27 @@ pub fn create_project(
         .map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
-    let default_doc = format!(
-        "# {title}\n\n_Created {now}. Edit via chat or workspace files._\n"
-    );
-    let doc_body = initial_document.unwrap_or(default_doc.as_str());
-    write_document(workspace_root, &id, doc_body)?;
+    let doc = resolve_workspace_subpath(workspace_root, &doc_path).map_err(|e| e.to_string())?;
+    assert_path_in_workspace(workspace_root, &doc).map_err(|e| e.to_string())?;
+    if doc.exists() {
+        if !doc.is_file() {
+            return Err(format!("project document path is not a file: {id}"));
+        }
+        let meta = std::fs::metadata(&doc).map_err(|e| e.to_string())?;
+        if meta.len() as usize > MAX_DOC_BYTES {
+            return Err(format!("project document exceeds {MAX_DOC_BYTES} bytes"));
+        }
+        if initial_document.is_some() {
+            return Err(format!(
+                "project document already exists: {id}; use project_write to replace it"
+            ));
+        }
+    } else {
+        let default_doc =
+            format!("# {title}\n\n_Created {now}. Edit via chat or workspace files._\n");
+        let doc_body = initial_document.unwrap_or(default_doc.as_str());
+        write_document(workspace_root, &id, doc_body)?;
+    }
 
     let meta = ProjectMeta {
         id: id.clone(),
@@ -490,18 +506,83 @@ pub fn validate_form_body(body: &Value) -> Result<(), String> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn test_workspace(name: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "opensage-proj-{name}-{}-{nanos}",
+            std::process::id()
+        ))
+    }
 
     #[test]
     fn create_and_read_project() {
-        let tmp = std::env::temp_dir().join(format!("opensage-proj-{}", std::process::id()));
+        let tmp = test_workspace("create-read");
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
-        let meta = create_project(&tmp, "test-budget", "Test Budget", "budget", None, None).unwrap();
+        let meta =
+            create_project(&tmp, "test-budget", "Test Budget", "budget", None, None).unwrap();
         assert_eq!(meta.id, "test-budget");
         let doc = read_document(&tmp, "test-budget").unwrap();
         assert!(doc.contains("Test Budget"));
         let list = list_projects(&tmp).unwrap();
         assert_eq!(list.len(), 1);
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn create_project_preserves_existing_unindexed_document() {
+        let tmp = test_workspace("preserve-doc");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        let original = "# Existing plan\n\nDo not replace this report.";
+        write_document(&tmp, "monthly-budget", original).unwrap();
+
+        let meta = create_project(
+            &tmp,
+            "monthly-budget",
+            "Monthly Budget",
+            "budget",
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(meta.id, "monthly-budget");
+        assert_eq!(read_document(&tmp, "monthly-budget").unwrap(), original);
+
+        let list = list_projects(&tmp).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].doc_path, "projects/monthly-budget/document.md");
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn create_project_refuses_to_overwrite_existing_document() {
+        let tmp = test_workspace("refuse-overwrite");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        let original = "# Existing plan\n\nKeep this content.";
+        write_document(&tmp, "monthly-budget", original).unwrap();
+
+        let err = create_project(
+            &tmp,
+            "monthly-budget",
+            "Monthly Budget",
+            "budget",
+            None,
+            Some("# Replacement"),
+        )
+        .unwrap_err();
+        assert!(err.contains("already exists"), "{err}");
+        assert_eq!(read_document(&tmp, "monthly-budget").unwrap(), original);
+
         let _ = fs::remove_dir_all(&tmp);
     }
 }
