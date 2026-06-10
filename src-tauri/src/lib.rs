@@ -28,7 +28,7 @@ mod recipes;
 mod settings;
 mod store_updates;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use memory::{
@@ -198,23 +198,36 @@ fn reveal_data_directory() -> Result<(), String> {
     opener::open(&dir).map_err(|e| format!("open data folder: {e}"))
 }
 
-/// Open a workspace-relative or absolute file path in the system default app.
-#[tauri::command]
-fn open_path(path: String, state: State<'_, NovaState>) -> Result<(), String> {
+fn resolve_open_path_target(workspace_root: &Path, path: &str) -> Result<PathBuf, String> {
     let raw = path.trim();
     if raw.is_empty() {
         return Err("path is empty".into());
     }
-    let p = std::path::Path::new(raw);
-    let abs = if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        let stripped = raw.strip_prefix("workspace/").unwrap_or(raw);
-        state.workspace_root.join(stripped)
-    };
+
+    let rel = raw
+        .strip_prefix("workspace/")
+        .unwrap_or(raw)
+        .trim_start_matches("./");
+    if rel.is_empty() || rel == "workspace" {
+        return Err("path is empty".into());
+    }
+    if Path::new(rel).is_absolute() {
+        return Err("path must be relative to the workspace".into());
+    }
+
+    let abs =
+        agent_tools::resolve_workspace_subpath(workspace_root, rel).map_err(|e| e.to_string())?;
+    agent_tools::assert_path_in_workspace(workspace_root, &abs).map_err(|e| e.to_string())?;
     if !abs.exists() {
         return Err(format!("path not found: {}", abs.display()));
     }
+    Ok(abs)
+}
+
+/// Open an existing workspace-relative file path in the system default app.
+#[tauri::command]
+fn open_path(path: String, state: State<'_, NovaState>) -> Result<(), String> {
+    let abs = resolve_open_path_target(&state.workspace_root, &path)?;
     opener::open(&abs).map_err(|e| format!("open path: {e}"))
 }
 
@@ -856,4 +869,50 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Persistent Sage (Tauri application)");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_open_path_target;
+    use std::fs;
+
+    fn temp_workspace(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "persistent-sage-open-path-{name}-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn open_path_resolves_workspace_prefixed_path() {
+        let ws = temp_workspace("allowed");
+        let projects = ws.join("projects");
+        fs::create_dir_all(&projects).unwrap();
+
+        let resolved = resolve_open_path_target(&ws, "workspace/projects").unwrap();
+
+        assert_eq!(resolved, projects);
+        let _ = fs::remove_dir_all(ws);
+    }
+
+    #[test]
+    fn open_path_rejects_traversal_outside_workspace() {
+        let ws = temp_workspace("traversal");
+        let err = resolve_open_path_target(&ws, "workspace/../outside.txt").unwrap_err();
+
+        assert!(err.contains(".."), "{err}");
+        let _ = fs::remove_dir_all(ws);
+    }
+
+    #[test]
+    fn open_path_rejects_absolute_paths() {
+        let ws = temp_workspace("absolute");
+        let err = resolve_open_path_target(&ws, "/etc/passwd").unwrap_err();
+
+        assert!(err.contains("relative"), "{err}");
+        let _ = fs::remove_dir_all(ws);
+    }
 }
