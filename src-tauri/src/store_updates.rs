@@ -25,14 +25,14 @@ mod imp {
     use windows::{
         core::Interface,
         Foundation::Collections::IVectorView,
-        Services::Store::{StoreContext, StorePackageUpdate},
+        Services::Store::{StoreContext, StorePackageUpdate, StorePackageUpdateState},
         Win32::Foundation::HWND,
         Win32::UI::Shell::IInitializeWithWindow,
     };
 
     fn store_context(hwnd: HWND) -> Result<StoreContext, String> {
-        let context =
-            StoreContext::GetDefault().map_err(|e| format!("Microsoft Store is unavailable ({e})."))?;
+        let context = StoreContext::GetDefault()
+            .map_err(|e| format!("Microsoft Store is unavailable ({e})."))?;
         let init: IInitializeWithWindow = context
             .cast()
             .map_err(|e| format!("Could not prepare Store update check ({e})."))?;
@@ -43,9 +43,7 @@ mod imp {
         Ok(context)
     }
 
-    fn pending_updates(
-        context: &StoreContext,
-    ) -> Result<IVectorView<StorePackageUpdate>, String> {
+    fn pending_updates(context: &StoreContext) -> Result<IVectorView<StorePackageUpdate>, String> {
         let op = context
             .GetAppAndOptionalStorePackageUpdatesAsync()
             .map_err(|e| format!("Could not check Microsoft Store for updates ({e})."))?;
@@ -101,12 +99,21 @@ mod imp {
             .OverallState()
             .map_err(|e| format!("Could not read Microsoft Store update status ({e})."))?;
 
-        Ok(StoreUpdateInstallResult {
-            message: format!(
-                "Microsoft Store update status: {state:?}. Windows may close Persistent Sage to finish installing."
-            ),
-            restart_required: true,
-        })
+        if state == StorePackageUpdateState::Completed {
+            Ok(StoreUpdateInstallResult {
+                message: "Microsoft Store update completed. Windows may close Persistent Sage to finish installing.".into(),
+                restart_required: true,
+            })
+        } else if state == StorePackageUpdateState::Canceled {
+            Ok(StoreUpdateInstallResult {
+                message: "Microsoft Store update was canceled.".into(),
+                restart_required: false,
+            })
+        } else {
+            Err(format!(
+                "Microsoft Store update did not install successfully (status: {state:?})."
+            ))
+        }
     }
 
     pub fn hwnd_from_app(app: &tauri::AppHandle) -> Result<HWND, String> {
