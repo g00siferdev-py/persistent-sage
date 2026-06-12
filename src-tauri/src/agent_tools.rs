@@ -5,7 +5,7 @@
 //! URLs are restricted to reduce SSRF; workspace paths are jailed to `{data_dir}/workspace`.
 
 use std::collections::BTreeMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
@@ -409,6 +409,41 @@ pub(crate) fn tool_err(msg: impl Into<String>) -> ProviderError {
     ProviderError::Api(msg.into())
 }
 
+fn blocked_ipv4(v4: Ipv4Addr) -> bool {
+    let octets = v4.octets();
+    let carrier_grade_nat = octets[0] == 100 && (octets[1] & 0b1100_0000) == 64;
+    v4.is_private()
+        || v4.is_loopback()
+        || v4.is_link_local()
+        || v4.is_broadcast()
+        || v4.is_unspecified()
+        || v4.is_multicast()
+        || carrier_grade_nat
+}
+
+fn ipv6_has_prefix(v6: Ipv6Addr, prefix: &[u16]) -> bool {
+    let segments = v6.segments();
+    segments
+        .iter()
+        .zip(prefix.iter())
+        .all(|(segment, expected)| segment == expected)
+}
+
+fn blocked_ipv6(v6: Ipv6Addr) -> bool {
+    if let Some(mapped) = v6.to_ipv4_mapped() {
+        return blocked_ipv4(mapped);
+    }
+    let documentation = ipv6_has_prefix(v6, &[0x2001, 0x0db8]);
+    let discard_only = ipv6_has_prefix(v6, &[0x0100]);
+    v6.is_loopback()
+        || v6.is_unspecified()
+        || v6.is_unique_local()
+        || v6.is_unicast_link_local()
+        || v6.is_multicast()
+        || documentation
+        || discard_only
+}
+
 fn blocked_host(host: &str) -> bool {
     let h = host.trim().trim_end_matches('.').to_lowercase();
     if h == "localhost"
@@ -424,10 +459,8 @@ fn blocked_host(host: &str) -> bool {
     }
     if let Ok(ip) = h.parse::<IpAddr>() {
         return match ip {
-            IpAddr::V4(v4) => {
-                v4.is_private() || v4.is_loopback() || v4.is_link_local() || v4.is_broadcast()
-            }
-            IpAddr::V6(v6) => v6.is_loopback() || v6.is_unique_local(),
+            IpAddr::V4(v4) => blocked_ipv4(v4),
+            IpAddr::V6(v6) => blocked_ipv6(v6),
         };
     }
     false
@@ -662,6 +695,7 @@ async fn http_request_tool(http: &reqwest::Client, v: &Value) -> Result<String, 
             return Err(ProviderError::Http(e));
         }
     };
+    validate_agent_https_url(res.url().as_str())?;
 
     let status = res.status();
     let mut status_text = status
@@ -1040,6 +1074,7 @@ pub async fn fetch_url_text(
         .send()
         .await?
         .error_for_status()?;
+    validate_fetch_url(res.url().as_str())?;
 
     let mut buf: Vec<u8> = Vec::new();
     let mut stream = res.bytes_stream();
@@ -1294,7 +1329,8 @@ pub async fn run_builtin_tool(
             let p = v["path"].as_str().unwrap_or("").trim();
             workspace_list_directory(root, p)
         }
-        "project_list" | "project_create" | "project_read" | "project_write" | "project_set_active" => {
+        "project_list" | "project_create" | "project_read" | "project_write"
+        | "project_set_active" => {
             let root = workspace_root.ok_or_else(|| tool_err("project tools are not available"))?;
             crate::projects::run_project_tool(root, n, arguments_json, memory_tools, None).await
         }
@@ -1347,6 +1383,31 @@ mod tests {
     fn https_url_validator_rejects_http() {
         let err = validate_agent_https_url("http://example.com/path").unwrap_err();
         assert!(err.to_string().to_lowercase().contains("https"), "{err}");
+    }
+
+    #[test]
+    fn fetch_url_validator_rejects_ipv4_mapped_loopback() {
+        let err = validate_fetch_url("http://[::ffff:127.0.0.1]:11434/api/tags").unwrap_err();
+        assert!(err.to_string().contains("private or local"), "{err}");
+    }
+
+    #[test]
+    fn fetch_url_validator_rejects_non_public_ip_literals() {
+        for url in [
+            "http://10.0.0.1/",
+            "http://100.64.0.1/",
+            "http://169.254.169.254/",
+            "http://[fc00::1]/",
+            "http://[fe80::1]/",
+        ] {
+            assert!(validate_fetch_url(url).is_err(), "{url} should be blocked");
+        }
+    }
+
+    #[test]
+    fn fetch_url_validator_allows_public_hosts() {
+        assert!(validate_fetch_url("https://example.com/path").is_ok());
+        assert!(validate_fetch_url("https://[2606:4700:4700::1111]/").is_ok());
     }
 
     #[test]
