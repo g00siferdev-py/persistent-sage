@@ -14,7 +14,7 @@ use futures_util::StreamExt;
 use reqwest::header::{HeaderName, HeaderValue, USER_AGENT};
 use reqwest::{Method, StatusCode};
 use serde_json::{json, Value};
-use url::Url;
+use url::{Host, Url};
 
 use crate::provider::{ProviderError, ToolCall, ToolDefinition};
 
@@ -466,6 +466,17 @@ fn blocked_host(host: &str) -> bool {
     false
 }
 
+fn blocked_url_host(url: &Url) -> Result<bool, ProviderError> {
+    let host = url
+        .host()
+        .ok_or_else(|| tool_err("URL must include a host"))?;
+    Ok(match host {
+        Host::Domain(domain) => blocked_host(domain),
+        Host::Ipv4(v4) => blocked_ipv4(v4),
+        Host::Ipv6(v6) => blocked_ipv6(v6),
+    })
+}
+
 /// Only `http:` / `https:` to public-looking hosts (best-effort SSRF guard).
 pub fn validate_fetch_url(raw: &str) -> Result<Url, ProviderError> {
     let raw = raw.trim();
@@ -480,10 +491,7 @@ pub fn validate_fetch_url(raw: &str) -> Result<Url, ProviderError> {
     if u.username() != "" || u.password().is_some() {
         return Err(tool_err("URLs with embedded credentials are not allowed"));
     }
-    let host = u
-        .host_str()
-        .ok_or_else(|| tool_err("URL must include a host"))?;
-    if blocked_host(host) {
+    if blocked_url_host(&u)? {
         return Err(tool_err(
             "URL host is not allowed (private or local addresses blocked)",
         ));
@@ -516,10 +524,7 @@ fn validate_agent_https_url(raw: &str) -> Result<Url, ProviderError> {
             "URLs with embedded credentials are not allowed; put tokens in headers instead",
         ));
     }
-    let host = u
-        .host_str()
-        .ok_or_else(|| tool_err("URL must include a host"))?;
-    if blocked_host(host) {
+    if blocked_url_host(&u)? {
         return Err(tool_err(
             "URL host is not allowed (private or local addresses blocked)",
         ));
