@@ -125,6 +125,29 @@ const DB_WRITE_INFO = (
   </>
 );
 
+const CODING_TOOLS_INFO = (
+  <>
+    For <strong className="font-medium text-slate-700 dark:text-slate-300">Coding mode</strong> only. Enables{" "}
+    {toolLabelList(["coding_grep", "coding_apply_patch"])} scoped to the active repo under{" "}
+    <span className="font-mono text-slate-600 dark:text-slate-400">workspace/repos/</span>. Also enables workspace
+    file tools for that session. Off by default.
+  </>
+);
+
+const CODING_SHELL_INFO = (
+  <>
+    Coding mode: allowlisted shell commands via {toolDisplayName("coding_run_command")} (npm, cargo, git, python,
+    etc.) in the active repo directory. Off by default.
+  </>
+);
+
+const CODING_GIT_INFO = (
+  <>
+    Coding mode: {toolLabelList(["coding_git_status", "coding_git_diff", "coding_git_commit"])} for the active repo.
+    Commits are local only — no push. Off by default.
+  </>
+);
+
 const FEEDBACK_ISSUE_URL = "https://github.com/g00siferdev-py/persistent-sage/issues/new";
 
 function providerSupportsTools(settings: SettingsView | null): boolean {
@@ -174,6 +197,9 @@ type SettingsView = {
   agentBrowserIgnoreRobots: boolean;
   /** When true, the model may read/write/list files only under the app workspace folder (see data paths). */
   agentWorkspaceEnabled: boolean;
+  agentCodingToolsEnabled: boolean;
+  agentCodingShellEnabled: boolean;
+  agentCodingGitEnabled: boolean;
   agentPersonalityEditEnabled: boolean;
   /** When true, database_query may use location=app_data on .db/.sqlite files in the Persistent Sage data directory (same folder as the live memory DB). */
   databaseAppDataEnabled: boolean;
@@ -215,6 +241,9 @@ type SettingsPatch = {
   agentBrowserFetchEnabled?: boolean;
   agentBrowserIgnoreRobots?: boolean;
   agentWorkspaceEnabled?: boolean;
+  agentCodingToolsEnabled?: boolean;
+  agentCodingShellEnabled?: boolean;
+  agentCodingGitEnabled?: boolean;
   agentPersonalityEditEnabled?: boolean;
   databaseAppDataEnabled?: boolean;
   databaseAllowWrite?: boolean;
@@ -1897,6 +1926,87 @@ export function SettingsPanel({
                 </p>
               ) : null}
             </SettingsToggleCard>
+
+            <p className="pt-2 text-[11px] font-semibold uppercase tracking-wide text-violet-400/90">
+              Coding mode (v2)
+            </p>
+            <SettingsToggleCard
+              id="agent-coding-tools"
+              title={`Allow ${toolLabelList(["coding_grep", "coding_apply_patch"])}`}
+              compact
+              info={CODING_TOOLS_INFO}
+              footnote={providerToolsFootnote(settings)}
+              checked={settings?.agentCodingToolsEnabled ?? false}
+              disabled={!providerSupportsTools(settings)}
+              onChange={(agentCodingToolsEnabled) => {
+                setSettings((s) => (s ? { ...s, agentCodingToolsEnabled } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { agentCodingToolsEnabled },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+            />
+            <SettingsToggleCard
+              id="agent-coding-shell"
+              title={`Allow ${toolDisplayName("coding_run_command")}`}
+              compact
+              info={CODING_SHELL_INFO}
+              nestDepth={1}
+              footnote={providerToolsFootnote(settings)}
+              checked={settings?.agentCodingShellEnabled ?? false}
+              disabled={!providerSupportsTools(settings)}
+              onChange={(agentCodingShellEnabled) => {
+                setSettings((s) => (s ? { ...s, agentCodingShellEnabled } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { agentCodingShellEnabled },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+            />
+            <SettingsToggleCard
+              id="agent-coding-git"
+              title={`Allow ${toolLabelList(["coding_git_status", "coding_git_diff", "coding_git_commit"])}`}
+              compact
+              info={CODING_GIT_INFO}
+              nestDepth={1}
+              footnote={providerToolsFootnote(settings)}
+              checked={settings?.agentCodingGitEnabled ?? false}
+              disabled={!providerSupportsTools(settings)}
+              onChange={(agentCodingGitEnabled) => {
+                setSettings((s) => (s ? { ...s, agentCodingGitEnabled } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { agentCodingGitEnabled },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+            />
             <SettingsToggleCard
               id="database-app-data-enabled"
               title={`${toolDisplayName("database_query")} on app data folder`}

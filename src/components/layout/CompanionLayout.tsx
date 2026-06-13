@@ -4,12 +4,14 @@ import { useChat } from "@/hooks/useChat";
 import { ChatMain } from "@/components/chat/ChatMain";
 import { ConversationSidebar } from "@/components/sidebar/ConversationSidebar";
 import { SettingsPanel } from "@/components/settings/SettingsPanel";
+import { AppModeSwitcher } from "@/components/layout/AppModeSwitcher";
 import {
   cycleSettingsLayoutMode,
   loadSettingsLayoutMode,
   saveSettingsLayoutMode,
   type SettingsLayoutMode,
 } from "@/lib/settingsLayout";
+import type { AppMode } from "@/lib/appMode";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { buildWhatsNewContent, WhatsNewModal } from "@/components/WhatsNewModal";
 
@@ -26,13 +28,18 @@ type SettingsForHint = {
   whatsNewSeenVersion?: string;
 };
 
+type Props = {
+  onModeChange: (mode: AppMode) => void;
+};
+
 function truncate(s: string, max: number): string {
   const t = s.trim().replace(/\s+/g, " ");
   if (t.length <= max) return t;
   return `${t.slice(0, max - 1)}…`;
 }
 
-export function ChatLayout() {
+/** Companion mode shell — chat, memory, personality, and collaborative projects. */
+export function CompanionLayout({ onModeChange }: Props) {
   const [settingsLayoutMode, setSettingsLayoutMode] = useState<SettingsLayoutMode>(() =>
     loadSettingsLayoutMode(),
   );
@@ -221,7 +228,7 @@ export function ChatLayout() {
   }, [loadBackendHint]);
 
   return (
-    <div className="relative flex h-full w-full overflow-hidden">
+    <div className="relative flex h-full w-full flex-col overflow-hidden">
       {onboardingChecked && showOnboarding ? (
         <OnboardingWizard
           onComplete={() => {
@@ -237,79 +244,87 @@ export function ChatLayout() {
           onDismiss={() => void dismissWhatsNew()}
         />
       ) : null}
-      <ConversationSidebar
-        conversations={conversations}
-        hasThreadsInDatabase={conversationsForTitle.length > 0}
-        threadListHiddenFromSidebar={threadListHiddenFromSidebar}
-        onClearThreadListFromView={clearConversationSidebarView}
-        onRestoreThreadListFromView={() => void restoreConversationSidebarView()}
-        activeId={activeConversationId}
-        onSelect={selectConversation}
-        onNewChat={() => void startNewConversation()}
-        onRename={(id, title) => void renameConversation(id, title)}
-        onDelete={(id) => void deleteConversation(id)}
-        listLoading={listLoading}
-        briefing={briefing}
-        briefingLoading={threadLoading && !!activeConversationId}
-        anchors={anchors}
-        extractingAnchors={extractingAnchors}
-        onExtractAnchors={() => void extractAnchorsFromChat()}
-        companionName={activeCompanionLabel}
-      />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {backendHint ? (
-          <div
-            role="status"
-            className="shrink-0 border-b border-sky-800/50 bg-sky-950/50 px-4 py-2 text-xs leading-relaxed text-sky-100/95"
-          >
-            {backendHint}
-          </div>
-        ) : null}
-        <ChatMain
-          title={title}
-          subtitle={subtitle}
-          hasActiveConversation={activeConversationId != null}
-          messages={messages}
-          threadLoading={threadLoading}
-          sending={sending}
-          streamAssistant={streamAssistant}
-          error={error}
-          recipes={recipes}
-          onRunRecipe={(id) => void runRecipe(id)}
-          onSubmitArtifactForm={(title, projectId, values) =>
-            void submitArtifactForm(title, projectId, values)
+      <div className="flex shrink-0 items-center border-b border-slate-800/80 bg-slate-900/50 px-3 py-1.5">
+        <AppModeSwitcher mode="companion" onModeChange={onModeChange} />
+      </div>
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        <ConversationSidebar
+          conversations={conversations}
+          hasThreadsInDatabase={conversationsForTitle.length > 0}
+          threadListHiddenFromSidebar={threadListHiddenFromSidebar}
+          onClearThreadListFromView={clearConversationSidebarView}
+          onRestoreThreadListFromView={() => void restoreConversationSidebarView()}
+          activeId={activeConversationId}
+          onSelect={selectConversation}
+          onNewChat={() => void startNewConversation()}
+          onRename={(id, title) => void renameConversation(id, title)}
+          onDelete={(id) => void deleteConversation(id)}
+          listLoading={listLoading}
+          briefing={briefing}
+          briefingLoading={threadLoading && !!activeConversationId}
+          anchors={anchors}
+          extractingAnchors={extractingAnchors}
+          onExtractAnchors={() => void extractAnchorsFromChat()}
+          companionName={activeCompanionLabel}
+        />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {backendHint ? (
+            <div
+              role="status"
+              className="shrink-0 border-b border-sky-800/50 bg-sky-950/50 px-4 py-2 text-xs leading-relaxed text-sky-100/95"
+            >
+              {backendHint}
+            </div>
+          ) : null}
+          <ChatMain
+            title={title}
+            subtitle={subtitle}
+            hasActiveConversation={activeConversationId != null}
+            messages={messages}
+            threadLoading={threadLoading}
+            sending={sending}
+            streamAssistant={streamAssistant}
+            error={error}
+            recipes={recipes}
+            onRunRecipe={(id) => void runRecipe(id)}
+            onSubmitArtifactForm={(title, projectId, values) =>
+              void submitArtifactForm(title, projectId, values)
+            }
+            projectList={projectList}
+            activeProjectId={activeProjectId}
+            onContinueProject={(id, title) => continueProject(id, title)}
+            onOpenProjectWorkspace={() => void openProjectWorkspace()}
+            settingsLayoutMode={settingsLayoutMode}
+            onCycleSettingsLayout={() => cycleSettingsLayout()}
+            onSendMessage={(text, image) =>
+              void sendMessage(text, image
+                ? { base64: image.base64, mime: image.mime, previewUrl: image.previewUrl }
+                : null)
+            }
+            visionSupported={visionSupported}
+            activeCompanionProfileId={activePersonalityId}
+            activeCompanionLabel={activeCompanionLabel}
+            companionOptions={companionOptions}
+            thinkingEffort={thinkingEffort}
+            onThinkingEffortChange={updateThinkingEffort}
+            onCompanionChange={async (profileId) => {
+              await applyActivePersonality(profileId);
+            }}
+          />
+        </div>
+        <SettingsPanel
+          layoutMode={settingsLayoutMode}
+          onLayoutModeChange={setSettingsLayout}
+          chatActiveProfileId={activePersonalityId}
+          onCompanionActiveProfileChange={(profileId) =>
+            void applyActivePersonality(profileId)
           }
-          projectList={projectList}
-          activeProjectId={activeProjectId}
-          onContinueProject={(id, title) => continueProject(id, title)}
-          onOpenProjectWorkspace={() => void openProjectWorkspace()}
-          settingsLayoutMode={settingsLayoutMode}
-          onCycleSettingsLayout={() => cycleSettingsLayout()}
-          onSendMessage={(text, image) =>
-            void sendMessage(text, image
-              ? { base64: image.base64, mime: image.mime, previewUrl: image.previewUrl }
-              : null)
-          }
-          visionSupported={visionSupported}
-          activeCompanionProfileId={activePersonalityId}
-          activeCompanionLabel={activeCompanionLabel}
-          companionOptions={companionOptions}
-          thinkingEffort={thinkingEffort}
-          onThinkingEffortChange={updateThinkingEffort}
-          onCompanionChange={async (profileId) => {
-            await applyActivePersonality(profileId);
-          }}
+          onRequestOnboarding={() => setShowOnboarding(true)}
         />
       </div>
-      <SettingsPanel
-        layoutMode={settingsLayoutMode}
-        onLayoutModeChange={setSettingsLayout}
-        chatActiveProfileId={activePersonalityId}
-        onCompanionActiveProfileChange={(profileId) =>
-          void applyActivePersonality(profileId)
-        }
-        onRequestOnboarding={() => setShowOnboarding(true)}
-      />
     </div>
   );
 }
+
+/** @deprecated Use `CompanionLayout` — kept for transitional imports. */
+export const ChatLayout = CompanionLayout;

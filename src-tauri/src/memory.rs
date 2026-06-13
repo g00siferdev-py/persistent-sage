@@ -231,6 +231,16 @@ pub trait ConversationMemory: Send + Sync {
 
     fn create_conversation(&self, title: &str) -> Result<String, MemoryError>;
 
+    fn list_coding_conversations(&self, repo_id: &str) -> Result<Vec<StoredConversation>, MemoryError>;
+
+    fn create_coding_conversation(&self, repo_id: &str, title: &str) -> Result<String, MemoryError>;
+
+    fn get_or_create_coding_conversation(
+        &self,
+        repo_id: &str,
+        repo_name: &str,
+    ) -> Result<String, MemoryError>;
+
     fn rename_conversation(&self, conversation_id: &str, title: &str) -> Result<(), MemoryError>;
 
     /// Deletes a thread and its messages (CASCADE). Anchors for this thread become `NULL` or are removed per schema.
@@ -331,7 +341,7 @@ pub trait ConversationMemory: Send + Sync {
 
 // --- Schema / migration -------------------------------------------------------
 
-const SCHEMA_VERSION: i32 = 7;
+const SCHEMA_VERSION: i32 = 8;
 
 /// SQLite value for legacy rows and the built-in profile id in `personality.json`.
 pub const DEFAULT_PERSONALITY_ID: &str = "default";
@@ -437,6 +447,7 @@ fn migrate_schema(conn: &Connection) -> Result<(), MemoryError> {
     if ver >= SCHEMA_VERSION {
         migrate_message_image_columns(conn)?;
         migrate_message_artifact_column(conn)?;
+        migrate_conversation_coding_columns(conn)?;
         ensure_seed_conversation(conn)?;
         return Ok(());
     }
@@ -478,6 +489,7 @@ fn migrate_schema(conn: &Connection) -> Result<(), MemoryError> {
     }
     migrate_message_image_columns(conn)?;
     migrate_message_artifact_column(conn)?;
+    migrate_conversation_coding_columns(conn)?;
     ensure_seed_conversation(conn)?;
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
@@ -486,6 +498,21 @@ fn migrate_schema(conn: &Connection) -> Result<(), MemoryError> {
 fn migrate_message_artifact_column(conn: &Connection) -> Result<(), MemoryError> {
     if table_exists(conn, "messages")? && !column_exists(conn, "messages", "artifact_json")? {
         conn.execute("ALTER TABLE messages ADD COLUMN artifact_json TEXT", [])?;
+    }
+    Ok(())
+}
+
+fn migrate_conversation_coding_columns(conn: &Connection) -> Result<(), MemoryError> {
+    if table_exists(conn, "conversations")? && !column_exists(conn, "conversations", "app_mode")? {
+        conn.execute(
+            "ALTER TABLE conversations ADD COLUMN app_mode TEXT NOT NULL DEFAULT 'companion'",
+            [],
+        )?;
+    }
+    if table_exists(conn, "conversations")?
+        && !column_exists(conn, "conversations", "coding_repo_id")?
+    {
+        conn.execute("ALTER TABLE conversations ADD COLUMN coding_repo_id TEXT", [])?;
     }
     Ok(())
 }
@@ -2003,6 +2030,7 @@ impl ConversationMemory for MemoryAnchor {
         let mut stmt = conn.prepare(
             "SELECT id, title, created_at, updated_at FROM conversations
              WHERE personality_id = ?1
+               AND (app_mode IS NULL OR app_mode = 'companion')
              ORDER BY datetime(updated_at) DESC, id DESC",
         )?;
         let rows = stmt.query_map([pid], MemoryAnchor::row_to_conversation)?;
@@ -2040,6 +2068,59 @@ impl ConversationMemory for MemoryAnchor {
             params![id, title, pid],
         )?;
         Ok(id)
+    }
+
+    fn list_coding_conversations(
+        &self,
+        repo_id: &str,
+    ) -> Result<Vec<StoredConversation>, MemoryError> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, title, created_at, updated_at FROM conversations
+             WHERE personality_id = ?1 AND app_mode = 'coding' AND coding_repo_id = ?2
+             ORDER BY datetime(updated_at) DESC, id DESC",
+        )?;
+        let rows = stmt.query_map(
+            params![crate::coding::CODING_PERSONALITY_ID, repo_id.trim()],
+            MemoryAnchor::row_to_conversation,
+        )?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(MemoryError::from)
+    }
+
+    fn create_coding_conversation(
+        &self,
+        repo_id: &str,
+        title: &str,
+    ) -> Result<String, MemoryError> {
+        let id = Uuid::new_v4().to_string();
+        let conn = self.conn()?;
+        conn.execute(
+            "INSERT INTO conversations (id, title, personality_id, app_mode, coding_repo_id)
+             VALUES (?1, ?2, ?3, 'coding', ?4)",
+            params![
+                id,
+                title.trim(),
+                crate::coding::CODING_PERSONALITY_ID,
+                repo_id.trim()
+            ],
+        )?;
+        Ok(id)
+    }
+
+    fn get_or_create_coding_conversation(
+        &self,
+        repo_id: &str,
+        repo_name: &str,
+    ) -> Result<String, MemoryError> {
+        if let Some(c) = self
+            .list_coding_conversations(repo_id)?
+            .into_iter()
+            .next()
+        {
+            return Ok(c.id);
+        }
+        let title = format!("{} — coding", repo_name.trim());
+        self.create_coding_conversation(repo_id, &title)
     }
 
     fn rename_conversation(&self, conversation_id: &str, title: &str) -> Result<(), MemoryError> {

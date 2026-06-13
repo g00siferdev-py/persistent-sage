@@ -203,6 +203,7 @@ pub async fn run_recipe(
             enable_tools: true,
             assistant_reply_prefix: Some(format!("Recipe: {} — ", recipe.name)),
             ephemeral_user_note: crate::chat::EphemeralUserNote::None,
+            coding_context: None,
         },
     )
     .await

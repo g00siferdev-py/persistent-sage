@@ -94,6 +94,12 @@ pub struct SettingsFile {
     pub agent_browser_ignore_robots: bool,
     #[serde(default = "default_agent_workspace")]
     pub agent_workspace_enabled: bool,
+    #[serde(default = "default_agent_coding_tools")]
+    pub agent_coding_tools_enabled: bool,
+    #[serde(default = "default_agent_coding_shell")]
+    pub agent_coding_shell_enabled: bool,
+    #[serde(default = "default_agent_coding_git")]
+    pub agent_coding_git_enabled: bool,
     #[serde(default = "default_agent_personality_edit")]
     pub agent_personality_edit_enabled: bool,
     #[serde(default = "default_database_allow_write")]
@@ -153,6 +159,18 @@ fn default_agent_browser_ignore_robots() -> bool {
 }
 
 fn default_agent_workspace() -> bool {
+    false
+}
+
+fn default_agent_coding_tools() -> bool {
+    false
+}
+
+fn default_agent_coding_shell() -> bool {
+    false
+}
+
+fn default_agent_coding_git() -> bool {
     false
 }
 
@@ -234,6 +252,9 @@ impl Default for SettingsFile {
             agent_browser_fetch_enabled: false,
             agent_browser_ignore_robots: false,
             agent_workspace_enabled: false,
+            agent_coding_tools_enabled: false,
+            agent_coding_shell_enabled: false,
+            agent_coding_git_enabled: false,
             agent_personality_edit_enabled: false,
             database_allow_write: false,
             database_app_data_enabled: false,
@@ -274,6 +295,9 @@ pub struct SettingsView {
     pub agent_browser_fetch_enabled: bool,
     pub agent_browser_ignore_robots: bool,
     pub agent_workspace_enabled: bool,
+    pub agent_coding_tools_enabled: bool,
+    pub agent_coding_shell_enabled: bool,
+    pub agent_coding_git_enabled: bool,
     pub agent_personality_edit_enabled: bool,
     pub database_allow_write: bool,
     pub database_app_data_enabled: bool,
@@ -317,6 +341,9 @@ pub struct SettingsUpdatePayload {
     pub agent_browser_fetch_enabled: Option<bool>,
     pub agent_browser_ignore_robots: Option<bool>,
     pub agent_workspace_enabled: Option<bool>,
+    pub agent_coding_tools_enabled: Option<bool>,
+    pub agent_coding_shell_enabled: Option<bool>,
+    pub agent_coding_git_enabled: Option<bool>,
     pub agent_personality_edit_enabled: Option<bool>,
     pub database_allow_write: Option<bool>,
     pub database_app_data_enabled: Option<bool>,
@@ -660,6 +687,9 @@ impl SettingsManager {
             agent_browser_fetch_enabled: inner.agent_browser_fetch_enabled,
             agent_browser_ignore_robots: inner.agent_browser_ignore_robots,
             agent_workspace_enabled: inner.agent_workspace_enabled,
+            agent_coding_tools_enabled: inner.agent_coding_tools_enabled,
+            agent_coding_shell_enabled: inner.agent_coding_shell_enabled,
+            agent_coding_git_enabled: inner.agent_coding_git_enabled,
             agent_personality_edit_enabled: inner.agent_personality_edit_enabled,
             database_allow_write: inner.database_allow_write,
             database_app_data_enabled: inner.database_app_data_enabled,
@@ -743,6 +773,27 @@ impl SettingsManager {
         self.inner
             .read()
             .map(|g| g.agent_workspace_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn agent_coding_tools_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.agent_coding_tools_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn agent_coding_shell_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.agent_coding_shell_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn agent_coding_git_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.agent_coding_git_enabled)
             .unwrap_or(false)
     }
 
@@ -988,6 +1039,15 @@ impl SettingsManager {
         }
         if let Some(b) = patch.agent_workspace_enabled {
             inner.agent_workspace_enabled = b;
+        }
+        if let Some(b) = patch.agent_coding_tools_enabled {
+            inner.agent_coding_tools_enabled = b;
+        }
+        if let Some(b) = patch.agent_coding_shell_enabled {
+            inner.agent_coding_shell_enabled = b;
+        }
+        if let Some(b) = patch.agent_coding_git_enabled {
+            inner.agent_coding_git_enabled = b;
         }
         if let Some(b) = patch.agent_personality_edit_enabled {
             inner.agent_personality_edit_enabled = b;

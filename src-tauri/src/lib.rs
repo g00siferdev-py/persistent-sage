@@ -13,6 +13,8 @@ mod artifacts;
 mod attachments;
 mod browser_fetch;
 mod chat;
+mod coding;
+mod coding_tools;
 mod database_query;
 mod distribution;
 mod embedding;
@@ -22,11 +24,13 @@ mod memory_tools;
 mod personality;
 mod personality_tools;
 mod projects;
+mod repos;
 mod provider;
 mod pulse;
 mod recipes;
 mod settings;
 mod store_updates;
+mod tool_stream;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -242,6 +246,28 @@ async fn recipe_run(
 #[tauri::command]
 fn project_list(state: State<'_, NovaState>) -> Result<projects::ProjectListView, String> {
     projects::list_projects_view(&state.workspace_root)
+}
+
+#[tauri::command]
+fn coding_repo_list(state: State<'_, NovaState>) -> Result<repos::RepoListView, String> {
+    repos::list_repos_view(&state.workspace_root)
+}
+
+#[tauri::command]
+fn coding_repo_set_active(
+    repo_id: Option<String>,
+    state: State<'_, NovaState>,
+) -> Result<repos::RepoListView, String> {
+    repos::set_active_repo(&state.workspace_root, repo_id.as_deref())
+}
+
+#[tauri::command]
+fn coding_repo_tree(
+    repo_id: String,
+    state: State<'_, NovaState>,
+) -> Result<Vec<repos::RepoTreeNode>, String> {
+    let meta = repos::get_repo_meta(&state.workspace_root, repo_id.trim())?;
+    repos::repo_file_tree(&state.workspace_root, &meta.path_rel)
 }
 
 #[derive(serde::Serialize)]
@@ -470,6 +496,10 @@ fn memory_set_active_personality(
         tid = DEFAULT_PERSONALITY_ID.to_string();
     }
     eprintln!("persistent-sage: ipc memory_set_active_personality personality_id={tid} (sync persona + memory)");
+    if tid == crate::coding::CODING_PERSONALITY_ID {
+        state.memory.set_active_personality(&tid);
+        return Ok(());
+    }
     state
         .personality
         .set_active_profile_id(&tid)
@@ -488,6 +518,41 @@ fn memory_create_conversation(state: State<NovaState>, title: String) -> Result<
     state
         .memory
         .create_conversation(&title)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn memory_list_coding_conversations(
+    repo_id: String,
+    state: State<NovaState>,
+) -> Result<Vec<StoredConversation>, String> {
+    state
+        .memory
+        .list_coding_conversations(repo_id.trim())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn memory_create_coding_conversation(
+    repo_id: String,
+    title: String,
+    state: State<NovaState>,
+) -> Result<String, String> {
+    state
+        .memory
+        .create_coding_conversation(repo_id.trim(), title.trim())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn memory_get_or_create_coding_conversation(
+    repo_id: String,
+    repo_name: String,
+    state: State<NovaState>,
+) -> Result<String, String> {
+    state
+        .memory
+        .get_or_create_coding_conversation(repo_id.trim(), repo_name.trim())
         .map_err(|e| e.to_string())
 }
 
@@ -761,6 +826,7 @@ pub fn run() {
     workspace_root = std::fs::canonicalize(&workspace_root).unwrap_or(workspace_root);
     ensure_workspace_guide(&workspace_root);
     projects::ensure_projects_tree(&workspace_root);
+    repos::ensure_repos_tree(&workspace_root);
     eprintln!(
         "persistent-sage: agent workspace directory {}",
         workspace_root.display()
@@ -853,6 +919,12 @@ pub fn run() {
             recipe_run,
             project_list,
             project_format_form_submission,
+            coding_repo_list,
+            coding_repo_set_active,
+            coding_repo_tree,
+            memory_list_coding_conversations,
+            memory_create_coding_conversation,
+            memory_get_or_create_coding_conversation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Persistent Sage (Tauri application)");

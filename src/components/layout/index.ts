@@ -1,1 +1,3 @@
-export { ChatLayout } from "./ChatLayout";
+export { AppModeSwitcher } from "./AppModeSwitcher";
+export { CompanionLayout, ChatLayout } from "./CompanionLayout";
+export { CodingLayout } from "./CodingLayout";

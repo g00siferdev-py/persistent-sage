@@ -12,6 +12,12 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   personality_get: "View Personality",
   personality_update: "Update Personality",
   memory_search: "Memory Search",
+  coding_grep: "Code Search",
+  coding_apply_patch: "Apply Patch",
+  coding_run_command: "Run Command",
+  coding_git_status: "Git Status",
+  coding_git_diff: "Git Diff",
+  coding_git_commit: "Git Commit",
 };
 
 /** Friendly title for settings UI and docs; falls back to a spaced version of the id. */

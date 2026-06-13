@@ -12,6 +12,9 @@ export { storedToChatMessage } from "./chat";
 
 export type AppPlatform = "desktop";
 
+/** Top-level UI mode (Persistent Sage v2). */
+export type AppMode = "companion" | "coding";
+
 export interface AppMeta {
   name: "Persistent Sage";
   platform: AppPlatform;

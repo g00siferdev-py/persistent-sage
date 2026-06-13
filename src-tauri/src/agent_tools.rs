@@ -51,6 +51,12 @@ fn tool_user_facing_label(name: &str) -> String {
         "personality_get" => "View Personality".into(),
         "personality_update" => "Update Personality".into(),
         "memory_search" => "Memory Search".into(),
+        "coding_grep" => "Code Search".into(),
+        "coding_apply_patch" => "Apply Patch".into(),
+        "coding_run_command" => "Run Command".into(),
+        "coding_git_status" => "Git Status".into(),
+        "coding_git_diff" => "Git Diff".into(),
+        "coding_git_commit" => "Git Commit".into(),
         other => other.to_string(),
     }
 }
@@ -1238,10 +1244,18 @@ pub async fn run_builtin_tool(
         &crate::settings::SettingsManager,
         &dyn crate::memory::ConversationMemory,
     )>,
+    coding_ctx: Option<&crate::coding::CodingTurnContext>,
+    tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     name: &str,
     arguments_json: &str,
 ) -> Result<String, ProviderError> {
     let n = name.trim();
+    if let (Some(ctx), Some(root)) = (coding_ctx, workspace_root) {
+        if crate::coding_tools::is_coding_tool_name(n) {
+            return crate::coding_tools::run_coding_tool(root, ctx, n, arguments_json, tool_stream)
+                .await;
+        }
+    }
     if n == "personality_get" || n == "personality_update" {
         let mgr = personality
             .ok_or_else(|| tool_err("personality self-edit tools are not enabled in Settings"))?;

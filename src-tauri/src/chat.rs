@@ -7,6 +7,7 @@ use tauri::{AppHandle, Emitter, State};
 use std::path::Path;
 
 use crate::attachments::{self, model_supports_vision};
+use crate::coding::{CodingTurnContext, CODING_PERSONALITY_ID, CODING_SYSTEM_APPENDIX};
 use crate::memory::{
     ConversationMemory, MemoryRecallBundle, MessageRole, StoredMessage, DEFAULT_PERSONALITY_ID,
 };
@@ -80,7 +81,8 @@ fn emit_synthetic_stream_deltas(app: &AppHandle, conversation_id: &str, text: &s
         buf.push(ch);
         n += 1;
         if n >= CHUNK_CHARS {
-            let _ = app.emit(
+            crate::tool_stream::emit_chat_event(
+                app,
                 "chat:stream",
                 ChatStreamEvent {
                     conversation_id: conversation_id.to_string(),
@@ -92,7 +94,8 @@ fn emit_synthetic_stream_deltas(app: &AppHandle, conversation_id: &str, text: &s
         }
     }
     if !buf.is_empty() {
-        let _ = app.emit(
+        crate::tool_stream::emit_chat_event(
+            app,
             "chat:stream",
             ChatStreamEvent {
                 conversation_id: conversation_id.to_string(),
@@ -101,7 +104,8 @@ fn emit_synthetic_stream_deltas(app: &AppHandle, conversation_id: &str, text: &s
             },
         );
     }
-    let _ = app.emit(
+    crate::tool_stream::emit_chat_event(
+        app,
         "chat:stream",
         ChatStreamEvent {
             conversation_id: conversation_id.to_string(),
@@ -246,11 +250,56 @@ async fn apply_tool_round_messages(
     browser_ignore_robots: bool,
     personality: Option<&crate::personality::PersonalityManager>,
     memory_tools: Option<(&crate::settings::SettingsManager, &dyn ConversationMemory)>,
+    coding_ctx: Option<&crate::coding::CodingTurnContext>,
+    tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     messages: &mut Vec<ChatTurn>,
     round: &CompletionResponse,
     backend: AgentWebToolBackend,
 ) -> Result<(), ProviderError> {
     let mut personality_updated = false;
+
+    async fn exec_tool(
+        http: &reqwest::Client,
+        workspace_root: Option<&Path>,
+        data_directory: &Path,
+        database_app_data_enabled: bool,
+        database_allow_write: bool,
+        browser_ignore_robots: bool,
+        personality: Option<&crate::personality::PersonalityManager>,
+        memory_tools: Option<(
+            &crate::settings::SettingsManager,
+            &dyn ConversationMemory,
+        )>,
+        coding_ctx: Option<&crate::coding::CodingTurnContext>,
+        tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
+        name: &str,
+        arguments_json: &str,
+    ) -> String {
+        if let Some(ts) = tool_stream {
+            ts.start(name, &crate::tool_stream::tool_start_detail(name, arguments_json));
+        }
+        let body = crate::agent_tools::run_builtin_tool(
+            http,
+            workspace_root,
+            data_directory,
+            database_app_data_enabled,
+            database_allow_write,
+            browser_ignore_robots,
+            personality,
+            memory_tools,
+            coding_ctx,
+            tool_stream,
+            name,
+            arguments_json,
+        )
+        .await
+        .unwrap_or_else(|e| format!("Tool error: {e}"));
+        if let Some(ts) = tool_stream {
+            ts.end(name);
+        }
+        body
+    }
+
     match backend {
         AgentWebToolBackend::OpenAI => {
             messages.push(ChatTurn {
@@ -261,7 +310,7 @@ async fn apply_tool_round_messages(
                 anthropic_message: None,
             });
             for tc in &round.tool_calls {
-                let body = crate::agent_tools::run_builtin_tool(
+                let body = exec_tool(
                     http,
                     workspace_root,
                     data_directory,
@@ -270,11 +319,12 @@ async fn apply_tool_round_messages(
                     browser_ignore_robots,
                     personality,
                     memory_tools,
+                    coding_ctx,
+                    tool_stream,
                     &tc.name,
                     &tc.arguments_json,
                 )
-                .await
-                .unwrap_or_else(|e| format!("Tool error: {e}"));
+                .await;
                 if tc.name == "personality_update" && !body.starts_with("Tool error:") {
                     personality_updated = true;
                 }
@@ -300,7 +350,7 @@ async fn apply_tool_round_messages(
                 anthropic_message: None,
             });
             for tc in &round.tool_calls {
-                let body = crate::agent_tools::run_builtin_tool(
+                let body = exec_tool(
                     http,
                     workspace_root,
                     data_directory,
@@ -309,11 +359,12 @@ async fn apply_tool_round_messages(
                     browser_ignore_robots,
                     personality,
                     memory_tools,
+                    coding_ctx,
+                    tool_stream,
                     &tc.name,
                     &tc.arguments_json,
                 )
-                .await
-                .unwrap_or_else(|e| format!("Tool error: {e}"));
+                .await;
                 if tc.name == "personality_update" && !body.starts_with("Tool error:") {
                     personality_updated = true;
                 }
@@ -340,7 +391,7 @@ async fn apply_tool_round_messages(
             });
             let mut bodies: Vec<String> = Vec::with_capacity(round.tool_calls.len());
             for tc in &round.tool_calls {
-                let body = crate::agent_tools::run_builtin_tool(
+                let body = exec_tool(
                     http,
                     workspace_root,
                     data_directory,
@@ -349,11 +400,12 @@ async fn apply_tool_round_messages(
                     browser_ignore_robots,
                     personality,
                     memory_tools,
+                    coding_ctx,
+                    tool_stream,
                     &tc.name,
                     &tc.arguments_json,
                 )
-                .await
-                .unwrap_or_else(|e| format!("Tool error: {e}"));
+                .await;
                 if tc.name == "personality_update" && !body.starts_with("Tool error:") {
                     personality_updated = true;
                 }
@@ -388,18 +440,23 @@ async fn agent_complete_with_tools(
     browser_ignore_robots: bool,
     personality: Option<&crate::personality::PersonalityManager>,
     memory_tools: Option<(&crate::settings::SettingsManager, &dyn ConversationMemory)>,
+    coding_ctx: Option<&crate::coding::CodingTurnContext>,
+    tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     mut messages: Vec<ChatTurn>,
     max_tokens: Option<u32>,
     temperature: f32,
     thinking_effort: Option<String>,
     backend: AgentWebToolBackend,
     tools: Vec<ToolDefinition>,
+    max_tool_rounds: usize,
 ) -> Result<String, ProviderError> {
-    const MAX_ROUNDS: usize = 8;
     if tools.is_empty() {
         return Err(ProviderError::Api("internal: no tools configured".into()));
     }
-    for _ in 0..MAX_ROUNDS {
+    for _ in 0..max_tool_rounds {
+        if let Some(ts) = tool_stream {
+            ts.turn_status("Waiting for model…");
+        }
         let req = CompletionRequest {
             messages: messages.clone(),
             tools: Some(tools.clone()),
@@ -435,6 +492,8 @@ async fn agent_complete_with_tools(
             browser_ignore_robots,
             personality,
             memory_tools,
+            coding_ctx,
+            tool_stream,
             &mut messages,
             &round,
             backend,
@@ -442,7 +501,7 @@ async fn agent_complete_with_tools(
         .await?;
     }
     Err(ProviderError::Api(
-        "Agent stopped after maximum tool rounds — try a narrower question.".into(),
+        format!("Agent stopped after maximum tool rounds ({max_tool_rounds}) — try a narrower question."),
     ))
 }
 
@@ -457,6 +516,8 @@ async fn try_complete_after_embedded_tool_xml(
     browser_ignore_robots: bool,
     personality: Option<&crate::personality::PersonalityManager>,
     memory_tools: Option<(&crate::settings::SettingsManager, &dyn ConversationMemory)>,
+    coding_ctx: Option<&crate::coding::CodingTurnContext>,
+    tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     mut messages: Vec<ChatTurn>,
     assistant_xml: &str,
     max_tokens: Option<u32>,
@@ -464,6 +525,7 @@ async fn try_complete_after_embedded_tool_xml(
     thinking_effort: Option<String>,
     backend: AgentWebToolBackend,
     tools: Vec<ToolDefinition>,
+    max_tool_rounds: usize,
 ) -> Result<Option<String>, ProviderError> {
     let calls = crate::agent_tools::parse_text_embedded_tool_calls(assistant_xml);
     if calls.is_empty() {
@@ -489,6 +551,8 @@ async fn try_complete_after_embedded_tool_xml(
         browser_ignore_robots,
         personality,
         memory_tools,
+        coding_ctx,
+        tool_stream,
         &mut messages,
         &round,
         backend,
@@ -504,12 +568,15 @@ async fn try_complete_after_embedded_tool_xml(
         browser_ignore_robots,
         personality,
         memory_tools,
+        coding_ctx,
+        tool_stream,
         messages,
         max_tokens,
         temperature,
         thinking_effort,
         backend,
         tools,
+        max_tool_rounds,
     )
     .await?;
     Ok(Some(text))
@@ -552,6 +619,8 @@ pub struct ChatTurnOptions {
     pub assistant_reply_prefix: Option<String>,
     /// When `persist_user_message` is false, how to label the ephemeral user turn for the model.
     pub ephemeral_user_note: EphemeralUserNote,
+    /// When set, run a coding-mode turn (repo-scoped prompt; no companion persona sync).
+    pub coding_context: Option<CodingTurnContext>,
 }
 
 /// Ephemeral user text is sent to the model but not stored in SQLite / chat UI.
@@ -572,6 +641,7 @@ impl ChatTurnOptions {
             enable_tools: true,
             assistant_reply_prefix: None,
             ephemeral_user_note: EphemeralUserNote::None,
+            coding_context: None,
         }
     }
 
@@ -584,6 +654,7 @@ impl ChatTurnOptions {
             enable_tools: true,
             assistant_reply_prefix: None,
             ephemeral_user_note: EphemeralUserNote::FormSubmission,
+            coding_context: None,
         }
     }
 
@@ -596,6 +667,19 @@ impl ChatTurnOptions {
             enable_tools: true,
             assistant_reply_prefix: Some(assistant_reply_prefix),
             ephemeral_user_note: EphemeralUserNote::Pulse,
+            coding_context: None,
+        }
+    }
+
+    pub fn coding(ctx: CodingTurnContext) -> Self {
+        Self {
+            emit_stream: true,
+            persist_user_message: true,
+            persist_assistant_message: true,
+            enable_tools: true,
+            assistant_reply_prefix: None,
+            ephemeral_user_note: EphemeralUserNote::None,
+            coding_context: Some(ctx),
         }
     }
 }
@@ -608,6 +692,7 @@ async fn run_chat_completion(
     engine: &std::sync::Arc<dyn LLMProviderEngine + Send + Sync>,
     mut messages: Vec<ChatTurn>,
     options: ChatTurnOptions,
+    tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
 ) -> Result<String, String> {
     let configured = state.settings.max_tokens();
     let max_tokens = match configured {
@@ -619,7 +704,8 @@ async fn run_chat_completion(
     let thinking_effort = Some(state.settings.thinking_effort());
 
     let mut tool_definitions: Vec<ToolDefinition> = Vec::new();
-    if options.enable_tools && state.settings.agent_web_tools_enabled() {
+    let is_coding_turn = options.coding_context.is_some();
+    if options.enable_tools && state.settings.agent_web_tools_enabled() && !is_coding_turn {
         tool_definitions.extend(crate::agent_tools::builtin_tool_definitions());
         if state.settings.agent_browser_fetch_enabled() {
             tool_definitions.push(crate::agent_tools::browser_fetch_tool_definition(
@@ -627,24 +713,43 @@ async fn run_chat_completion(
             ));
         }
     }
-    if options.enable_tools && state.settings.agent_workspace_enabled() {
+    if options.enable_tools && state.settings.agent_workspace_enabled() && !is_coding_turn {
         tool_definitions.extend(crate::agent_tools::workspace_tool_definitions());
     }
-    if options.enable_tools && state.settings.artifacts_enabled() {
+    if options.enable_tools && state.settings.artifacts_enabled() && !is_coding_turn {
         tool_definitions.extend(crate::projects::project_tool_definitions());
     }
     let database_tools_enabled = options.enable_tools
+        && !is_coding_turn
         && (state.settings.agent_workspace_enabled() || state.settings.database_app_data_enabled());
     if database_tools_enabled {
         tool_definitions.extend(crate::database_query::tool_definitions());
     }
     let personality_edit_enabled =
-        options.enable_tools && state.settings.agent_personality_edit_enabled();
+        options.enable_tools && !is_coding_turn && state.settings.agent_personality_edit_enabled();
     if personality_edit_enabled {
         tool_definitions.extend(crate::personality_tools::tool_definitions());
     }
+    if options.enable_tools && is_coding_turn {
+        if state.settings.agent_coding_tools_enabled() {
+            tool_definitions.extend(crate::coding_tools::search_and_patch_tool_definitions());
+        }
+        if state.settings.agent_coding_shell_enabled() {
+            tool_definitions.push(crate::coding_tools::run_command_tool_definition());
+        }
+        if state.settings.agent_coding_git_enabled() {
+            tool_definitions.extend(crate::coding_tools::git_tool_definitions());
+        }
+        let coding_tools_on = state.settings.agent_coding_tools_enabled()
+            || state.settings.agent_coding_shell_enabled()
+            || state.settings.agent_coding_git_enabled();
+        if coding_tools_on {
+            tool_definitions.extend(crate::agent_tools::workspace_tool_definitions());
+        }
+    }
     let provider_id = engine.provider_id();
-    let memory_tools_active = options.enable_tools && provider_id != "placeholder";
+    let memory_tools_active =
+        options.enable_tools && provider_id != "placeholder" && !is_coding_turn;
     if memory_tools_active {
         tool_definitions.extend(crate::memory_tools::tool_definitions());
     }
@@ -654,8 +759,14 @@ async fn run_chat_completion(
             state.memory.as_ref() as &dyn ConversationMemory,
         )
     });
+    let coding_ctx_ref = options.coding_context.as_ref();
+    let max_tool_rounds = if is_coding_turn { 32 } else { 8 };
     let workspace_root_for_tools = if state.settings.agent_workspace_enabled()
         || state.settings.artifacts_enabled()
+        || (is_coding_turn
+            && (state.settings.agent_coding_tools_enabled()
+                || state.settings.agent_coding_shell_enabled()
+                || state.settings.agent_coding_git_enabled()))
     {
         Some(state.workspace_root.as_path())
     } else {
@@ -732,12 +843,15 @@ async fn run_chat_completion(
             browser_ignore_robots,
             personality_for_tools,
             memory_tools_ctx,
+            coding_ctx_ref,
+            tool_stream,
             messages,
             max_tokens,
             temperature,
             thinking_effort.clone(),
             backend,
             tool_definitions,
+            max_tool_rounds,
         )
         .await
         {
@@ -852,6 +966,8 @@ async fn run_chat_completion(
                     browser_ignore_robots,
                     personality_for_tools,
                     memory_tools_ctx,
+                    coding_ctx_ref,
+                    tool_stream,
                     messages_for_tool_recovery,
                     &full,
                     max_tokens,
@@ -859,6 +975,7 @@ async fn run_chat_completion(
                     thinking_effort.clone(),
                     backend,
                     tool_definitions.clone(),
+                    max_tool_rounds,
                 )
                 .await
                 {
@@ -917,6 +1034,84 @@ pub struct PendingImage {
     pub mime: String,
 }
 
+/// Run a user-requested shell command directly (bypasses LLM — avoids hallucinated exit codes).
+async fn execute_direct_coding_command(
+    app: &AppHandle,
+    state: &NovaState,
+    conversation_id: &str,
+    ctx: &CodingTurnContext,
+    parsed: &crate::coding::ParsedRunCommand,
+    tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
+    options: &ChatTurnOptions,
+) -> Result<String, String> {
+    let mut args = serde_json::json!({ "command": parsed.command });
+    if let Some(ref cwd) = parsed.cwd {
+        if !cwd.trim().is_empty() {
+            args["cwd"] = serde_json::json!(cwd.trim());
+        }
+    }
+
+    eprintln!(
+        "persistent-sage: direct coding_run_command cwd={:?} cmd={}",
+        parsed.cwd, parsed.command
+    );
+
+    let args_str = args.to_string();
+    if let Some(ts) = tool_stream {
+        ts.turn_status("Running command…");
+        ts.start(
+            "coding_run_command",
+            &crate::tool_stream::tool_start_detail("coding_run_command", &args_str),
+        );
+    }
+
+    let result = crate::coding_tools::run_coding_tool(
+        state.workspace_root.as_path(),
+        ctx,
+        "coding_run_command",
+        &args_str,
+        tool_stream,
+    )
+    .await
+    .map_err(|e| e.to_string());
+
+    if let Some(ts) = tool_stream {
+        ts.end("coding_run_command");
+    }
+
+    let result = result?;
+
+    let cwd_note = parsed
+        .cwd
+        .as_ref()
+        .filter(|c| !c.trim().is_empty())
+        .map(|c| format!(" (cwd: `{c}`)"))
+        .unwrap_or_default();
+    let reply = format!(
+        "Ran `{}`{cwd_note}:\n\n```\n{}\n```",
+        parsed.command,
+        result.trim()
+    );
+
+    if options.persist_assistant_message {
+        state
+            .memory
+            .store_message(
+                conversation_id,
+                MessageRole::Assistant,
+                &reply,
+                None,
+                None,
+                None,
+            )
+            .map_err(|e| e.to_string())?;
+    }
+
+    // Tool panel already streamed live output; skip synthetic stream (its `done` event
+    // was clearing the UI before the transcript reload finished).
+    Ok(reply)
+}
+
 /// Messages loaded into the model context (smaller = faster prep on long threads).
 const CHAT_CONTEXT_RECENT: usize = 32;
 const CHAT_PREP_TIMEOUT: Duration = Duration::from_secs(12);
@@ -944,7 +1139,8 @@ pub async fn execute_chat_turn(
     };
 
     if options.emit_stream {
-        let _ = app.emit(
+        crate::tool_stream::emit_chat_event(
+            app,
             "chat:stream-start",
             ChatStreamStart {
                 conversation_id: conversation_id.to_string(),
@@ -952,11 +1148,23 @@ pub async fn execute_chat_turn(
         );
     }
 
-    state
-        .personality
-        .set_active_profile_id(pid)
-        .map_err(|e| format!("companion persona sync: {e}"))?;
-    ConversationMemory::set_active_personality(&*state.memory, pid);
+    let tool_stream = options
+        .emit_stream
+        .then(|| crate::tool_stream::ToolStreamEmitter::new(app.clone(), conversation_id));
+
+    if let Some(ref ts) = tool_stream {
+        ts.turn_status("Preparing session…");
+    }
+
+    if options.coding_context.is_some() {
+        ConversationMemory::set_active_personality(&*state.memory, CODING_PERSONALITY_ID);
+    } else {
+        state
+            .personality
+            .set_active_profile_id(pid)
+            .map_err(|e| format!("companion persona sync: {e}"))?;
+        ConversationMemory::set_active_personality(&*state.memory, pid);
+    }
 
     let engine: std::sync::Arc<dyn LLMProviderEngine + Send + Sync> =
         match build_engine(&state.http, &state.settings) {
@@ -981,7 +1189,11 @@ pub async fn execute_chat_turn(
         None => (None, None),
     };
 
-    let companion_label = state.personality.companion_display_name();
+    let companion_label = if options.coding_context.is_some() {
+        "Coding Agent".to_string()
+    } else {
+        state.personality.companion_display_name()
+    };
     let memory = state.memory.clone();
     let conv_id = conversation_id.to_string();
     let user_text = text.to_string();
@@ -992,6 +1204,8 @@ pub async fn execute_chat_turn(
     };
     let companion_for_prep = companion_label.clone();
     let persist_user_message = options.persist_user_message;
+    let coding_ctx = options.coding_context.clone();
+    let workspace_root = state.workspace_root.clone();
 
     let prep = tokio::time::timeout(
         CHAT_PREP_TIMEOUT,
@@ -1009,11 +1223,24 @@ pub async fn execute_chat_turn(
                     .map_err(|e| e.to_string())?;
             }
 
-            let mut briefing = memory
-                .get_startup_briefing(&conv_id, &companion_for_prep)
-                .map_err(|e| e.to_string())?;
+            let mut briefing = if let Some(ref ctx) = coding_ctx {
+                let mut b = format!(
+                    "# Coding session\n\nRepository: **{}** (`{}`)\n\nWorkspace-relative root for file tools: `{}`.",
+                    ctx.repo_name, ctx.path_rel, ctx.path_rel
+                );
+                let hints = crate::coding_tools::repo_layout_hints(&workspace_root, ctx);
+                if !hints.is_empty() {
+                    b.push_str("\n\n");
+                    b.push_str(&hints);
+                }
+                b
+            } else {
+                memory
+                    .get_startup_briefing(&conv_id, &companion_for_prep)
+                    .map_err(|e| e.to_string())?
+            };
 
-            if !recall_source.trim().is_empty() {
+            if coding_ctx.is_none() && !recall_source.trim().is_empty() {
                 let recall_q: String = recall_source.chars().take(520).collect();
                 let recall_heavy = should_auto_memory_recall(&recall_source);
                 let (anchor_limit, message_limit, max_chars) = if recall_heavy {
@@ -1064,7 +1291,7 @@ pub async fn execute_chat_turn(
         }
     };
 
-    if !text.is_empty() && options.persist_user_message {
+    if !text.is_empty() && options.persist_user_message && options.coding_context.is_none() {
         crate::memory_extract::spawn_post_message_memory(
             state.http.clone(),
             state.settings.clone(),
@@ -1075,7 +1302,12 @@ pub async fn execute_chat_turn(
     }
 
     let persona = state.personality.system_prompt_prefix();
-    let mut system_content = {
+    let mut system_content = if let Some(ref ctx) = options.coding_context {
+        format!(
+            "{CODING_SYSTEM_APPENDIX}\n\n---\n\n# Active repository\n\n**{}** — `{}`\n\n---\n\n# Session\n\n{briefing}",
+            ctx.repo_name, ctx.path_rel
+        )
+    } else {
         let p = persona.trim();
         if p.is_empty() {
             briefing.clone()
@@ -1083,7 +1315,7 @@ pub async fn execute_chat_turn(
             format!("{p}\n\n---\n\n# Memory & session context\n\n{briefing}")
         }
     };
-    if state.settings.artifacts_enabled() {
+    if options.coding_context.is_none() && state.settings.artifacts_enabled() {
         system_content.push_str(crate::artifacts::ARTIFACT_SYSTEM_APPENDIX);
         system_content.push_str(crate::projects::PROJECT_SYSTEM_APPENDIX);
     }
@@ -1148,7 +1380,37 @@ pub async fn execute_chat_turn(
         messages.push(ChatTurn::text("user", content));
     }
 
-    run_chat_completion(app, state, conversation_id, &engine, messages, options).await
+    if let Some(ref ctx) = options.coding_context {
+        if let Some(parsed) = crate::coding::parse_direct_run_command(text) {
+            if !state.settings.agent_coding_shell_enabled() {
+                return Err(
+                    "Enable **Run Command** in Settings → Tools → Coding mode (v2) to run shell commands."
+                        .into(),
+                );
+            }
+            return execute_direct_coding_command(
+                app,
+                state,
+                conversation_id,
+                ctx,
+                &parsed,
+                tool_stream.as_ref(),
+                &options,
+            )
+            .await;
+        }
+    }
+
+    run_chat_completion(
+        app,
+        state,
+        conversation_id,
+        &engine,
+        messages,
+        options,
+        tool_stream.as_ref(),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -1161,12 +1423,42 @@ pub async fn chat_send_message(
     image_base64: Option<String>,
     image_mime: Option<String>,
     silent_user_message: Option<bool>,
+    app_mode: Option<String>,
+    coding_repo_id: Option<String>,
 ) -> Result<ChatSendResult, String> {
-    let pid = personality_id
+    let is_coding = app_mode
         .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or(DEFAULT_PERSONALITY_ID);
+        .map(|m| m.trim().eq_ignore_ascii_case(crate::coding::APP_MODE_CODING))
+        .unwrap_or(false);
+
+    let turn_options = if is_coding {
+        let repo_id = coding_repo_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| "coding mode requires codingRepoId".to_string())?;
+        let meta = crate::repos::get_repo_meta(&state.workspace_root, repo_id)
+            .map_err(|e| e.to_string())?;
+        ChatTurnOptions::coding(CodingTurnContext {
+            repo_id: meta.id.clone(),
+            repo_name: meta.name.clone(),
+            path_rel: meta.path_rel.clone(),
+        })
+    } else if silent_user_message == Some(true) {
+        ChatTurnOptions::silent_user_turn()
+    } else {
+        ChatTurnOptions::interactive()
+    };
+
+    let pid = if is_coding {
+        CODING_PERSONALITY_ID
+    } else {
+        personality_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or(DEFAULT_PERSONALITY_ID)
+    };
 
     let engine_probe = build_engine(&state.http, &state.settings).map_err(|e| e.to_string())?;
     let pending_image = match (image_base64, image_mime) {
@@ -1192,12 +1484,6 @@ pub async fn chat_send_message(
         (Some(_), None) => return Err("imageMime is required when sending an image".into()),
         (None, Some(_)) => return Err("image data missing".into()),
         _ => None,
-    };
-
-    let turn_options = if silent_user_message == Some(true) {
-        ChatTurnOptions::silent_user_turn()
-    } else {
-        ChatTurnOptions::interactive()
     };
 
     let reply = execute_chat_turn(

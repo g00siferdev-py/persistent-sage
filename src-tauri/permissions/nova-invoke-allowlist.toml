@@ -54,4 +54,10 @@ commands.allow = [
   "recipe_run",
   "project_list",
   "project_format_form_submission",
+  "coding_repo_list",
+  "coding_repo_set_active",
+  "coding_repo_tree",
+  "memory_list_coding_conversations",
+  "memory_create_coding_conversation",
+  "memory_get_or_create_coding_conversation",
 ]

@@ -2536,6 +2536,7 @@ dependencies = [
  "hex",
  "keyring",
  "opener",
+ "regex",
  "reqwest 0.12.28",
  "ring",
  "rusqlite",
