@@ -1508,6 +1508,22 @@ pub async fn chat_send_message(
             .ok_or_else(|| "coding mode requires codingRepoId".to_string())?;
         let meta = crate::repos::get_repo_meta(&state.workspace_root, repo_id)
             .map_err(|e| e.to_string())?;
+        match state
+            .memory
+            .coding_repo_id_for_conversation(conversation_id.trim())
+            .map_err(|e| e.to_string())?
+        {
+            Some(stored_repo_id) if stored_repo_id == meta.id => {}
+            Some(stored_repo_id) => {
+                return Err(format!(
+                    "coding conversation belongs to repo `{stored_repo_id}`, not `{}`",
+                    meta.id
+                ));
+            }
+            None => {
+                return Err("conversation is not a coding conversation".to_string());
+            }
+        }
         ChatTurnOptions::coding(CodingTurnContext {
             repo_id: meta.id.clone(),
             repo_name: meta.name.clone(),

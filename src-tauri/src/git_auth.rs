@@ -33,6 +33,10 @@ fn askpass_script_path(data_dir: &Path) -> std::path::PathBuf {
     data_dir.join(".nova_crypto").join(name)
 }
 
+fn disabled_hooks_path(data_dir: &Path) -> std::path::PathBuf {
+    data_dir.join(".nova_crypto").join("git-hooks-disabled")
+}
+
 fn askpass_script_body() -> &'static str {
     if cfg!(windows) {
         r#"@echo off
@@ -73,8 +77,34 @@ pub fn ensure_askpass_script(data_dir: &Path) -> Result<std::path::PathBuf, Prov
     Ok(path)
 }
 
-fn apply_git_auth_env(cmd: &mut impl GitAuthCommand, data_dir: &Path, pat: &str) -> Result<(), ProviderError> {
+fn ensure_disabled_hooks_dir(data_dir: &Path) -> Result<std::path::PathBuf, ProviderError> {
+    let path = disabled_hooks_path(data_dir);
+    std::fs::create_dir_all(&path).map_err(|e| tool_err(format!("git hooks dir: {e}")))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&path)
+            .map_err(|e| tool_err(format!("git hooks chmod: {e}")))?
+            .permissions();
+        perms.set_mode(0o700);
+        std::fs::set_permissions(&path, perms)
+            .map_err(|e| tool_err(format!("git hooks chmod: {e}")))?;
+    }
+    Ok(path)
+}
+
+fn apply_git_auth_env(
+    cmd: &mut impl GitAuthCommand,
+    data_dir: &Path,
+    pat: &str,
+) -> Result<(), ProviderError> {
     let script = ensure_askpass_script(data_dir)?;
+    let hooks_dir = ensure_disabled_hooks_dir(data_dir)?;
+    // Authenticated git commands expose the PAT to git's child processes via askpass.
+    // Disable repository hooks for these invocations so a cloned/pulled repo cannot
+    // inherit and exfiltrate the credential.
+    cmd.arg("-c");
+    cmd.arg(format!("core.hooksPath={}", hooks_dir.display()));
     cmd.set_env("GIT_TERMINAL_PROMPT", "0");
     cmd.set_env("GIT_ASKPASS_NO_TTY", "1");
     cmd.set_env(PS_GIT_PAT_ENV, pat);
@@ -83,6 +113,10 @@ fn apply_git_auth_env(cmd: &mut impl GitAuthCommand, data_dir: &Path, pat: &str)
 }
 
 trait GitAuthCommand {
+    fn arg<S>(&mut self, arg: S)
+    where
+        S: AsRef<std::ffi::OsStr>;
+
     fn set_env<K, V>(&mut self, key: K, val: V)
     where
         K: AsRef<std::ffi::OsStr>,
@@ -90,6 +124,13 @@ trait GitAuthCommand {
 }
 
 impl GitAuthCommand for StdCommand {
+    fn arg<S>(&mut self, arg: S)
+    where
+        S: AsRef<std::ffi::OsStr>,
+    {
+        StdCommand::arg(self, arg);
+    }
+
     fn set_env<K, V>(&mut self, key: K, val: V)
     where
         K: AsRef<std::ffi::OsStr>,
@@ -100,6 +141,13 @@ impl GitAuthCommand for StdCommand {
 }
 
 impl GitAuthCommand for tokio::process::Command {
+    fn arg<S>(&mut self, arg: S)
+    where
+        S: AsRef<std::ffi::OsStr>,
+    {
+        tokio::process::Command::arg(self, arg);
+    }
+
     fn set_env<K, V>(&mut self, key: K, val: V)
     where
         K: AsRef<std::ffi::OsStr>,

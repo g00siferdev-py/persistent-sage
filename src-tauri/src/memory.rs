@@ -235,6 +235,11 @@ pub trait ConversationMemory: Send + Sync {
 
     fn create_coding_conversation(&self, repo_id: &str, title: &str) -> Result<String, MemoryError>;
 
+    fn coding_repo_id_for_conversation(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Option<String>, MemoryError>;
+
     fn get_or_create_coding_conversation(
         &self,
         repo_id: &str,
@@ -2142,6 +2147,28 @@ impl ConversationMemory for MemoryAnchor {
         Ok(id)
     }
 
+    fn coding_repo_id_for_conversation(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Option<String>, MemoryError> {
+        let conn = self.conn()?;
+        let row = conn.query_row(
+            "SELECT app_mode, coding_repo_id FROM conversations WHERE id = ?1",
+            params![conversation_id.trim()],
+            |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, Option<String>>(1)?)),
+        );
+        match row {
+            Ok((Some(app_mode), repo_id)) if app_mode == crate::coding::APP_MODE_CODING => {
+                Ok(repo_id)
+            }
+            Ok(_) => Ok(None),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Err(MemoryError::UnknownConversation(
+                conversation_id.to_string(),
+            )),
+            Err(e) => Err(MemoryError::from(e)),
+        }
+    }
+
     fn get_or_create_coding_conversation(
         &self,
         repo_id: &str,
@@ -2725,6 +2752,33 @@ mod anchor_storage_tests {
             bundle.anchors,
             bundle.messages
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn coding_repo_id_lookup_rejects_cross_repo_confusion() {
+        let dir = std::env::temp_dir().join(format!("nova_mem_coding_repo_{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        let path = dir.join("m.sqlite");
+        let mem = MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
+        let coding =
+            ConversationMemory::create_coding_conversation(&mem, "repo-a", "repo-a coding")
+                .expect("coding conv");
+        let companion = ConversationMemory::create_conversation(&mem, "companion")
+            .expect("companion conv");
+
+        assert_eq!(
+            ConversationMemory::coding_repo_id_for_conversation(&mem, &coding).expect("lookup"),
+            Some("repo-a".to_string())
+        );
+        assert_eq!(
+            ConversationMemory::coding_repo_id_for_conversation(&mem, &companion).expect("lookup"),
+            None
+        );
+        assert!(matches!(
+            ConversationMemory::coding_repo_id_for_conversation(&mem, "missing"),
+            Err(MemoryError::UnknownConversation(_))
+        ));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

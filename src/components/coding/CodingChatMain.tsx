@@ -34,7 +34,7 @@ export function CodingChatMain({
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const text = draft.trim();
-    if (!text || sending) return;
+    if (!text || sending || loading) return;
     setDraft("");
     onSendMessage(text);
   };
@@ -127,7 +127,7 @@ export function CodingChatMain({
           />
           <button
             type="submit"
-            disabled={sending || !draft.trim()}
+            disabled={sending || loading || !draft.trim()}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-700 text-white hover:bg-violet-600 disabled:opacity-40"
             title="Send"
           >

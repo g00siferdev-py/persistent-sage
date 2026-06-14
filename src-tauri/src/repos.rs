@@ -417,12 +417,12 @@ pub async fn clone_repository(
     }
 
     let mut cmd = Command::new("git");
+    crate::git_auth::apply_git_auth_tokio(&mut cmd, data_dir, &pat).map_err(|e| e.to_string())?;
     cmd.args(["clone", url.trim(), &id])
         .current_dir(&repos_dir)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true);
-    crate::git_auth::apply_git_auth_tokio(&mut cmd, data_dir, &pat).map_err(|e| e.to_string())?;
 
     let out = tokio::time::timeout(Duration::from_secs(900), cmd.output())
         .await

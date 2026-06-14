@@ -38,6 +38,7 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
   const conversationIdRef = useRef<string | null>(null);
   const sendingRef = useRef(false);
   const loadSeq = useRef(0);
+  const loadedRepoIdRef = useRef<string | null>(null);
 
   const eventConversationMatches = useCallback((id: string) => {
     const active = conversationIdRef.current;
@@ -69,35 +70,49 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
 
   useEffect(() => {
     if (!activeRepo) {
+      loadSeq.current += 1;
+      loadedRepoIdRef.current = null;
+      conversationIdRef.current = null;
       setConversationId(null);
       setMessages([]);
+      setStreamAssistant(null);
       setError(null);
       return;
     }
+    const repoId = activeRepo.id;
+    const repoName = activeRepo.name;
+    const seq = ++loadSeq.current;
+    loadedRepoIdRef.current = null;
+    conversationIdRef.current = null;
+    setConversationId(null);
+    setMessages([]);
+    setStreamAssistant(null);
     let cancelled = false;
     (async () => {
       setLoading(true);
       setError(null);
       try {
         const convId = await invoke<string>("memory_get_or_create_coding_conversation", {
-          repoId: activeRepo.id,
-          repoName: activeRepo.name,
+          repoId,
+          repoName,
         });
-        if (cancelled) return;
+        if (cancelled || seq !== loadSeq.current) return;
         setConversationId(convId);
         const recent = await invoke<StoredMessage[]>("memory_get_recent", {
           conversationId: convId,
           limit: 200,
         });
-        if (cancelled) return;
+        if (cancelled || seq !== loadSeq.current) return;
+        loadedRepoIdRef.current = repoId;
         setMessages(recent.map(storedToChatMessage));
       } catch (e) {
-        if (cancelled) return;
+        if (cancelled || seq !== loadSeq.current) return;
+        loadedRepoIdRef.current = null;
         setError(e instanceof Error ? e.message : String(e));
         setConversationId(null);
         setMessages([]);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && seq === loadSeq.current) setLoading(false);
       }
     })();
     return () => {
@@ -184,6 +199,10 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
       const convId = conversationId;
       const repoId = activeRepo?.id;
       if (!trimmed || sending || !convId || !repoId) return;
+      if (loadedRepoIdRef.current !== repoId) {
+        setError("Coding chat is still loading for this repo. Try again in a moment.");
+        return;
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -200,6 +219,7 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
       setError(null);
 
       try {
+        loadSeq.current += 1;
         const result = await invoke<ChatSendResult>("chat_send_message", {
           conversationId: convId,
           message: trimmed,
