@@ -18,6 +18,12 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   coding_git_status: "Git Status",
   coding_git_diff: "Git Diff",
   coding_git_commit: "Git Commit",
+  coding_git_push: "Git Push",
+  coding_git_pull: "Git Pull",
+  coding_git_fetch: "Git Fetch",
+  coding_git_clone: "Git Clone",
+  coding_repo_create: "Create Repo",
+  coding_github_save_pat: "Save GitHub PAT",
 };
 
 /** Friendly title for settings UI and docs; falls back to a spaced version of the id. */

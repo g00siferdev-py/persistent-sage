@@ -144,7 +144,23 @@ const CODING_SHELL_INFO = (
 const CODING_GIT_INFO = (
   <>
     Coding mode: {toolLabelList(["coding_git_status", "coding_git_diff", "coding_git_commit"])} for the active repo.
-    Commits are local only — no push. Off by default.
+    Commits are local only unless remote git is enabled. Off by default.
+  </>
+);
+
+const CODING_GIT_REMOTE_INFO = (
+  <>
+    Coding mode: {toolLabelList(["coding_git_push", "coding_git_pull", "coding_git_fetch", "coding_git_clone"])} via
+    HTTPS and a saved GitHub PAT. Force push is blocked. Requires a GitHub token below (or ask the agent to save one).
+    Off by default.
+  </>
+);
+
+const CODING_COMPANION_LINKED_INFO = (
+  <>
+    When on, coding mode uses your <strong className="font-medium text-slate-700 dark:text-slate-300">active companion</strong>{" "}
+    (persona + memory). Project decisions from coding can be saved to that companion&apos;s memory; code snippets and
+    command output are filtered out. Uses the same provider and model as Companion mode.
   </>
 );
 
@@ -200,6 +216,8 @@ type SettingsView = {
   agentCodingToolsEnabled: boolean;
   agentCodingShellEnabled: boolean;
   agentCodingGitEnabled: boolean;
+  agentCodingGitRemoteEnabled: boolean;
+  agentCodingCompanionLinkedEnabled: boolean;
   agentPersonalityEditEnabled: boolean;
   /** When true, database_query may use location=app_data on .db/.sqlite files in the Persistent Sage data directory (same folder as the live memory DB). */
   databaseAppDataEnabled: boolean;
@@ -217,6 +235,7 @@ type SettingsView = {
   hasOllamaApiKey: boolean;
   hasGeminiApiKey: boolean;
   hasXaiApiKey: boolean;
+  hasGithubPat: boolean;
   onboardingCompleted: boolean;
   artifactsEnabled: boolean;
 };
@@ -244,6 +263,8 @@ type SettingsPatch = {
   agentCodingToolsEnabled?: boolean;
   agentCodingShellEnabled?: boolean;
   agentCodingGitEnabled?: boolean;
+  agentCodingGitRemoteEnabled?: boolean;
+  agentCodingCompanionLinkedEnabled?: boolean;
   agentPersonalityEditEnabled?: boolean;
   databaseAppDataEnabled?: boolean;
   databaseAllowWrite?: boolean;
@@ -570,6 +591,7 @@ export function SettingsPanel({
   const [ollamaKeyInput, setOllamaKeyInput] = useState("");
   const [geminiKeyInput, setGeminiKeyInput] = useState("");
   const [xaiKeyInput, setXaiKeyInput] = useState("");
+  const [githubPatInput, setGithubPatInput] = useState("");
   const [cloudModelTags, setCloudModelTags] = useState<string[] | null>(null);
   const [cloudTagsLoading, setCloudTagsLoading] = useState(false);
   const [openaiFetchedModels, setOpenaiFetchedModels] = useState<string[] | null>(null);
@@ -813,6 +835,17 @@ export function SettingsPanel({
       setError(null);
       await invoke("settings_save_api_key", { provider: "xai", apiKey: xaiKeyInput });
       setXaiKeyInput("");
+      await refreshSettings();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const saveGithubPat = async () => {
+    try {
+      setError(null);
+      await invoke("settings_save_api_key", { provider: "github", apiKey: githubPatInput });
+      setGithubPatInput("");
       await refreshSettings();
     } catch (e) {
       setError(String(e));
@@ -1931,6 +1964,30 @@ export function SettingsPanel({
               Coding mode (v2)
             </p>
             <SettingsToggleCard
+              id="agent-coding-companion-linked"
+              title="Link coding mode to active companion"
+              compact
+              info={CODING_COMPANION_LINKED_INFO}
+              footnote="Companion selection is the profile chosen in the Companion tab."
+              checked={settings?.agentCodingCompanionLinkedEnabled ?? true}
+              onChange={(agentCodingCompanionLinkedEnabled) => {
+                setSettings((s) => (s ? { ...s, agentCodingCompanionLinkedEnabled } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { agentCodingCompanionLinkedEnabled },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+            />
+            <SettingsToggleCard
               id="agent-coding-tools"
               title={`Allow ${toolLabelList(["coding_grep", "coding_apply_patch"])}`}
               compact
@@ -2007,6 +2064,65 @@ export function SettingsPanel({
                 })();
               }}
             />
+            <SettingsToggleCard
+              id="agent-coding-git-remote"
+              title={`Allow ${toolLabelList(["coding_git_push", "coding_git_pull", "coding_git_fetch", "coding_git_clone"])}`}
+              compact
+              info={CODING_GIT_REMOTE_INFO}
+              nestDepth={1}
+              footnote={providerToolsFootnote(settings)}
+              checked={settings?.agentCodingGitRemoteEnabled ?? false}
+              disabled={!providerSupportsTools(settings)}
+              onChange={(agentCodingGitRemoteEnabled) => {
+                setSettings((s) => (s ? { ...s, agentCodingGitRemoteEnabled } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { agentCodingGitRemoteEnabled },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+            />
+            <div className="ml-3 space-y-2 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-3 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">GitHub (coding mode)</p>
+              <p className="text-[11px] leading-relaxed text-slate-500">
+                Personal Access Token for HTTPS clone, push, and pull. Stored encrypted locally — same as API keys. You
+                can also paste a token in chat and ask the agent to save it.
+              </p>
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <KeyRound className="size-3.5 shrink-0" aria-hidden />
+                <span>
+                  GitHub PAT:{" "}
+                  {settings?.hasGithubPat ? (
+                    <span className="text-emerald-400/90">saved (encrypted)</span>
+                  ) : (
+                    <span className="text-amber-400/90">not set</span>
+                  )}
+                </span>
+              </div>
+              <input
+                type="password"
+                autoComplete="off"
+                placeholder="ghp_… or github_pat_…"
+                value={githubPatInput}
+                onChange={(e) => setGithubPatInput(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+              />
+              <button
+                type="button"
+                onClick={() => void saveGithubPat()}
+                className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white hover:bg-indigo-500"
+              >
+                Save GitHub PAT
+              </button>
+            </div>
             <SettingsToggleCard
               id="database-app-data-enabled"
               title={`${toolDisplayName("database_query")} on app data folder`}

@@ -2,16 +2,18 @@
 //!
 //! v2 foundation: directory tree, index file, and list command for the Coding layout.
 //! Folders dropped or cloned into `workspace/repos/` are discovered on each list sync.
-//! Clone, shell, and git agent tools will build on this module.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use tokio::process::Command;
 
 use crate::agent_tools::{assert_path_in_workspace, resolve_workspace_subpath};
 use crate::provider::ProviderError;
+use crate::settings::SettingsManager;
 
 pub const REPOS_DIR: &str = "repos";
 const INDEX_REL: &str = "repos/_index.json";
@@ -379,6 +381,303 @@ fn repo_by_id<'a>(index: &'a RepoIndex, repo_id: &str) -> Option<&'a RepoMeta> {
     index.repos.iter().find(|r| r.id == repo_id)
 }
 
+pub fn repo_name_from_clone_url(url: &str) -> Result<String, String> {
+    let url = url.trim().trim_end_matches('/');
+    let segment = url
+        .rsplit('/')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .trim_end_matches(".git");
+    slugify_id(segment)
+}
+
+/// Clone an HTTPS git repo into `workspace/repos/` using the encrypted GitHub PAT.
+pub async fn clone_repository(
+    workspace_root: &Path,
+    data_dir: &Path,
+    settings: &SettingsManager,
+    url: &str,
+    name_hint: Option<&str>,
+) -> Result<RepoMeta, String> {
+    crate::git_auth::validate_https_git_url(url).map_err(|e| e.to_string())?;
+    let pat = crate::git_auth::require_github_pat(settings).map_err(|e| e.to_string())?;
+    ensure_repos_tree(workspace_root);
+    let index = sync_repos_from_disk(workspace_root)?;
+    let base = match name_hint.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(h) => slugify_id(h)?,
+        None => repo_name_from_clone_url(url)?,
+    };
+    let taken: HashSet<String> = index.repos.iter().map(|r| r.id.clone()).collect();
+    let id = unique_repo_id(&base, &taken);
+    let repos_dir = workspace_root.join(REPOS_DIR);
+    let dest = repos_dir.join(&id);
+    if dest.exists() {
+        return Err(format!("destination already exists: repos/{id}"));
+    }
+
+    let mut cmd = Command::new("git");
+    cmd.args(["clone", url.trim(), &id])
+        .current_dir(&repos_dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+    crate::git_auth::apply_git_auth_tokio(&mut cmd, data_dir, &pat).map_err(|e| e.to_string())?;
+
+    let out = tokio::time::timeout(Duration::from_secs(900), cmd.output())
+        .await
+        .map_err(|_| "git clone timed out after 900s".to_string())?
+        .map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        let _ = std::fs::remove_dir_all(&dest);
+        return Err(format!(
+            "git clone failed (exit {}): {}",
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stderr)
+        ));
+    }
+
+    set_active_repo(workspace_root, Some(&id))?;
+    get_repo_meta(workspace_root, &id)
+}
+
+fn run_git_init(repo_dir: &Path) -> Result<(), String> {
+    let out = std::process::Command::new("git")
+        .args(["init"])
+        .current_dir(repo_dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .map_err(|e| format!("git init failed to start: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "git init failed (exit {}): {}",
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stderr)
+        ));
+    }
+    Ok(())
+}
+
+fn basic_gitignore() -> &'static str {
+    "# Persistent Sage\n.DS_Store\nThumbs.db\n*.log\n.env\n.env.*\n!.env.example\n"
+}
+
+/// Supported starter templates for [`create_repository`].
+pub const REPO_TEMPLATES: &[&str] = &["empty", "rust", "node", "python", "tauri", "csharp"];
+
+pub fn normalize_repo_template(template: Option<&str>) -> Result<&'static str, String> {
+    match template.unwrap_or("empty").trim().to_ascii_lowercase().as_str() {
+        "" | "empty" => Ok("empty"),
+        "rust" | "rs" => Ok("rust"),
+        "node" | "javascript" | "js" | "typescript" | "ts" => Ok("node"),
+        "python" | "py" => Ok("python"),
+        "tauri" => Ok("tauri"),
+        "csharp" | "c#" | "cs" | "dotnet" => Ok("csharp"),
+        other => Err(format!(
+            "unknown template `{other}` — use one of: {}",
+            REPO_TEMPLATES.join(", ")
+        )),
+    }
+}
+
+fn run_command_in_dir(dir: &Path, program: &str, args: &[&str], hint: &str) -> Result<(), String> {
+    let out = std::process::Command::new(program)
+        .args(args)
+        .current_dir(dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .map_err(|e| format!("{hint}: failed to start `{program}`: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "{hint} failed (exit {}): {}",
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stderr)
+        ));
+    }
+    Ok(())
+}
+
+fn npm_program() -> &'static str {
+    if cfg!(windows) {
+        "npm.cmd"
+    } else {
+        "npm"
+    }
+}
+
+fn python_module_name(id: &str) -> String {
+    let mut out = String::new();
+    for ch in id.chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(if ch == '-' { '_' } else { ch });
+        } else if ch == '-' || ch == '_' {
+            if !out.ends_with('_') {
+                out.push('_');
+            }
+        }
+    }
+    let out = out.trim_matches('_').to_string();
+    if out.is_empty() || out.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        format!("app_{out}")
+    } else {
+        out
+    }
+}
+
+fn apply_python_template(dest: &Path, id: &str, readme: &str) -> Result<(), String> {
+    let module = python_module_name(id);
+    let pyproject = format!(
+        r#"[project]
+name = "{id}"
+version = "0.1.0"
+description = "Python project created with Persistent Sage"
+requires-python = ">=3.10"
+
+[project.scripts]
+{module} = "{module}.main:main"
+"#
+    );
+    std::fs::write(dest.join("pyproject.toml"), pyproject).map_err(|e| e.to_string())?;
+    std::fs::write(
+        dest.join("requirements.txt"),
+        "# Add runtime dependencies here, e.g. fastapi>=0.100\n",
+    )
+    .map_err(|e| e.to_string())?;
+    std::fs::write(dest.join("README.md"), readme).map_err(|e| e.to_string())?;
+    let src = dest.join(&module);
+    std::fs::create_dir_all(&src).map_err(|e| e.to_string())?;
+    std::fs::write(src.join("__init__.py"), "").map_err(|e| e.to_string())?;
+    std::fs::write(
+        src.join("main.py"),
+        format!(
+            r#"def main() -> None:
+    print("Hello from {id}")
+
+
+if __name__ == "__main__":
+    main()
+"#
+        ),
+    )
+    .map_err(|e| e.to_string())?;
+    let mut gitignore = basic_gitignore().to_string();
+    gitignore.push_str("__pycache__/\n*.py[cod]\n.venv/\nvenv/\n.pytest_cache/\n.mypy_cache/\n.ruff_cache/\n");
+    std::fs::write(dest.join(".gitignore"), gitignore).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn apply_csharp_template(dest: &Path, id: &str) -> Result<(), String> {
+    run_command_in_dir(
+        dest,
+        "dotnet",
+        &["new", "console", "--name", id, "-o", ".", "--force"],
+        "dotnet new console (is the .NET SDK installed?)",
+    )
+}
+
+fn apply_tauri_template(dest: &Path) -> Result<(), String> {
+    run_command_in_dir(
+        dest,
+        npm_program(),
+        &[
+            "create",
+            "tauri-app@latest",
+            ".",
+            "--",
+            "--template",
+            "vanilla-ts",
+            "--manager",
+            "npm",
+            "--yes",
+        ],
+        "npm create tauri-app (is Node.js/npm installed? This may take several minutes)",
+    )
+}
+
+fn apply_repo_template(dest: &Path, id: &str, template: &str) -> Result<(), String> {
+    let template = normalize_repo_template(Some(template))?;
+    let title = id.replace('-', " ");
+    let readme = format!(
+        "# {title}\n\nCreated with Persistent Sage coding mode.\n"
+    );
+    match template {
+        "rust" => {
+            run_command_in_dir(
+                dest,
+                "cargo",
+                &["init", "--name", id, "--vcs", "none"],
+                "cargo init (is Rust installed?)",
+            )?;
+            std::fs::write(dest.join("README.md"), readme).map_err(|e| e.to_string())?;
+        }
+        "node" => {
+            let pkg = serde_json::json!({
+                "name": id,
+                "version": "0.1.0",
+                "private": true,
+                "description": format!("{title} — Persistent Sage project"),
+            });
+            std::fs::write(
+                dest.join("package.json"),
+                serde_json::to_string_pretty(&pkg).map_err(|e| e.to_string())?,
+            )
+            .map_err(|e| e.to_string())?;
+            std::fs::write(dest.join("README.md"), readme).map_err(|e| e.to_string())?;
+            let mut gitignore = basic_gitignore().to_string();
+            gitignore.push_str("node_modules/\ndist/\nbuild/\n");
+            std::fs::write(dest.join(".gitignore"), gitignore).map_err(|e| e.to_string())?;
+        }
+        "python" => apply_python_template(dest, id, &readme)?,
+        "csharp" => apply_csharp_template(dest, id)?,
+        "tauri" => apply_tauri_template(dest)?,
+        _ => {
+            std::fs::write(dest.join("README.md"), readme).map_err(|e| e.to_string())?;
+            std::fs::write(dest.join(".gitignore"), basic_gitignore()).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+/// Create a new git repo under `workspace/repos/` with an optional starter template.
+pub fn create_repository(
+    workspace_root: &Path,
+    name: &str,
+    template: Option<&str>,
+) -> Result<RepoMeta, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("project name is required".into());
+    }
+    ensure_repos_tree(workspace_root);
+    let index = sync_repos_from_disk(workspace_root)?;
+    let base = slugify_id(name)?;
+    let taken: HashSet<String> = index.repos.iter().map(|r| r.id.clone()).collect();
+    let id = unique_repo_id(&base, &taken);
+    let repos_dir = workspace_root.join(REPOS_DIR);
+    let dest = repos_dir.join(&id);
+    if dest.exists() {
+        return Err(format!("destination already exists: repos/{id}"));
+    }
+
+    std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+    let template_key = normalize_repo_template(template)?;
+    if let Err(e) = apply_repo_template(&dest, &id, template_key) {
+        let _ = std::fs::remove_dir_all(&dest);
+        return Err(e);
+    }
+    if !is_git_repo(&dest) {
+        if let Err(e) = run_git_init(&dest) {
+            let _ = std::fs::remove_dir_all(&dest);
+            return Err(e);
+        }
+    }
+
+    set_active_repo(workspace_root, Some(&id))?;
+    get_repo_meta(workspace_root, &id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -414,6 +713,45 @@ mod tests {
             Some("https://github.com/example/my-app.git")
         );
         assert_eq!(view.active_repo_id.as_deref(), Some("my-app"));
+        let _ = std::fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn create_empty_repository() {
+        let workspace = tmp_workspace();
+        std::fs::create_dir_all(&workspace).unwrap();
+        ensure_repos_tree(&workspace);
+        let meta = create_repository(&workspace, "my-new-app", Some("empty")).unwrap();
+        assert_eq!(meta.id, "my-new-app");
+        let repo_dir = workspace.join("repos/my-new-app");
+        assert!(repo_dir.join(".git").exists());
+        assert!(repo_dir.join("README.md").is_file());
+        assert!(repo_dir.join(".gitignore").is_file());
+        let view = list_repos_view(&workspace).unwrap();
+        assert_eq!(view.active_repo_id.as_deref(), Some("my-new-app"));
+        let _ = std::fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn normalize_repo_template_aliases() {
+        assert_eq!(normalize_repo_template(Some("py")).unwrap(), "python");
+        assert_eq!(normalize_repo_template(Some("dotnet")).unwrap(), "csharp");
+        assert_eq!(normalize_repo_template(Some("ts")).unwrap(), "node");
+        assert!(normalize_repo_template(Some("java")).is_err());
+    }
+
+    #[test]
+    fn create_python_repository() {
+        let workspace = tmp_workspace();
+        std::fs::create_dir_all(&workspace).unwrap();
+        ensure_repos_tree(&workspace);
+        let meta = create_repository(&workspace, "py-demo", Some("python")).unwrap();
+        assert_eq!(meta.id, "py-demo");
+        let repo_dir = workspace.join("repos/py-demo");
+        assert!(repo_dir.join("pyproject.toml").is_file());
+        assert!(repo_dir.join("requirements.txt").is_file());
+        assert!(repo_dir.join("py_demo/main.py").is_file());
+        assert!(repo_dir.join(".git").exists());
         let _ = std::fs::remove_dir_all(&workspace);
     }
 }

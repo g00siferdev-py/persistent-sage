@@ -9,26 +9,27 @@ Persistent Sage is a **Tauri 2** desktop application: a **React 19** frontend ta
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │  Webview (React + TypeScript + Tailwind v4)                 │
-│  ChatMain · ConversationSidebar · SettingsPanel             │
+│  CompanionLayout · CodingLayout · SettingsPanel             │
+│  ChatMain · CodeEditorPanel · CodingTerminalPanel           │
 └───────────────────────────┬─────────────────────────────────┘
                             │ Tauri invoke + events
 ┌───────────────────────────▼─────────────────────────────────┐
 │  Rust (src-tauri/src/)                                      │
 │  lib.rs — NovaState, command registration                   │
 │  chat.rs — send pipeline, streaming, agent tool loop        │
+│  coding.rs · coding_tools.rs · coding_ide.rs · repos.rs    │
+│  git_auth.rs — encrypted GitHub PAT via GIT_ASKPASS         │
 │  memory.rs — MemoryAnchor (SQLite)                          │
 │  settings.rs · personality.rs                               │
 │  provider/ — OpenAI, Gemini, xAI, Ollama, Anthropic         │
-│  attachments.rs — vision payloads                           │
-│  pulse.rs — scheduled ticks in open thread                  │
-│  agent_tools.rs · browser_fetch.rs · personality_tools.rs   │
-│  database_query.rs                                          │
+│  attachments.rs · pulse.rs · agent_tools.rs · browser_fetch   │
 └───────────────────────────┬─────────────────────────────────┘
                             │
         ┌───────────────────┼───────────────────┐
         ▼                   ▼                   ▼
  nova_memory.sqlite   settings.json      personality.json
  attachments/         .nova_crypto/      workspace/
+                                         └── repos/   (coding mode)
 ```
 
 ---
@@ -65,6 +66,38 @@ Held in Tauri managed state (`lib.rs`):
 10. Persist assistant reply; stream events to UI.
 
 **Pulse** (`pulse.rs`) calls the same `execute_chat_turn` on a timer for the conversation id stored in settings (`pulseConversationId`), bound to the sidebar-selected thread from the frontend.
+
+---
+
+## Coding mode (v2)
+
+**Entry:** User selects **Coding** in `AppModeSwitcher` → `CodingLayout` loads active repo from `coding_repo_list`.
+
+### Repository layer (`repos.rs`)
+
+- Repos live under `{workspace_root}/repos/`.
+- Index file: `repos/_index.json` (metadata + active repo id).
+- IPC: `coding_repo_list`, `coding_repo_set_active`, `coding_repo_tree`, `coding_repo_clone`, `coding_repo_create`.
+
+### IDE layer (`coding_ide.rs`)
+
+- IPC: `coding_read_file`, `coding_write_file`, `coding_run_shell`.
+- UI: `useCodingIde`, `CodeEditorPanel`, `CodingTerminalPanel`, `CodingViewToolbar`.
+- Read limit 512 KB; write limit 900 KB per file.
+
+### Coding chat
+
+- `chat_send_message` with `appMode: "coding"` and `codingRepoId`.
+- `CodingTurnContext` injects repo path into system prompt + `CODING_SYSTEM_APPENDIX`.
+- Tools from `coding_tools.rs` (not companion web/project tools).
+- Optional **companion link**: active personality + memory recall; extraction via `memory_extract` coding filter.
+
+### Git authentication (`git_auth.rs`)
+
+- GitHub PAT decrypted from settings; `GIT_ASKPASS` script in `.nova_crypto/`.
+- Never persisted in `.git/config`.
+
+See [CODING-MODE.md](./CODING-MODE.md) for user-facing behavior.
 
 ---
 
@@ -116,7 +149,11 @@ Non-streaming multi-round loop (`agent_complete_with_tools`); synthetic stream e
 
 | Path | Role |
 |------|------|
-| `src/hooks/useChat.ts` | Conversations, messages, send, stream listeners, Pulse target sync |
+| `src/hooks/useChat.ts` | Companion conversations, messages, send, stream listeners |
+| `src/hooks/useCodingChat.ts` | Coding-mode chat per repo |
+| `src/hooks/useCodingIde.ts` | Editor tabs, terminal, view mode |
+| `src/components/layout/CodingLayout.tsx` | Coding workspace shell |
+| `src/components/coding/CodeEditorPanel.tsx` | Multi-tab editor |
 | `src/components/chat/ChatMain.tsx` | Composer, image attach, message list |
 | `src/components/sidebar/ConversationSidebar.tsx` | Threads, memory panel |
 | `src/components/settings/SettingsPanel.tsx` | Companion / Provider / Tools / General tabs |

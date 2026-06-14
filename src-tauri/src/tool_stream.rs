@@ -126,6 +126,20 @@ pub fn tool_start_detail(name: &str, arguments_json: &str) -> String {
             .chars()
             .take(120)
             .collect(),
+        "coding_git_push" | "coding_git_pull" => v["branch"]
+            .as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("(current branch)")
+            .to_string(),
+        "coding_git_fetch" => v["remote"].as_str().unwrap_or("origin").trim().to_string(),
+        "coding_git_clone" => v["url"].as_str().unwrap_or("").trim().to_string(),
+        "coding_repo_create" => {
+            let n = v["name"].as_str().unwrap_or("").trim();
+            let t = v["template"].as_str().unwrap_or("empty").trim();
+            format!("{n} ({t})")
+        }
+        "coding_github_save_pat" => "save GitHub PAT".into(),
         "workspace_read_file" | "workspace_write_file" => {
             v["path"].as_str().unwrap_or("").trim().to_string()
         }

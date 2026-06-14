@@ -12,8 +12,10 @@ Persistent Sage is designed as a **local-first** desktop companion. This documen
 | Companion personalities | `personality.json` | **No** | No (local file) |
 | App settings (non-secret) | `settings.json` | **No** | No |
 | API keys | `settings.json` (ciphertext) + `.nova_crypto/` | **Yes** (AES-256-GCM) | Yes — sent to **your chosen** provider when chatting |
+| GitHub PAT (coding mode) | `settings.json` (ciphertext) + `.nova_crypto/` | **Yes** (AES-256-GCM) | Yes — sent to **GitHub** over HTTPS when you push/pull/clone |
 | Image attachments | `attachments/{conversationId}/` | **No** | Yes — embedded in vision API requests when you send photos |
 | Agent workspace files | `workspace/` | **No** | Only via tools you enable |
+| Coding repositories | `workspace/repos/{project}/` | **No** | No — local git working trees |
 | Pulse / chat traffic | In-memory + provider API | N/A | Yes — to configured LLM endpoint |
 
 **There is no Persistent Sage-operated cloud** that stores your conversations. After the app is built and run, persistence is **entirely on your device** unless you explicitly enable tools that contact third-party URLs.
@@ -38,7 +40,7 @@ When `PERSISTENT_SAGE_DATA_DIR`/`PERSISTENT_SAGE_PORTABLE` (or legacy `NOVA_*`) 
 | `settings.json` | Provider, models, feature toggles, encrypted API key blobs |
 | `personality.json` | Companion profiles and active profile id |
 | `.nova_crypto/` | Input keying material for settings encryption |
-| `workspace/` | Sandboxed directory for optional agent file tools |
+| `workspace/` | Sandboxed directory for optional agent file tools and **coding repos** (`workspace/repos/`) |
 | `attachments/` | Saved images from the chat composer (vision) |
 
 The git repository **does not** contain your database or settings. Each machine starts empty until you chat or restore a backup copy of the data folder.

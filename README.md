@@ -6,12 +6,12 @@
 
 # Persistent Sage
 
-**Persistent Sage** is a privacy-oriented desktop AI companion: multi-thread chat, long-term **Memory Anchor** storage, optional **agent tools**, customizable companion personalities, **Pulse** scheduled check-ins, and **vision** image attachments—all in a local-first **Tauri 2** application.
+**Persistent Sage** is a privacy-oriented desktop AI companion: multi-thread chat, long-term **Memory Anchor** storage, optional **agent tools**, customizable companion personalities, **Pulse** scheduled check-ins, **vision** image attachments, and **Coding mode** — a repo-scoped development workspace with editor, terminal, and git tools—all in a local-first **Tauri 2** application.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
 **Repository:** [github.com/g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage)  
-**Status:** **Persistent Sage 1.0** — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues)
+**Status:** **Persistent Sage 2.0** — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues)
 
 ---
 
@@ -40,7 +40,8 @@ Persistent Sage is in **open beta**. **Windows users** can install from **[GitHu
 | **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)** | **Windows users** — download from Releases, installer, portable USB |
 | **[docs/PUBLISH.md](./docs/PUBLISH.md)** | **Maintainers** — publish beta builds to GitHub Releases |
 | **[docs/BUILD-CI.md](./docs/BUILD-CI.md)** | CI Windows builds (Actions) |
-| **[docs/USER-GUIDE.md](./docs/USER-GUIDE.md)** | Day-to-day usage — chat, memory, settings, Pulse, OpenClaw migration |
+| **[docs/CODING-MODE.md](./docs/CODING-MODE.md)** | **Coding mode (v2)** — repos, IDE, terminal, agent tools, GitHub PAT |
+| **[docs/USER-GUIDE.md](./docs/USER-GUIDE.md)** | Day-to-day usage — Companion + Coding, memory, settings, Pulse |
 | **[docs/PRODUCT-KNOWLEDGE-BASE.md](./docs/PRODUCT-KNOWLEDGE-BASE.md)** | Full product KB for marketing & support agents |
 | **[docs/DATA-AND-PRIVACY.md](./docs/DATA-AND-PRIVACY.md)** | What is stored locally; **API keys encrypted**, **database not encrypted** |
 | **[PRIVACY.md](./PRIVACY.md)** | Public privacy policy |
@@ -80,6 +81,7 @@ After you build and run Persistent Sage, **nothing is stored on a Persistent Sag
 
 ## Key features
 
+- **Coding mode (v2)** — Git repos under `workspace/repos/`, file tree, multi-tab editor, integrated terminal, and repo-scoped coding agent (grep, patch, shell, git). Switch with **Companion | Coding** in the header. See **[docs/CODING-MODE.md](./docs/CODING-MODE.md)**.
 - **Memory Anchor** — SQLite conversations, messages, anchors, projects, and preferences; hybrid FTS recall and startup briefings.
 - **Companion profiles** — Multiple personalities with live system-prompt preview; Persistent Sage JSON and OpenClaw markdown import; optional agent self-edit of `personality.json`.
 - **Providers** — OpenAI, Google Gemini, xAI Grok, Ollama (local), Ollama Cloud, Anthropic, or offline placeholder.
@@ -167,7 +169,7 @@ More: **[docs/INSTALL.md § Troubleshooting](./docs/INSTALL.md#10-troubleshootin
 
 ## Project status
 
-Persistent Sage **1.0** ships chat artifacts (HTML, charts, forms), collaborative projects, Pulse, memory anchor, agent web tools (including browser fetch), dual update paths (Microsoft Store vs GitHub), and multi-provider chat. See [PERSISTENT-SAGE-STATUS.md](./PERSISTENT-SAGE-STATUS.md) and [CHANGELOG.md](./CHANGELOG.md).
+Persistent Sage **2.0** ships Companion mode (artifacts, projects, Pulse, memory anchor, agent web tools) plus **Coding mode** (repo IDE, terminal, git, coding agent). Dual update paths: Microsoft Store + GitHub. See [PERSISTENT-SAGE-STATUS.md](./PERSISTENT-SAGE-STATUS.md) and [CHANGELOG.md](./CHANGELOG.md).
 
 <img width="261" height="389" alt="IMG_2515" src="https://github.com/user-attachments/assets/7f7731f4-5c19-44b4-b86f-bc7c101df250" />
 

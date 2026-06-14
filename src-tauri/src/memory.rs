@@ -1936,6 +1936,47 @@ impl MemoryAnchor {
 
         Ok(MemoryRecallBundle { anchors, messages })
     }
+
+    fn find_legacy_coding_conversation(&self, repo_id: &str) -> Result<Option<String>, MemoryError> {
+        let conn = self.conn()?;
+        let row = conn.query_row(
+            "SELECT id FROM conversations
+             WHERE personality_id = ?1 AND app_mode = 'coding' AND coding_repo_id = ?2
+             ORDER BY datetime(updated_at) DESC, id DESC
+             LIMIT 1",
+            params![crate::coding::CODING_PERSONALITY_ID, repo_id.trim()],
+            |r| r.get(0),
+        );
+        match row {
+            Ok(id) => Ok(Some(id)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(MemoryError::from(e)),
+        }
+    }
+
+    fn reassign_conversation_personality(
+        &self,
+        conversation_id: &str,
+        new_personality_id: &str,
+    ) -> Result<(), MemoryError> {
+        let conn = self.conn()?;
+        conn.execute(
+            "UPDATE conversations SET personality_id = ?2 WHERE id = ?1",
+            params![conversation_id, new_personality_id],
+        )?;
+        conn.execute(
+            "UPDATE messages SET personality_id = ?2 WHERE conversation_id = ?1",
+            params![conversation_id, new_personality_id],
+        )?;
+        conn.execute(
+            "UPDATE anchors SET personality_id = ?2 WHERE conversation_id = ?1",
+            params![conversation_id, new_personality_id],
+        )?;
+        eprintln!(
+            "persistent-sage: migrated coding conversation {conversation_id} to personality {new_personality_id}"
+        );
+        Ok(())
+    }
 }
 
 impl ConversationMemory for MemoryAnchor {
@@ -2074,16 +2115,14 @@ impl ConversationMemory for MemoryAnchor {
         &self,
         repo_id: &str,
     ) -> Result<Vec<StoredConversation>, MemoryError> {
+        let pid = self.active_personality()?;
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, title, created_at, updated_at FROM conversations
              WHERE personality_id = ?1 AND app_mode = 'coding' AND coding_repo_id = ?2
              ORDER BY datetime(updated_at) DESC, id DESC",
         )?;
-        let rows = stmt.query_map(
-            params![crate::coding::CODING_PERSONALITY_ID, repo_id.trim()],
-            MemoryAnchor::row_to_conversation,
-        )?;
+        let rows = stmt.query_map(params![pid, repo_id.trim()], MemoryAnchor::row_to_conversation)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(MemoryError::from)
     }
 
@@ -2093,16 +2132,12 @@ impl ConversationMemory for MemoryAnchor {
         title: &str,
     ) -> Result<String, MemoryError> {
         let id = Uuid::new_v4().to_string();
+        let pid = self.active_personality()?;
         let conn = self.conn()?;
         conn.execute(
             "INSERT INTO conversations (id, title, personality_id, app_mode, coding_repo_id)
              VALUES (?1, ?2, ?3, 'coding', ?4)",
-            params![
-                id,
-                title.trim(),
-                crate::coding::CODING_PERSONALITY_ID,
-                repo_id.trim()
-            ],
+            params![id, title.trim(), pid, repo_id.trim()],
         )?;
         Ok(id)
     }
@@ -2118,6 +2153,13 @@ impl ConversationMemory for MemoryAnchor {
             .next()
         {
             return Ok(c.id);
+        }
+        let pid = self.active_personality()?;
+        if pid != crate::coding::CODING_PERSONALITY_ID {
+            if let Some(legacy_id) = self.find_legacy_coding_conversation(repo_id)? {
+                self.reassign_conversation_personality(&legacy_id, &pid)?;
+                return Ok(legacy_id);
+            }
         }
         let title = format!("{} — coding", repo_name.trim());
         self.create_coding_conversation(repo_id, &title)

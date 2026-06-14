@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { ChatMessage, ChatSendResult, StoredMessage } from "@/types/chat";
 import { storedToChatMessage } from "@/types/chat";
-import { memoryGetRecent, memorySetActivePersonality } from "@/hooks/useNovaMemory";
+import { memoryGetRecent } from "@/hooks/useNovaMemory";
 import {
   applyToolStreamEvent,
   type ChatToolStreamEvent,
@@ -79,7 +79,6 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
       setLoading(true);
       setError(null);
       try {
-        await memorySetActivePersonality("__coding__");
         const convId = await invoke<string>("memory_get_or_create_coding_conversation", {
           repoId: activeRepo.id,
           repoName: activeRepo.name,
@@ -204,7 +203,6 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
         const result = await invoke<ChatSendResult>("chat_send_message", {
           conversationId: convId,
           message: trimmed,
-          personalityId: "__coding__",
           appMode: "coding",
           codingRepoId: repoId,
         });

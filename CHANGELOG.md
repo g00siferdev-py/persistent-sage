@@ -8,6 +8,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2.0.0] — 2026-06-13
+
+### Added
+
+- **Coding mode (v2)** — Dual-mode app: switch between **Companion** and **Coding** from the header. Coding workspace manages git repos under `workspace/repos/`.
+- **Repository management** — New project (templates: empty, rust, node, python, tauri, csharp), HTTPS clone, folder refresh, active repo selection, file tree with collapse/expand all.
+- **Built-in IDE** — Multi-tab editor (read/write, line numbers, Ctrl+S, revert, open externally), Split/Editor/Chat view toolbar, resizable integrated terminal with allowlisted shell.
+- **Coding agent tools** (opt-in) — `coding_grep`, `coding_apply_patch`, `coding_run_command`, local git (status/diff/commit), remote git (push/pull/fetch/clone), `coding_repo_create`, `coding_github_save_pat`.
+- **GitHub PAT** — Encrypted storage; HTTPS git via `GIT_ASKPASS` (token never written to `.git/config`); Settings UI and agent save tool.
+- **Companion ↔ coding link** — Optional shared persona and memory (default on); coding conversations per repo + companion; filtered memory extraction (no code in anchors).
+- **Direct run parsing** — Explicit user shell requests can bypass the model and execute `coding_run_command` when shell is enabled.
+- **Live tool streaming** — `coding_run_command` output streams to the integrated terminal during agent turns.
+- **Documentation** — [docs/CODING-MODE.md](./docs/CODING-MODE.md), release notes, updated architecture and user guide.
+
+### Changed
+
+- **Persistent Sage 2.0** — Version bump across `package.json`, `Cargo.toml`, `tauri.conf.json`, and MSIX manifest (`2.0.0.0`).
+- **Memory schema** — Coding conversations use `app_mode` and `coding_repo_id`; legacy `__coding__` threads migrate when companion link is on.
+- **Chat pipeline** — Coding turns use a dedicated system appendix, up to 32 tool rounds, and workspace tools scoped to `repos/...` paths.
+
+### Security
+
+- Force push blocked for coding git tools.
+- Shell command allowlist and destructive-pattern blocklist.
+- Repo file access confined to registered repositories under `workspace/repos/`.
+
+---
+
 ## [1.0.0] — 2026-06-05
 
 ### Added

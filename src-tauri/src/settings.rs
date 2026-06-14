@@ -100,6 +100,11 @@ pub struct SettingsFile {
     pub agent_coding_shell_enabled: bool,
     #[serde(default = "default_agent_coding_git")]
     pub agent_coding_git_enabled: bool,
+    #[serde(default = "default_agent_coding_git_remote")]
+    pub agent_coding_git_remote_enabled: bool,
+    /// When true, coding mode uses the active companion persona + shared memory (filtered extraction).
+    #[serde(default = "default_agent_coding_companion_linked")]
+    pub agent_coding_companion_linked_enabled: bool,
     #[serde(default = "default_agent_personality_edit")]
     pub agent_personality_edit_enabled: bool,
     #[serde(default = "default_database_allow_write")]
@@ -172,6 +177,14 @@ fn default_agent_coding_shell() -> bool {
 
 fn default_agent_coding_git() -> bool {
     false
+}
+
+fn default_agent_coding_git_remote() -> bool {
+    false
+}
+
+fn default_agent_coding_companion_linked() -> bool {
+    true
 }
 
 fn default_agent_personality_edit() -> bool {
@@ -255,6 +268,8 @@ impl Default for SettingsFile {
             agent_coding_tools_enabled: false,
             agent_coding_shell_enabled: false,
             agent_coding_git_enabled: false,
+            agent_coding_git_remote_enabled: false,
+            agent_coding_companion_linked_enabled: true,
             agent_personality_edit_enabled: false,
             database_allow_write: false,
             database_app_data_enabled: false,
@@ -298,6 +313,8 @@ pub struct SettingsView {
     pub agent_coding_tools_enabled: bool,
     pub agent_coding_shell_enabled: bool,
     pub agent_coding_git_enabled: bool,
+    pub agent_coding_git_remote_enabled: bool,
+    pub agent_coding_companion_linked_enabled: bool,
     pub agent_personality_edit_enabled: bool,
     pub database_allow_write: bool,
     pub database_app_data_enabled: bool,
@@ -313,6 +330,7 @@ pub struct SettingsView {
     pub has_ollama_api_key: bool,
     pub has_gemini_api_key: bool,
     pub has_xai_api_key: bool,
+    pub has_github_pat: bool,
     pub onboarding_completed: bool,
     pub whats_new_seen_version: String,
     pub artifacts_enabled: bool,
@@ -344,6 +362,8 @@ pub struct SettingsUpdatePayload {
     pub agent_coding_tools_enabled: Option<bool>,
     pub agent_coding_shell_enabled: Option<bool>,
     pub agent_coding_git_enabled: Option<bool>,
+    pub agent_coding_git_remote_enabled: Option<bool>,
+    pub agent_coding_companion_linked_enabled: Option<bool>,
     pub agent_personality_edit_enabled: Option<bool>,
     pub database_allow_write: Option<bool>,
     pub database_app_data_enabled: Option<bool>,
@@ -690,6 +710,8 @@ impl SettingsManager {
             agent_coding_tools_enabled: inner.agent_coding_tools_enabled,
             agent_coding_shell_enabled: inner.agent_coding_shell_enabled,
             agent_coding_git_enabled: inner.agent_coding_git_enabled,
+            agent_coding_git_remote_enabled: inner.agent_coding_git_remote_enabled,
+            agent_coding_companion_linked_enabled: inner.agent_coding_companion_linked_enabled,
             agent_personality_edit_enabled: inner.agent_personality_edit_enabled,
             database_allow_write: inner.database_allow_write,
             database_app_data_enabled: inner.database_app_data_enabled,
@@ -719,6 +741,10 @@ impl SettingsManager {
             has_xai_api_key: can_decrypt_api_blob(
                 &self.aes_key,
                 inner.encrypted_api_keys.get("xai"),
+            ),
+            has_github_pat: can_decrypt_api_blob(
+                &self.aes_key,
+                inner.encrypted_api_keys.get("github"),
             ),
             onboarding_completed: inner.onboarding_completed,
             whats_new_seen_version: inner.whats_new_seen_version.clone(),
@@ -795,6 +821,20 @@ impl SettingsManager {
             .read()
             .map(|g| g.agent_coding_git_enabled)
             .unwrap_or(false)
+    }
+
+    pub fn agent_coding_git_remote_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.agent_coding_git_remote_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn agent_coding_companion_linked_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.agent_coding_companion_linked_enabled)
+            .unwrap_or(true)
     }
 
     pub fn agent_personality_edit_enabled(&self) -> bool {
@@ -1049,6 +1089,12 @@ impl SettingsManager {
         if let Some(b) = patch.agent_coding_git_enabled {
             inner.agent_coding_git_enabled = b;
         }
+        if let Some(b) = patch.agent_coding_git_remote_enabled {
+            inner.agent_coding_git_remote_enabled = b;
+        }
+        if let Some(b) = patch.agent_coding_companion_linked_enabled {
+            inner.agent_coding_companion_linked_enabled = b;
+        }
         if let Some(b) = patch.agent_personality_edit_enabled {
             inner.agent_personality_edit_enabled = b;
         }
@@ -1173,6 +1219,7 @@ fn normalize_key_slot(provider: &str) -> Result<String, SettingsError> {
         "ollama" | "ollama_cloud" => Ok("ollama".into()),
         "gemini" | "google" => Ok("gemini".into()),
         "xai" | "grok" => Ok("xai".into()),
+        "github" | "github_pat" => Ok("github".into()),
         _ => Err(SettingsError::InvalidKeySlot(provider.to_string())),
     }
 }
@@ -1193,6 +1240,8 @@ mod tests {
             ("google", "gemini"),
             ("xai", "xai"),
             ("grok", "xai"),
+            ("github", "github"),
+            ("github_pat", "github"),
         ];
 
         for (provider, slot) in cases {

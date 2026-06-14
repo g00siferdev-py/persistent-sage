@@ -13,7 +13,9 @@ mod artifacts;
 mod attachments;
 mod browser_fetch;
 mod chat;
+mod git_auth;
 mod coding;
+mod coding_ide;
 mod coding_tools;
 mod database_query;
 mod distribution;
@@ -270,6 +272,78 @@ fn coding_repo_tree(
     repos::repo_file_tree(&state.workspace_root, &meta.path_rel)
 }
 
+#[tauri::command]
+async fn coding_repo_clone(
+    url: String,
+    name: Option<String>,
+    state: State<'_, NovaState>,
+) -> Result<repos::RepoListView, String> {
+    repos::clone_repository(
+        &state.workspace_root,
+        state.data_directory.as_path(),
+        &state.settings,
+        url.trim(),
+        name.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+    )
+    .await?;
+    repos::list_repos_view(&state.workspace_root)
+}
+
+#[tauri::command]
+fn coding_repo_create(
+    name: String,
+    template: Option<String>,
+    state: State<'_, NovaState>,
+) -> Result<repos::RepoListView, String> {
+    repos::create_repository(
+        &state.workspace_root,
+        name.trim(),
+        template.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+    )?;
+    repos::list_repos_view(&state.workspace_root)
+}
+
+#[tauri::command]
+fn coding_read_file(
+    repo_id: String,
+    path_rel: String,
+    state: State<'_, NovaState>,
+) -> Result<coding_ide::CodingFileView, String> {
+    coding_ide::read_file(&state.workspace_root, repo_id.trim(), path_rel.trim())
+}
+
+#[tauri::command]
+fn coding_write_file(
+    repo_id: String,
+    path_rel: String,
+    content: String,
+    state: State<'_, NovaState>,
+) -> Result<(), String> {
+    coding_ide::write_file(
+        &state.workspace_root,
+        repo_id.trim(),
+        path_rel.trim(),
+        &content,
+    )
+}
+
+#[tauri::command]
+async fn coding_run_shell(
+    repo_id: String,
+    command: String,
+    cwd: Option<String>,
+    state: State<'_, NovaState>,
+) -> Result<coding_ide::CodingShellResult, String> {
+    coding_ide::run_shell(
+        &state.workspace_root,
+        &state.settings,
+        repo_id.trim(),
+        command.trim(),
+        cwd.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+    )
+    .await
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct FormSubmissionMessage {
@@ -508,6 +582,23 @@ fn memory_set_active_personality(
     Ok(())
 }
 
+fn sync_coding_session_personality(state: &NovaState) -> Result<String, String> {
+    let linked = state.settings.agent_coding_companion_linked_enabled();
+    let pid = if linked {
+        state.personality.active_profile_id()
+    } else {
+        crate::coding::CODING_PERSONALITY_ID.to_string()
+    };
+    if linked {
+        state
+            .personality
+            .set_active_profile_id(&pid)
+            .map_err(|e| e.to_string())?;
+    }
+    state.memory.set_active_personality(&pid);
+    Ok(pid)
+}
+
 #[tauri::command]
 fn memory_list_conversations(state: State<NovaState>) -> Result<Vec<StoredConversation>, String> {
     state.memory.list_conversations().map_err(|e| e.to_string())
@@ -538,6 +629,7 @@ fn memory_create_coding_conversation(
     title: String,
     state: State<NovaState>,
 ) -> Result<String, String> {
+    sync_coding_session_personality(&state)?;
     state
         .memory
         .create_coding_conversation(repo_id.trim(), title.trim())
@@ -550,6 +642,7 @@ fn memory_get_or_create_coding_conversation(
     repo_name: String,
     state: State<NovaState>,
 ) -> Result<String, String> {
+    sync_coding_session_personality(&state)?;
     state
         .memory
         .get_or_create_coding_conversation(repo_id.trim(), repo_name.trim())
@@ -922,6 +1015,11 @@ pub fn run() {
             coding_repo_list,
             coding_repo_set_active,
             coding_repo_tree,
+            coding_repo_clone,
+            coding_repo_create,
+            coding_read_file,
+            coding_write_file,
+            coding_run_shell,
             memory_list_coding_conversations,
             memory_create_coding_conversation,
             memory_get_or_create_coding_conversation,

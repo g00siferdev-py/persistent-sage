@@ -2,8 +2,8 @@
 
 **Purpose:** This document is the canonical knowledge base for external agents that market, promote, and support Persistent Sage. Use it to answer product questions accurately, write marketing copy, troubleshoot user issues, and explain privacy tradeoffs in plain language.
 
-**Product version:** 0.2.0-beta.9 (open beta)  
-**Last updated:** May 31, 2026  
+**Product version:** 2.0.0  
+**Last updated:** June 13, 2026  
 **Repository:** https://github.com/g00siferdev-py/persistent-sage  
 **Maintainer:** g00siferdev-py / g00sifer Development Lab  
 **License:** MIT  
@@ -208,6 +208,35 @@ Stored in `{data_dir}/personality.json`. Each profile includes:
 - `PERSISTENT_SAGE_CHROME_NO_SANDBOX=1` — Docker/containers
 - `PERSISTENT_SAGE_CHROME_IGNORE_CERT_ERRORS=1` — development only
 
+### Coding mode (v2) — desktop only
+
+Second top-level mode (**Companion | Coding** in header). Repositories live under `{data_dir}/workspace/repos/`.
+
+| Capability | Description |
+|------------|-------------|
+| **Repo management** | New project (templates), HTTPS clone, refresh, file tree |
+| **Built-in IDE** | Multi-tab editor, Split/Editor/Chat views, Ctrl+S save |
+| **Terminal** | Allowlisted shell in repo root; agent output streams live |
+| **Coding chat** | One thread per repo (+ companion when linked) |
+| **Companion link** | Shared persona/memory (default on); code filtered from anchors |
+
+**Coding agent tools** (Settings → Tools → Coding mode, mostly off by default):
+
+| Tool | Purpose |
+|------|---------|
+| `coding_grep` | Regex search in repo |
+| `coding_apply_patch` | Search/replace in one file |
+| `coding_run_command` | Allowlisted shell |
+| `coding_git_*` | status, diff, commit, push, pull, fetch, clone |
+| `coding_repo_create` | New repo from template |
+| `coding_github_save_pat` | Save encrypted GitHub PAT |
+
+**GitHub PAT:** Encrypted like API keys; git uses `GIT_ASKPASS` — never stored in `.git/config`. HTTPS only; force push blocked.
+
+**Providers:** Coding tools require OpenAI, Anthropic, xAI, or Ollama. Gemini and Placeholder: chat without tool execution.
+
+Full guide: [CODING-MODE.md](./CODING-MODE.md).
+
 ### Settings panel (four tabs)
 
 #### Companion tab
@@ -247,8 +276,9 @@ Nested toggles with clear hierarchy:
 - Web tools → Browser fetch → Ignore robots.txt
 - Workspace tools → App data databases → Allow database writes
 - Allow personality self-edit
+- **Coding mode (v2)** — grep/patch, shell, local git, remote git, GitHub PAT, companion link
 
-All off by default.
+Companion web/workspace toggles and coding toggles are separate. Coding toggles mostly off by default (companion link on).
 
 #### General tab
 
@@ -284,13 +314,23 @@ One-time highlights shown after app version changes (e.g., after in-app update).
 
 ## Application layout
 
+**Companion mode**
+
 | Region | Component | Purpose |
 |--------|-----------|---------|
 | Left | Conversation sidebar | Thread list, Memory Anchor panel |
-| Center | Chat | Messages, composer, companion picker, Settings toggle |
+| Center | Chat | Messages, composer, companion picker |
 | Right | Settings panel | Companion · Provider · Tools · General |
 
-Settings slides in from the right via header toggle.
+**Coding mode**
+
+| Region | Component | Purpose |
+|--------|-----------|---------|
+| Left | Repositories | Repo list, new project, clone |
+| Center | IDE + chat + terminal | Editor, coding agent, shell |
+| Right | Files | Repo file tree |
+
+Mode switcher in the header. Settings slides in from the right in Companion mode. See [CODING-MODE.md](./CODING-MODE.md).
 
 ---
 
@@ -607,6 +647,8 @@ Open beta for Windows: github.com/g00siferdev-py/persistent-sage
 
 | Version | Date | Notable changes |
 |---------|------|-----------------|
+| **2.0.0** | 2026-06-13 | Coding mode — repos, IDE, terminal, coding agent tools, GitHub PAT, companion link |
+| **1.0.0** | 2026-06-05 | GA — artifacts, projects, browser fetch, dual update channels |
 | **0.2.0-beta.9** | 2026-05-27 | Pulse improvements, What's new dialog, Ollama Cloud model split, OpenAI key fix |
 | **0.2.0-beta.8** | 2026-05-25 | First-run API key UX fix |
 | **0.2.0-beta.7** | 2026-05-25 | Gemini + xAI providers, thinking selector, updater, feedback flow, Sage guide |

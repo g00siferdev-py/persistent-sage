@@ -1,6 +1,6 @@
 [package]
 name = "persistent-sage"
-version = "1.0.0"
+version = "2.0.0"
 description = "Persistent Sage — local-first AI companion (Tauri shell)"
 authors = ["g00siferdev-py"]
 edition = "2021"

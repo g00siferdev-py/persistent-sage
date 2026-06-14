@@ -154,6 +154,100 @@ pub fn git_tool_definitions() -> Vec<ToolDefinition> {
     ]
 }
 
+pub fn git_remote_tool_definitions() -> Vec<ToolDefinition> {
+    vec![
+        ToolDefinition {
+            name: "coding_git_push".into(),
+            description: Some(
+                "Push commits to the remote (HTTPS + saved GitHub PAT). Optional branch name; defaults to current branch.".into(),
+            ),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "branch": { "type": "string", "description": "Optional branch to push" },
+                    "remote": { "type": "string", "description": "Remote name (default origin)" }
+                }
+            }),
+        },
+        ToolDefinition {
+            name: "coding_git_pull".into(),
+            description: Some(
+                "Pull from remote (HTTPS + saved GitHub PAT). Optional branch; defaults to current branch.".into(),
+            ),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "branch": { "type": "string", "description": "Optional branch to pull" },
+                    "remote": { "type": "string", "description": "Remote name (default origin)" }
+                }
+            }),
+        },
+        ToolDefinition {
+            name: "coding_git_fetch".into(),
+            description: Some("Fetch from remote (HTTPS + saved GitHub PAT).".into()),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "remote": { "type": "string", "description": "Remote name (default origin)" }
+                }
+            }),
+        },
+        ToolDefinition {
+            name: "coding_git_clone".into(),
+            description: Some(
+                "Clone an HTTPS git repo into workspace/repos (requires saved GitHub PAT).".into(),
+            ),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "url": { "type": "string", "description": "HTTPS clone URL, e.g. https://github.com/owner/repo.git" },
+                    "name": { "type": "string", "description": "Optional folder name under workspace/repos" }
+                },
+                "required": ["url"]
+            }),
+        },
+        ToolDefinition {
+            name: "coding_github_save_pat".into(),
+            description: Some(
+                "Save a GitHub Personal Access Token (encrypted locally, like API keys). Use when the user pastes a token and asks to store it.".into(),
+            ),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "token": { "type": "string", "description": "GitHub PAT (classic or fine-grained with repo scope)" }
+                },
+                "required": ["token"]
+            }),
+        },
+    ]
+}
+
+pub fn repo_create_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "coding_repo_create".into(),
+        description: Some(
+            "Create a new git repository under workspace/repos with a starter template. \
+             Does not require GitHub — use for greenfield projects. Sets the new repo as active."
+                .into(),
+        ),
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Project folder name (slugified under workspace/repos/)"
+                },
+                "template": {
+                    "type": "string",
+                    "description": "Starter template",
+                    "enum": ["empty", "rust", "node", "python", "tauri", "csharp"]
+                }
+            },
+            "required": ["name"]
+        }),
+    }
+}
+
 /// Workspace-relative path for the active repo, e.g. `repos/persistent-sage`.
 pub fn repo_workspace_rel(ctx: &CodingTurnContext) -> &str {
     ctx.path_rel.as_str()
@@ -164,9 +258,18 @@ fn workspace_path_for_repo_file(
     ctx: &CodingTurnContext,
     repo_rel: &str,
 ) -> Result<PathBuf, ProviderError> {
-    let rel = repo_rel.trim().trim_start_matches('/');
+    resolve_repo_file_path(workspace_root, ctx.path_rel.trim(), repo_rel)
+}
+
+/// Resolve a repo-relative file path under `workspace/repos/{repo}/`.
+pub fn resolve_repo_file_path(
+    workspace_root: &Path,
+    repo_path_rel: &str,
+    file_rel: &str,
+) -> Result<PathBuf, ProviderError> {
+    let rel = file_rel.trim().trim_start_matches('/');
     if rel.is_empty() {
-        let path = resolve_workspace_subpath(workspace_root, ctx.path_rel.trim())?;
+        let path = resolve_workspace_subpath(workspace_root, repo_path_rel.trim())?;
         assert_path_in_workspace(workspace_root, &path)?;
         return Ok(path);
     }
@@ -176,10 +279,62 @@ fn workspace_path_for_repo_file(
     if rel.split('/').any(|s| s == "..") {
         return Err(tool_err("path must not contain '..'"));
     }
-    let ws_rel = format!("{}/{}", ctx.path_rel.trim_end_matches('/'), rel);
+    let ws_rel = format!("{}/{}", repo_path_rel.trim_end_matches('/'), rel);
     let path = resolve_workspace_subpath(workspace_root, &ws_rel)?;
     assert_path_in_workspace(workspace_root, &path)?;
     Ok(path)
+}
+
+const IDE_READ_MAX_BYTES: u64 = 512_000;
+const IDE_WRITE_MAX_BYTES: usize = 900_000;
+
+pub fn read_repo_file_for_ide(
+    workspace_root: &Path,
+    repo_path_rel: &str,
+    file_rel: &str,
+) -> Result<(String, u64), ProviderError> {
+    let path = resolve_repo_file_path(workspace_root, repo_path_rel, file_rel)?;
+    let meta = std::fs::metadata(&path).map_err(|e| tool_err(format!("read: {e}")))?;
+    if !meta.is_file() {
+        return Err(tool_err("path is not a file"));
+    }
+    if meta.len() > IDE_READ_MAX_BYTES {
+        return Err(tool_err(format!(
+            "file is {} bytes (max {IDE_READ_MAX_BYTES})",
+            meta.len()
+        )));
+    }
+    let bytes = std::fs::read(&path).map_err(|e| tool_err(format!("read: {e}")))?;
+    let text = String::from_utf8(bytes).map_err(|_| tool_err("file is not valid UTF-8"))?;
+    Ok((text, meta.len()))
+}
+
+pub fn write_repo_file_for_ide(
+    workspace_root: &Path,
+    repo_path_rel: &str,
+    file_rel: &str,
+    content: &str,
+) -> Result<(), ProviderError> {
+    if content.as_bytes().len() > IDE_WRITE_MAX_BYTES {
+        return Err(tool_err(format!(
+            "content exceeds {IDE_WRITE_MAX_BYTES} bytes"
+        )));
+    }
+    let path = resolve_repo_file_path(workspace_root, repo_path_rel, file_rel)?;
+    if let Some(parent) = path.parent() {
+        assert_path_in_workspace(workspace_root, parent)?;
+        std::fs::create_dir_all(parent).map_err(|e| tool_err(format!("mkdir: {e}")))?;
+    }
+    std::fs::write(&path, content).map_err(|e| tool_err(format!("write: {e}")))?;
+    Ok(())
+}
+
+pub async fn run_shell_for_ide(
+    repo_dir: &Path,
+    command: &str,
+    timeout_secs: Option<u64>,
+) -> Result<String, ProviderError> {
+    run_shell_in_repo(repo_dir, command, timeout_secs, None, "coding_run_command").await
 }
 
 fn command_base_token(command: &str) -> Option<String> {
@@ -224,19 +379,31 @@ fn validate_command(command: &str) -> Result<(), ProviderError> {
 }
 
 async fn run_git(repo_dir: &Path, args: &[&str]) -> Result<String, ProviderError> {
+    run_git_with_auth(repo_dir, args, None, None).await
+}
+
+async fn run_git_with_auth(
+    repo_dir: &Path,
+    args: &[&str],
+    data_dir: Option<&Path>,
+    pat: Option<&str>,
+) -> Result<String, ProviderError> {
     validate_command(&format!("git {}", args.first().copied().unwrap_or("")))?;
     if !repo_dir.is_dir() {
         return Err(tool_err(format!("repo directory not found: {}", repo_dir.display())));
     }
+    let mut cmd = Command::new("git");
+    cmd.args(args)
+        .current_dir(repo_dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+    if let (Some(dir), Some(token)) = (data_dir, pat) {
+        crate::git_auth::apply_git_auth_tokio(&mut cmd, dir, token)?;
+    }
     let out = tokio::time::timeout(
         Duration::from_secs(COMMAND_TIMEOUT_SECS),
-        Command::new("git")
-            .args(args)
-            .current_dir(repo_dir)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true)
-            .output(),
+        cmd.output(),
     )
     .await
     .map_err(|_| tool_err(format!("git timed out after {COMMAND_TIMEOUT_SECS}s")))?
@@ -582,9 +749,27 @@ pub async fn run_coding_tool(
     name: &str,
     arguments_json: &str,
     tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
+    settings: Option<&crate::settings::SettingsManager>,
+    data_directory: &Path,
 ) -> Result<String, ProviderError> {
     let v: Value = serde_json::from_str(arguments_json)
         .map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
+
+    if name == "coding_repo_create" {
+        let project_name = v["name"].as_str().unwrap_or("").trim();
+        if project_name.is_empty() {
+            return Err(tool_err("name is required"));
+        }
+        let template = v["template"].as_str().map(str::trim).filter(|s| !s.is_empty());
+        let meta = crate::repos::create_repository(workspace_root, project_name, template)
+            .map_err(tool_err)?;
+        let template_label = template.unwrap_or("empty");
+        return Ok(format!(
+            "Created repo `{project_name}` with template `{template_label}` at `{}` (id: {}). It is now the active repo.",
+            meta.path_rel, meta.id
+        ));
+    }
+
     let repo_dir = workspace_path_for_repo_file(workspace_root, ctx, "")?;
 
     match name {
@@ -641,6 +826,68 @@ pub async fn run_coding_tool(
             run_git(&repo_dir, &["add", "-A"]).await?;
             run_git(&repo_dir, &["commit", "-m", msg]).await
         }
+        "coding_git_push" => {
+            let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
+            let pat = crate::git_auth::require_github_pat(settings)?;
+            let remote = v["remote"].as_str().unwrap_or("origin").trim();
+            let branch = v["branch"].as_str().map(str::trim).filter(|s| !s.is_empty());
+            let mut args = vec!["push", remote];
+            if let Some(b) = branch {
+                args.push(b);
+            }
+            crate::git_auth::reject_force_git_args(&args)?;
+            run_git_with_auth(&repo_dir, &args, Some(data_directory), Some(&pat)).await
+        }
+        "coding_git_pull" => {
+            let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
+            let pat = crate::git_auth::require_github_pat(settings)?;
+            let remote = v["remote"].as_str().unwrap_or("origin").trim();
+            let branch = v["branch"].as_str().map(str::trim).filter(|s| !s.is_empty());
+            let mut args = vec!["pull", remote];
+            if let Some(b) = branch {
+                args.push(b);
+            }
+            run_git_with_auth(&repo_dir, &args, Some(data_directory), Some(&pat)).await
+        }
+        "coding_git_fetch" => {
+            let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
+            let pat = crate::git_auth::require_github_pat(settings)?;
+            let remote = v["remote"].as_str().unwrap_or("origin").trim();
+            run_git_with_auth(
+                &repo_dir,
+                &["fetch", remote],
+                Some(data_directory),
+                Some(&pat),
+            )
+            .await
+        }
+        "coding_git_clone" => {
+            let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
+            let url = v["url"].as_str().unwrap_or("").trim();
+            let name = v["name"].as_str().map(str::trim).filter(|s| !s.is_empty());
+            let meta = crate::repos::clone_repository(
+                workspace_root,
+                data_directory,
+                settings,
+                url,
+                name,
+            )
+            .await
+            .map_err(tool_err)?;
+            Ok(format!(
+                "Cloned `{}` into `{}` (id: {}).",
+                url, meta.path_rel, meta.id
+            ))
+        }
+        "coding_github_save_pat" => {
+            let settings = settings.ok_or_else(|| tool_err("settings unavailable"))?;
+            let token = v["token"].as_str().unwrap_or("").trim();
+            if token.is_empty() {
+                return Err(tool_err("token is required"));
+            }
+            crate::git_auth::save_github_pat(settings, token)?;
+            Ok("GitHub PAT saved (encrypted locally).".into())
+        }
         _ => Err(tool_err(format!("unknown coding tool: {name}"))),
     }
 }
@@ -654,6 +901,12 @@ pub fn is_coding_tool_name(name: &str) -> bool {
             | "coding_git_status"
             | "coding_git_diff"
             | "coding_git_commit"
+            | "coding_git_push"
+            | "coding_git_pull"
+            | "coding_git_fetch"
+            | "coding_git_clone"
+            | "coding_github_save_pat"
+            | "coding_repo_create"
     )
 }
 

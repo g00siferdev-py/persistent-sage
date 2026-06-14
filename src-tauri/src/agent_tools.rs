@@ -1246,14 +1246,23 @@ pub async fn run_builtin_tool(
     )>,
     coding_ctx: Option<&crate::coding::CodingTurnContext>,
     tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
+    settings: Option<&crate::settings::SettingsManager>,
     name: &str,
     arguments_json: &str,
 ) -> Result<String, ProviderError> {
     let n = name.trim();
     if let (Some(ctx), Some(root)) = (coding_ctx, workspace_root) {
         if crate::coding_tools::is_coding_tool_name(n) {
-            return crate::coding_tools::run_coding_tool(root, ctx, n, arguments_json, tool_stream)
-                .await;
+            return crate::coding_tools::run_coding_tool(
+                root,
+                ctx,
+                n,
+                arguments_json,
+                tool_stream,
+                settings,
+                data_directory,
+            )
+            .await;
         }
     }
     if n == "personality_get" || n == "personality_update" {

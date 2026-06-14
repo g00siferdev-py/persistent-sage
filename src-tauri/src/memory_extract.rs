@@ -39,9 +39,88 @@ pub fn spawn_post_message_memory(
             memory.as_ref(),
             &conversation_id,
             &user_text,
+            false,
         )
         .await;
     });
+}
+
+/// Coding-mode extraction: companion memory pool, but skip code-heavy user messages.
+pub fn spawn_post_message_memory_coding(
+    http: reqwest::Client,
+    settings: Arc<SettingsManager>,
+    memory: Arc<dyn ConversationMemory + Send + Sync>,
+    conversation_id: String,
+    user_text: String,
+) {
+    if user_text.trim().is_empty() || is_code_heavy_user_message(&user_text) {
+        return;
+    }
+    tokio::spawn(async move {
+        let _guard = memory_pipeline_lock().lock().await;
+        process_user_memory_turn(
+            &http,
+            &settings,
+            memory.as_ref(),
+            &conversation_id,
+            &user_text,
+            true,
+        )
+        .await;
+    });
+}
+
+/// Skip memory extraction when the user message is mostly code or a paste.
+pub fn is_code_heavy_user_message(text: &str) -> bool {
+    let t = text.trim();
+    if t.is_empty() {
+        return true;
+    }
+    if t.contains("```") {
+        return true;
+    }
+    let lines: Vec<&str> = t.lines().filter(|l| !l.trim().is_empty()).collect();
+    if lines.is_empty() {
+        return true;
+    }
+    let code_lines = lines.iter().filter(|l| looks_like_code_line(l)).count();
+    if lines.len() >= 2 && code_lines * 2 >= lines.len() {
+        return true;
+    }
+    if t.chars().count() > 400 && code_lines >= 3 {
+        return true;
+    }
+    false
+}
+
+fn looks_like_code_line(line: &str) -> bool {
+    let s = line.trim();
+    if s.is_empty() {
+        return false;
+    }
+    let lower = s.to_ascii_lowercase();
+    const PREFIXES: &[&str] = &[
+        "import ", "use ", "from ", "fn ", "pub ", "const ", "let ", "var ", "function ",
+        "class ", "struct ", "enum ", "impl ", "trait ", "async ", "await ", "return ",
+        "if ", "else ", "for ", "while ", "match ", "case ", "#include", "package ",
+        "def ", "cargo ", "npm ", "pnpm ", "git ", "curl ", "SELECT ", "INSERT ",
+    ];
+    if PREFIXES.iter().any(|p| lower.starts_with(p)) {
+        return true;
+    }
+    if s.starts_with('#') && !s.starts_with("# ") {
+        return true;
+    }
+    if s.contains("=>") || s.contains("::") {
+        return true;
+    }
+    let opens = s.chars().filter(|&c| c == '{' || c == '(' || c == '[').count();
+    let closes = s.chars().filter(|&c| c == '}' || c == ')' || c == ']').count();
+    opens >= 2 && closes >= 2
+}
+
+fn looks_like_code_snippet(content: &str) -> bool {
+    is_code_heavy_user_message(content) || content.contains('\n') && content.contains('{')
 }
 
 #[derive(Debug, Deserialize)]
@@ -104,6 +183,16 @@ Rules:
 - Use scope "global" for facts that apply across all chats; "thread" only for topic-specific context.
 - If nothing worth storing, return {"memories":[]}."#;
 
+const CODING_EXTRACT_SYSTEM: &str = r#"You extract durable project memories from a software development session for a long-term companion database.
+Return ONLY valid JSON (no markdown): {"memories":[{"type":"fact|insight|curated","content":"...","importance":1-5,"scope":"global|thread"}]}
+Rules:
+- Store stable project decisions, goals, constraints, architecture choices, and user preferences (e.g. "targeting Microsoft Store", "use encrypted PAT storage", "minimal UI, no modals").
+- Do NOT store code snippets, file paths with line numbers, diffs, patches, command output, or implementation details.
+- Do NOT store greetings, filler, or one-off task requests ("run cargo check").
+- Each content string is one concise fact (under 200 characters), written as a durable decision or preference.
+- Prefer scope "global" for project-wide facts; "thread" for repo-specific context.
+- If nothing worth storing, return {"memories":[]}."#;
+
 /// Run LLM extraction and persist anchors; embed when semantic memory is enabled.
 pub async fn process_user_memory_turn(
     http: &reqwest::Client,
@@ -111,22 +200,30 @@ pub async fn process_user_memory_turn(
     memory: &dyn ConversationMemory,
     conversation_id: &str,
     user_text: &str,
+    coding_mode: bool,
 ) {
     let provider = settings.selected_provider();
 
-    match memory.ingest_user_message_anchors(conversation_id, user_text) {
-        Ok(ids) if !ids.is_empty() => {
-            eprintln!(
-                "persistent-sage: deterministic memory ingest stored {} raw anchor(s)",
-                ids.len()
-            );
+    if !coding_mode {
+        match memory.ingest_user_message_anchors(conversation_id, user_text) {
+            Ok(ids) if !ids.is_empty() => {
+                eprintln!(
+                    "persistent-sage: deterministic memory ingest stored {} raw anchor(s)",
+                    ids.len()
+                );
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!("persistent-sage: deterministic memory ingest failed: {e}"),
         }
-        Ok(_) => {}
-        Err(e) => eprintln!("persistent-sage: deterministic memory ingest failed: {e}"),
     }
 
     if provider != "placeholder" && settings.memory_llm_extraction_enabled() {
-        match extract_and_store(http, settings, memory, conversation_id, user_text).await {
+        let result = if coding_mode {
+            extract_and_store_coding(http, settings, memory, conversation_id, user_text).await
+        } else {
+            extract_and_store(http, settings, memory, conversation_id, user_text, EXTRACT_SYSTEM).await
+        };
+        match result {
             Ok(n) if n > 0 => eprintln!("persistent-sage: LLM memory extract stored {n} anchor(s)"),
             Ok(_) => {}
             Err(e) => eprintln!("persistent-sage: LLM memory extract failed: {e}"),
@@ -146,6 +243,47 @@ async fn extract_and_store(
     memory: &dyn ConversationMemory,
     conversation_id: &str,
     user_text: &str,
+    system_prompt: &str,
+) -> Result<usize, String> {
+    extract_and_store_inner(
+        http,
+        settings,
+        memory,
+        conversation_id,
+        user_text,
+        system_prompt,
+        false,
+    )
+    .await
+}
+
+async fn extract_and_store_coding(
+    http: &reqwest::Client,
+    settings: &SettingsManager,
+    memory: &dyn ConversationMemory,
+    conversation_id: &str,
+    user_text: &str,
+) -> Result<usize, String> {
+    extract_and_store_inner(
+        http,
+        settings,
+        memory,
+        conversation_id,
+        user_text,
+        CODING_EXTRACT_SYSTEM,
+        true,
+    )
+    .await
+}
+
+async fn extract_and_store_inner(
+    http: &reqwest::Client,
+    settings: &SettingsManager,
+    memory: &dyn ConversationMemory,
+    conversation_id: &str,
+    user_text: &str,
+    system_prompt: &str,
+    coding_mode: bool,
 ) -> Result<usize, String> {
     let engine = build_engine(http, settings).map_err(|e| e.to_string())?;
     if engine.provider_id() == "placeholder" {
@@ -166,7 +304,7 @@ async fn extract_and_store(
 
     let req = CompletionRequest {
         messages: vec![
-            ChatTurn::text("system", EXTRACT_SYSTEM),
+            ChatTurn::text("system", system_prompt),
             ChatTurn::text("user", user_block),
         ],
         tools: None,
@@ -189,6 +327,9 @@ async fn extract_and_store(
     for item in parsed.memories {
         let content = item.content.trim();
         if content.chars().count() < 8 {
+            continue;
+        }
+        if coding_mode && looks_like_code_snippet(content) {
             continue;
         }
         let ty = parse_anchor_type(&item.memory_type);
@@ -270,4 +411,21 @@ pub async fn reindex_all_embeddings(
         .count_anchors_with_embedding()
         .map_err(|e| e.to_string())?;
     Ok(n)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn code_heavy_detects_fenced_block() {
+        assert!(is_code_heavy_user_message("```rust\nfn main() {}\n```"));
+    }
+
+    #[test]
+    fn code_heavy_allows_decision_text() {
+        assert!(!is_code_heavy_user_message(
+            "We decided to use encrypted PAT storage like API keys, and ship v2 before the Microsoft Store."
+        ));
+    }
 }

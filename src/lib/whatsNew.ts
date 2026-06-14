@@ -6,6 +6,17 @@ export type WhatsNewContent = {
 
 /** Release notes shown once after the app version changes (e.g. in-app updater restart). */
 const RELEASES: Record<string, WhatsNewContent> = {
+  "2.0.0": {
+    version: "2.0.0",
+    title: "Persistent Sage 2.0 — Coding mode",
+    highlights: [
+      "Coding mode — manage git repos under workspace/repos with a built-in editor and terminal.",
+      "New project templates — empty, Rust, Node.js, Python, Tauri, and C# starters.",
+      "Coding agent tools — grep, patch, allowlisted shell, local git, and HTTPS remote via encrypted GitHub PAT.",
+      "Companion link — optional shared persona and memory between chat and coding (code filtered from anchors).",
+      "Split, Editor, or Chat views plus a resizable terminal with live agent command output.",
+    ],
+  },
   "1.0.0": {
     version: "1.0.0",
     title: "Persistent Sage 1.0",

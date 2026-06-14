@@ -1,6 +1,6 @@
 # Persistent Sage user guide
 
-Complete guide to the Persistent Sage desktop application as shipped in **version 0.2.0-beta.9** (open beta).
+Complete guide to the Persistent Sage desktop application as shipped in **version 2.0.0**.
 
 **Runtime requirement:** `npm run tauri dev` or an installed release build. Browser-only Vite preview cannot access chat, memory, or settings backends.
 
@@ -16,12 +16,17 @@ Persistent Sage is a **local-first AI companion**:
 - **Optional agent tools** — web search, URL fetch, HTTPS requests, workspace files, database query
 - **Pulse** — scheduled check-ins in your **currently selected** conversation
 - **Image attachments** — send photos to vision-capable models from the composer
+- **Coding mode (v2)** — repo-scoped IDE, terminal, and coding agent (see [§ 12 Coding mode](#12-coding-mode-v2))
 
 Your data stays on your machine. See [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md): the **database is not encrypted**, but it is **local** after install.
 
 ---
 
-## 2. Application layout
+## 2. Application modes and layout
+
+Persistent Sage has two top-level modes, switched from the header: **Companion** and **Coding**.
+
+### Companion mode (default)
 
 | Region | Component | Purpose |
 |--------|-----------|---------|
@@ -31,9 +36,19 @@ Your data stays on your machine. See [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md
 
 Settings slides in from the right; toggle **Settings** / **Hide** in the chat header.
 
+### Coding mode
+
+| Region | Component | Purpose |
+|--------|-----------|---------|
+| **Left** | Repositories | Repo list, new project, clone |
+| **Center** | IDE + chat + terminal | Editor tabs, coding agent chat, shell |
+| **Right** | Files | Repo file tree |
+
+See **[CODING-MODE.md](./CODING-MODE.md)** for full coding documentation.
+
 ---
 
-## 3. Conversations
+## 3. Conversations (Companion mode)
 
 ### List and actions
 
@@ -149,6 +164,21 @@ For migrating a long-running OpenClaw agent with maximum fidelity, see [§ 11 Mi
 | **App data databases** | `database_query` on `.sqlite` in data folder |
 | **Allow database writes** | INSERT/UPDATE/DELETE via `database_query` (dangerous) |
 
+#### Coding mode (v2)
+
+| Toggle | Tools / behavior |
+|--------|------------------|
+| **Link coding mode to active companion** | Shared persona + filtered memory (default **on**) |
+| **Allow coding grep / patch** | `coding_grep`, `coding_apply_patch` |
+| **Allow Run Command** | `coding_run_command` + integrated terminal |
+| **Allow local git** | status, diff, commit |
+| **Allow remote git** | push, pull, fetch, clone (HTTPS + GitHub PAT) |
+| **GitHub PAT** | Encrypted token for HTTPS git |
+
+Coding agent tools require **OpenAI, Anthropic, xAI, or Ollama**. Gemini and Placeholder do not execute tools.
+
+Full reference: [CODING-MODE.md](./CODING-MODE.md).
+
 **Note:** When you send an **image** on Ollama, web/workspace tools are **disabled for that request** so the model can receive the image payload.
 
 ### 6.4 General
@@ -220,6 +250,7 @@ The feedback buttons open public GitHub Issues. Persistent Sage pre-fills safe a
 | Semantic vector search | Optional in Settings → Memory; hybrid with FTS + keyword |
 | Windows code signing | Not active yet; see [SIGNING-AND-UPDATES.md](./SIGNING-AND-UPDATES.md) |
 | Dedicated projects UI | Projects in briefing only |
+| Coding IDE syntax highlighting | Textarea editor only (no Monaco) |
 | Pulse + tools | Pulse uses normal chat path; tools follow same rules as manual send |
 
 ---
@@ -236,6 +267,31 @@ The feedback buttons open public GitHub Issues. Persistent Sage pre-fills safe a
 - [x] OpenClaw / Persistent Sage JSON personality import
 - [x] In-app updater support for updater-enabled releases
 - [x] Portable / custom data directory
+- [x] Coding mode — repos, editor, terminal, coding agent tools
+
+---
+
+## 12. Coding mode (v2)
+
+Switch to **Coding** in the header to work on software projects stored under `workspace/repos/`.
+
+### Quick start
+
+1. Open **Coding** mode.
+2. **New project** or **Clone** a repository (or copy a repo folder and click **Refresh**).
+3. Select the repo in the sidebar.
+4. Enable coding tools in **Settings → Tools → Coding mode (v2)**.
+5. Click files in the tree to edit; use the chat panel to ask the agent for changes.
+6. Run commands in the integrated terminal (requires **Allow Run Command**).
+
+### Key behaviors
+
+- One coding conversation per **repository** (and companion when link is on).
+- Editor supports multiple tabs, **Ctrl+S** save, revert, and open in external app.
+- View modes: **Split**, **Editor**, or **Chat** only.
+- Agent shell output appears in the terminal during chat turns.
+
+Detailed documentation: **[CODING-MODE.md](./CODING-MODE.md)**.
 
 ---
 
