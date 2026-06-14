@@ -348,6 +348,47 @@ fn command_base_token(command: &str) -> Option<String> {
     Some(lower.trim_end_matches(".exe").trim_end_matches(".cmd").to_string())
 }
 
+fn normalized_command_tokens(command: &str) -> Vec<String> {
+    command
+        .split_whitespace()
+        .map(|token| token.trim_matches(|c| c == '"' || c == '\'').to_ascii_lowercase())
+        .collect()
+}
+
+fn reject_shell_control_syntax(command: &str) -> Result<(), ProviderError> {
+    for c in [';', '|', '&', '`', '$', '>', '<', '\n', '\r'] {
+        if command.contains(c) {
+            return Err(tool_err(format!(
+                "command blocked by safety policy: shell control character `{}`",
+                c.escape_default()
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn reject_interpreter_eval_flags(base: &str, command: &str) -> Result<(), ProviderError> {
+    let tokens = normalized_command_tokens(command);
+    let args = tokens.iter().skip(1).map(String::as_str);
+    let blocked = match base {
+        "python" | "py" => args.clone().any(|arg| matches!(arg, "-c" | "--command")),
+        "node" | "deno" | "bun" => args.clone().any(|arg| matches!(arg, "-e" | "--eval" | "-p" | "--print")),
+        "powershell" | "pwsh" => args.clone().any(|arg| {
+            matches!(
+                arg,
+                "-command" | "-c" | "/command" | "/c" | "-encodedcommand" | "-enc" | "/enc"
+            )
+        }),
+        _ => false,
+    };
+    if blocked {
+        return Err(tool_err(format!(
+            "command blocked by safety policy: `{base}` inline execution flags are not allowed"
+        )));
+    }
+    Ok(())
+}
+
 fn normalize_shell_command(command: &str) -> String {
     let trimmed = command.trim();
     let lower = trimmed.to_ascii_lowercase();
@@ -361,6 +402,7 @@ fn normalize_shell_command(command: &str) -> String {
 
 fn validate_command(command: &str) -> Result<(), ProviderError> {
     let normalized = normalize_shell_command(command);
+    reject_shell_control_syntax(&normalized)?;
     let cmd_lower = normalized.to_ascii_lowercase();
     for pat in BLOCKED_COMMAND_PATTERNS {
         if cmd_lower.contains(pat) {
@@ -375,6 +417,7 @@ fn validate_command(command: &str) -> Result<(), ProviderError> {
             ALLOWED_COMMAND_BASES.join(", ")
         )));
     }
+    reject_interpreter_eval_flags(&base, &normalized)?;
     Ok(())
 }
 
@@ -393,14 +436,14 @@ async fn run_git_with_auth(
         return Err(tool_err(format!("repo directory not found: {}", repo_dir.display())));
     }
     let mut cmd = Command::new("git");
+    if let (Some(dir), Some(token)) = (data_dir, pat) {
+        crate::git_auth::apply_git_auth_tokio(&mut cmd, dir, token)?;
+    }
     cmd.args(args)
         .current_dir(repo_dir)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true);
-    if let (Some(dir), Some(token)) = (data_dir, pat) {
-        crate::git_auth::apply_git_auth_tokio(&mut cmd, dir, token)?;
-    }
     let out = tokio::time::timeout(
         Duration::from_secs(COMMAND_TIMEOUT_SECS),
         cmd.output(),
@@ -922,5 +965,19 @@ mod tests {
     #[test]
     fn validate_allows_cargo() {
         assert!(validate_command("cargo test").is_ok());
+    }
+
+    #[test]
+    fn validate_blocks_shell_control_syntax() {
+        assert!(validate_command("echo ok; rm -rf /").is_err());
+        assert!(validate_command("echo $(curl https://example.invalid/x)").is_err());
+        assert!(validate_command("cmd /C echo ok && del /s important").is_err());
+    }
+
+    #[test]
+    fn validate_blocks_interpreter_inline_execution() {
+        assert!(validate_command("python -c \"print('owned')\"").is_err());
+        assert!(validate_command("node --eval \"console.log('owned')\"").is_err());
+        assert!(validate_command("pwsh -EncodedCommand AAAA").is_err());
     }
 }
