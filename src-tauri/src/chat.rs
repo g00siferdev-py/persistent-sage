@@ -1190,6 +1190,10 @@ pub async fn execute_chat_turn(
         } else {
             ConversationMemory::set_active_personality(&*state.memory, CODING_PERSONALITY_ID);
         }
+        state
+            .memory
+            .sync_coding_conversation_personality(conversation_id)
+            .map_err(|e| e.to_string())?;
     } else {
         state
             .personality

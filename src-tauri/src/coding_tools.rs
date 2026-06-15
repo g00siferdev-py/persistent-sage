@@ -359,6 +359,75 @@ fn normalize_shell_command(command: &str) -> String {
     trimmed.to_string()
 }
 
+fn shell_policy_tokens(command: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+
+    for ch in command.chars() {
+        if escaped {
+            current.push(ch);
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' && quote != Some('\'') {
+            escaped = true;
+            continue;
+        }
+        if let Some(q) = quote {
+            if ch == q {
+                quote = None;
+            } else {
+                current.push(ch);
+            }
+            continue;
+        }
+        if ch == '\'' || ch == '"' {
+            quote = Some(ch);
+            continue;
+        }
+        if ch.is_whitespace() {
+            if !current.is_empty() {
+                tokens.push(std::mem::take(&mut current));
+            }
+            continue;
+        }
+        if matches!(ch, ';' | '&' | '|') {
+            if !current.is_empty() {
+                tokens.push(std::mem::take(&mut current));
+            }
+            tokens.push(ch.to_string());
+            continue;
+        }
+        current.push(ch);
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    tokens
+}
+
+fn is_git_token(token: &str) -> bool {
+    command_base_token(token).is_some_and(|base| base == "git")
+}
+
+fn reject_destructive_git_push_in_shell(command: &str) -> Result<(), ProviderError> {
+    let tokens = shell_policy_tokens(command);
+    for idx in 0..tokens.len().saturating_sub(1) {
+        if !is_git_token(&tokens[idx]) || !tokens[idx + 1].eq_ignore_ascii_case("push") {
+            continue;
+        }
+        let args: Vec<&str> = tokens[idx + 1..]
+            .iter()
+            .take_while(|token| !matches!(token.as_str(), ";" | "&" | "|"))
+            .map(String::as_str)
+            .collect();
+        crate::git_auth::reject_force_git_args(&args)?;
+    }
+    Ok(())
+}
+
 fn validate_command(command: &str) -> Result<(), ProviderError> {
     let normalized = normalize_shell_command(command);
     let cmd_lower = normalized.to_ascii_lowercase();
@@ -367,6 +436,7 @@ fn validate_command(command: &str) -> Result<(), ProviderError> {
             return Err(tool_err(format!("command blocked by safety policy: contains `{pat}`")));
         }
     }
+    reject_destructive_git_push_in_shell(&normalized)?;
     let base = command_base_token(&normalized)
         .ok_or_else(|| tool_err("command is empty"))?;
     if !ALLOWED_COMMAND_BASES.iter().any(|a| *a == base.as_str()) {
@@ -922,5 +992,20 @@ mod tests {
     #[test]
     fn validate_allows_cargo() {
         assert!(validate_command("cargo test").is_ok());
+    }
+
+    #[test]
+    fn validate_blocks_destructive_git_push_commands() {
+        assert!(validate_command("git push --force origin main").is_err());
+        assert!(validate_command("git push origin +main").is_err());
+        assert!(validate_command("git push origin :main").is_err());
+        assert!(validate_command("npm test && git push -f origin main").is_err());
+        assert!(validate_command("cmd /C git push --force origin main").is_err());
+    }
+
+    #[test]
+    fn validate_allows_normal_git_push_commands() {
+        assert!(validate_command("git push origin main").is_ok());
+        assert!(validate_command("npm test && git push origin main").is_ok());
     }
 }

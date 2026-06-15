@@ -146,14 +146,60 @@ pub fn validate_https_git_url(url: &str) -> Result<(), ProviderError> {
     Ok(())
 }
 
+fn is_destructive_push_arg(arg: &str) -> bool {
+    let trimmed = arg.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("--force")
+        || lower == "--delete"
+        || lower.starts_with("--delete=")
+        || lower == "--mirror"
+        || lower == "--prune"
+    {
+        return true;
+    }
+    if lower.starts_with('-') && !lower.starts_with("--") {
+        let flags = lower.trim_start_matches('-');
+        if flags.contains('f') || flags.contains('d') {
+            return true;
+        }
+    }
+    trimmed.starts_with('+') || trimmed.starts_with(':') || trimmed.contains(":+")
+}
+
 pub fn reject_force_git_args(args: &[&str]) -> Result<(), ProviderError> {
     for a in args {
-        let lower = a.to_ascii_lowercase();
-        if lower.contains("--force") || lower == "-f" || lower.contains("force-with-lease") {
+        if is_destructive_push_arg(a) {
             return Err(tool_err(
-                "force push is blocked. Remove --force / -f from the request.",
+                "destructive git push is blocked. Remove force/delete flags or refspecs from the request.",
             ));
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_force_push_flags() {
+        assert!(reject_force_git_args(&["push", "origin", "--force", "main"]).is_err());
+        assert!(reject_force_git_args(&["push", "origin", "-f", "main"]).is_err());
+        assert!(reject_force_git_args(&["push", "origin", "-fu", "main"]).is_err());
+        assert!(reject_force_git_args(&["push", "origin", "--force-with-lease", "main"]).is_err());
+    }
+
+    #[test]
+    fn rejects_destructive_push_refspecs() {
+        assert!(reject_force_git_args(&["push", "origin", "+main"]).is_err());
+        assert!(reject_force_git_args(&["push", "origin", ":main"]).is_err());
+        assert!(reject_force_git_args(&["push", "origin", "main:+main"]).is_err());
+        assert!(reject_force_git_args(&["push", "--delete", "origin", "main"]).is_err());
+    }
+
+    #[test]
+    fn allows_normal_push_args() {
+        assert!(reject_force_git_args(&["push", "origin", "main"]).is_ok());
+        assert!(reject_force_git_args(&["push", "-u", "origin", "main"]).is_ok());
+    }
 }
