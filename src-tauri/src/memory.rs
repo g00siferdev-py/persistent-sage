@@ -241,6 +241,11 @@ pub trait ConversationMemory: Send + Sync {
         repo_name: &str,
     ) -> Result<String, MemoryError>;
 
+    fn sync_coding_conversation_personality(
+        &self,
+        conversation_id: &str,
+    ) -> Result<(), MemoryError>;
+
     fn rename_conversation(&self, conversation_id: &str, title: &str) -> Result<(), MemoryError>;
 
     /// Deletes a thread and its messages (CASCADE). Anchors for this thread become `NULL` or are removed per schema.
@@ -1937,16 +1942,31 @@ impl MemoryAnchor {
         Ok(MemoryRecallBundle { anchors, messages })
     }
 
-    fn find_legacy_coding_conversation(&self, repo_id: &str) -> Result<Option<String>, MemoryError> {
+    fn find_coding_conversation_to_migrate(
+        &self,
+        repo_id: &str,
+        target_personality_id: &str,
+    ) -> Result<Option<String>, MemoryError> {
         let conn = self.conn()?;
-        let row = conn.query_row(
-            "SELECT id FROM conversations
-             WHERE personality_id = ?1 AND app_mode = 'coding' AND coding_repo_id = ?2
-             ORDER BY datetime(updated_at) DESC, id DESC
-             LIMIT 1",
-            params![crate::coding::CODING_PERSONALITY_ID, repo_id.trim()],
-            |r| r.get(0),
-        );
+        let row = if target_personality_id == crate::coding::CODING_PERSONALITY_ID {
+            conn.query_row(
+                "SELECT id FROM conversations
+                 WHERE personality_id != ?1 AND app_mode = 'coding' AND coding_repo_id = ?2
+                 ORDER BY datetime(updated_at) DESC, id DESC
+                 LIMIT 1",
+                params![target_personality_id, repo_id.trim()],
+                |r| r.get(0),
+            )
+        } else {
+            conn.query_row(
+                "SELECT id FROM conversations
+                 WHERE personality_id = ?1 AND app_mode = 'coding' AND coding_repo_id = ?2
+                 ORDER BY datetime(updated_at) DESC, id DESC
+                 LIMIT 1",
+                params![crate::coding::CODING_PERSONALITY_ID, repo_id.trim()],
+                |r| r.get(0),
+            )
+        };
         match row {
             Ok(id) => Ok(Some(id)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
@@ -1975,6 +1995,31 @@ impl MemoryAnchor {
         eprintln!(
             "persistent-sage: migrated coding conversation {conversation_id} to personality {new_personality_id}"
         );
+        Ok(())
+    }
+
+    fn reassign_existing_coding_conversation(
+        &self,
+        conversation_id: &str,
+        new_personality_id: &str,
+    ) -> Result<(), MemoryError> {
+        let current_pid: String = {
+            let conn = self.conn()?;
+            conn.query_row(
+                "SELECT personality_id FROM conversations WHERE id = ?1 AND app_mode = 'coding'",
+                params![conversation_id],
+                |r| r.get(0),
+            )
+            .map_err(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => {
+                    MemoryError::UnknownConversation(conversation_id.to_string())
+                }
+                other => MemoryError::from(other),
+            })?
+        };
+        if current_pid != new_personality_id {
+            self.reassign_conversation_personality(conversation_id, new_personality_id)?;
+        }
         Ok(())
     }
 }
@@ -2155,14 +2200,20 @@ impl ConversationMemory for MemoryAnchor {
             return Ok(c.id);
         }
         let pid = self.active_personality()?;
-        if pid != crate::coding::CODING_PERSONALITY_ID {
-            if let Some(legacy_id) = self.find_legacy_coding_conversation(repo_id)? {
-                self.reassign_conversation_personality(&legacy_id, &pid)?;
-                return Ok(legacy_id);
-            }
+        if let Some(existing_id) = self.find_coding_conversation_to_migrate(repo_id, &pid)? {
+            self.reassign_conversation_personality(&existing_id, &pid)?;
+            return Ok(existing_id);
         }
         let title = format!("{} — coding", repo_name.trim());
         self.create_coding_conversation(repo_id, &title)
+    }
+
+    fn sync_coding_conversation_personality(
+        &self,
+        conversation_id: &str,
+    ) -> Result<(), MemoryError> {
+        let pid = self.active_personality()?;
+        self.reassign_existing_coding_conversation(conversation_id, &pid)
     }
 
     fn rename_conversation(&self, conversation_id: &str, title: &str) -> Result<(), MemoryError> {
@@ -2657,6 +2708,77 @@ mod anchor_storage_tests {
         let list = ConversationMemory::list_anchors_for_thread(&mem, &conv_id, 50).expect("list");
         let got = list.iter().find(|a| a.id == aid).expect("row");
         assert_eq!(got.content, body);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn coding_conversation_reloads_after_companion_link_toggle_off() {
+        let dir = std::env::temp_dir().join(format!("nova_mem_coding_reload_{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        let path = dir.join("m.sqlite");
+        let mem = MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
+        ConversationMemory::set_active_personality(&mem, "sage");
+        let conv = ConversationMemory::get_or_create_coding_conversation(&mem, "repo-1", "Repo")
+            .expect("linked coding conversation");
+        ConversationMemory::store_message(
+            &mem,
+            &conv,
+            MessageRole::User,
+            "before toggle",
+            None,
+            None,
+            None,
+        )
+        .expect("seed message");
+
+        ConversationMemory::set_active_personality(&mem, crate::coding::CODING_PERSONALITY_ID);
+        let recovered = ConversationMemory::get_or_create_coding_conversation(&mem, "repo-1", "Repo")
+            .expect("recover existing conversation");
+        assert_eq!(recovered, conv);
+        let msgs = ConversationMemory::get_recent(&mem, &conv, 10).expect("messages after toggle");
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].content, "before toggle");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn coding_conversation_send_survives_companion_link_toggle_off() {
+        let dir = std::env::temp_dir().join(format!("nova_mem_coding_send_{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        let path = dir.join("m.sqlite");
+        let mem = MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
+        ConversationMemory::set_active_personality(&mem, "sage");
+        let conv = ConversationMemory::get_or_create_coding_conversation(&mem, "repo-1", "Repo")
+            .expect("linked coding conversation");
+        ConversationMemory::store_message(
+            &mem,
+            &conv,
+            MessageRole::User,
+            "before toggle",
+            None,
+            None,
+            None,
+        )
+        .expect("seed message");
+
+        ConversationMemory::set_active_personality(&mem, crate::coding::CODING_PERSONALITY_ID);
+        ConversationMemory::sync_coding_conversation_personality(&mem, &conv)
+            .expect("sync existing conversation");
+        ConversationMemory::store_message(
+            &mem,
+            &conv,
+            MessageRole::Assistant,
+            "after toggle",
+            None,
+            None,
+            None,
+        )
+        .expect("send after toggle");
+        let msgs = ConversationMemory::get_recent(&mem, &conv, 10).expect("messages after send");
+        assert_eq!(
+            msgs.iter().map(|m| m.content.as_str()).collect::<Vec<_>>(),
+            vec!["before toggle", "after toggle"]
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
