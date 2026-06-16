@@ -716,6 +716,8 @@ async fn run_chat_completion(
 
     let mut tool_definitions: Vec<ToolDefinition> = Vec::new();
     let is_coding_turn = options.coding_context.is_some();
+    let coding_ctx_ref = options.coding_context.as_ref();
+    let coding_lab = coding_ctx_ref.is_some_and(|c| crate::lab_mode::unrestricted_coding(Some(c)));
     if options.enable_tools && state.settings.agent_web_tools_enabled() && !is_coding_turn {
         tool_definitions.extend(crate::agent_tools::builtin_tool_definitions());
         if state.settings.agent_browser_fetch_enabled() {
@@ -743,24 +745,31 @@ async fn run_chat_completion(
     }
     if options.enable_tools && is_coding_turn {
         tool_definitions.push(crate::coding_tools::repo_create_tool_definition());
-        if state.settings.agent_coding_tools_enabled() {
+        if coding_lab || state.settings.agent_coding_tools_enabled() {
             tool_definitions.extend(crate::coding_tools::search_and_patch_tool_definitions());
         }
-        if state.settings.agent_coding_shell_enabled() {
+        if coding_lab || state.settings.agent_coding_shell_enabled() {
             tool_definitions.push(crate::coding_tools::run_command_tool_definition());
         }
-        if state.settings.agent_coding_git_enabled() {
+        if coding_lab || state.settings.agent_coding_git_enabled() {
             tool_definitions.extend(crate::coding_tools::git_tool_definitions());
         }
-        if state.settings.agent_coding_git_remote_enabled() {
+        if coding_lab || state.settings.agent_coding_git_remote_enabled() {
             tool_definitions.extend(crate::coding_tools::git_remote_tool_definitions());
         }
-        let coding_tools_on = state.settings.agent_coding_tools_enabled()
+        let coding_tools_on = coding_lab
+            || state.settings.agent_coding_tools_enabled()
             || state.settings.agent_coding_shell_enabled()
             || state.settings.agent_coding_git_enabled()
             || state.settings.agent_coding_git_remote_enabled();
         if coding_tools_on {
             tool_definitions.extend(crate::agent_tools::workspace_tool_definitions());
+        }
+        if coding_lab {
+            tool_definitions.extend(crate::agent_tools::builtin_tool_definitions());
+            tool_definitions.push(crate::agent_tools::browser_fetch_tool_definition(true));
+            tool_definitions.extend(crate::personality_tools::tool_definitions());
+            tool_definitions.extend(crate::database_query::tool_definitions());
         }
     }
     let provider_id = engine.provider_id();
@@ -775,13 +784,17 @@ async fn run_chat_completion(
             state.memory.as_ref() as &dyn ConversationMemory,
         )
     });
-    let coding_ctx_ref = options.coding_context.as_ref();
     let settings_for_tools = Some(&*state.settings);
-    let max_tool_rounds = if is_coding_turn { 32 } else { 8 };
+    let max_tool_rounds = if is_coding_turn {
+        crate::lab_mode::max_coding_tool_rounds(coding_lab) as usize
+    } else {
+        8
+    };
     let workspace_root_for_tools = if state.settings.agent_workspace_enabled()
         || state.settings.artifacts_enabled()
         || (is_coding_turn
-            && (state.settings.agent_coding_tools_enabled()
+            && (coding_lab
+                || state.settings.agent_coding_tools_enabled()
                 || state.settings.agent_coding_shell_enabled()
                 || state.settings.agent_coding_git_enabled()
                 || state.settings.agent_coding_git_remote_enabled()))
@@ -790,10 +803,16 @@ async fn run_chat_completion(
     } else {
         None
     };
-    let database_app_data_enabled = state.settings.database_app_data_enabled();
-    let database_allow_write = state.settings.database_allow_write();
-    let browser_ignore_robots = state.settings.agent_browser_ignore_robots();
-    let personality_for_tools = personality_edit_enabled.then(|| state.personality.as_ref());
+    let database_app_data_enabled =
+        state.settings.database_app_data_enabled() || coding_lab;
+    let database_allow_write = state.settings.database_allow_write() || coding_lab;
+    let browser_ignore_robots =
+        state.settings.agent_browser_ignore_robots() || coding_lab;
+    let personality_for_tools = if personality_edit_enabled || coding_lab {
+        Some(state.personality.as_ref())
+    } else {
+        None
+    };
 
     let has_images = attachments::messages_include_images(&messages);
     // Ollama often ignores `images` when `tools` are present — prefer vision over tools for that turn.
@@ -1356,6 +1375,10 @@ pub async fn execute_chat_turn(
                 state.memory.clone(),
                 conversation_id.to_string(),
                 text.to_string(),
+                options
+                    .coding_context
+                    .as_ref()
+                    .is_some_and(|c| crate::lab_mode::unrestricted_coding(Some(c))),
             );
         }
     }
@@ -1372,10 +1395,14 @@ pub async fn execute_chat_turn(
         } else {
             CODING_SYSTEM_APPENDIX.to_string()
         };
-        format!(
+        let mut block = format!(
             "{coding_block}\n\n---\n\n# Active repository\n\n**{}** — `{}`\n\n---\n\n# Session\n\n{briefing}",
             ctx.repo_name, ctx.path_rel
-        )
+        );
+        if crate::lab_mode::unrestricted_coding(Some(ctx)) {
+            block.push_str(crate::coding::LAB_SYSTEM_APPENDIX);
+        }
+        block
     } else {
         let p = persona.trim();
         if p.is_empty() {
@@ -1451,7 +1478,8 @@ pub async fn execute_chat_turn(
 
     if let Some(ref ctx) = options.coding_context {
         if let Some(parsed) = crate::coding::parse_direct_run_command(text) {
-            if !state.settings.agent_coding_shell_enabled() {
+            let lab = crate::lab_mode::unrestricted_coding(Some(ctx));
+            if !lab && !state.settings.agent_coding_shell_enabled() {
                 return Err(
                     "Enable **Run Command** in Settings → Tools → Coding mode (v2) to run shell commands."
                         .into(),

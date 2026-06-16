@@ -107,13 +107,15 @@ pub async fn run_shell(
     command: &str,
     cwd: Option<&str>,
 ) -> Result<CodingShellResult, String> {
-    if !settings.agent_coding_shell_enabled() {
+    let meta = repos::get_repo_meta(workspace_root, repo_id)?;
+    if !settings.agent_coding_shell_enabled()
+        && !crate::lab_mode::unrestricted_repo(&meta.id, &meta.name)
+    {
         return Err(
             "Shell is disabled. Enable Run Command in Settings → Tools → Coding mode (v2)."
                 .into(),
         );
     }
-    let meta = repos::get_repo_meta(workspace_root, repo_id)?;
     let repo_dir = resolve_workspace_subpath(workspace_root, &meta.path_rel).map_err(map_err)?;
     let work_dir = if let Some(sub) = cwd.map(str::trim).filter(|s| !s.is_empty()) {
         crate::coding_tools::resolve_repo_file_path(workspace_root, &meta.path_rel, sub)
@@ -125,7 +127,8 @@ pub async fn run_shell(
         return Err(format!("working directory not found: {}", work_dir.display()));
     }
     let started = std::time::Instant::now();
-    let output = run_shell_for_ide(&work_dir, command.trim(), None)
+    let unrestricted = crate::lab_mode::unrestricted_repo(&meta.id, &meta.name);
+    let output = run_shell_for_ide(&work_dir, command.trim(), None, unrestricted)
         .await
         .map_err(map_err)?;
     Ok(CodingShellResult {

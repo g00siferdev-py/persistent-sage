@@ -40,6 +40,7 @@ pub fn spawn_post_message_memory(
             &conversation_id,
             &user_text,
             false,
+            false,
         )
         .await;
     });
@@ -52,8 +53,11 @@ pub fn spawn_post_message_memory_coding(
     memory: Arc<dyn ConversationMemory + Send + Sync>,
     conversation_id: String,
     user_text: String,
+    lab_unrestricted: bool,
 ) {
-    if user_text.trim().is_empty() || is_code_heavy_user_message(&user_text) {
+    if user_text.trim().is_empty()
+        || (!lab_unrestricted && is_code_heavy_user_message(&user_text))
+    {
         return;
     }
     tokio::spawn(async move {
@@ -65,6 +69,7 @@ pub fn spawn_post_message_memory_coding(
             &conversation_id,
             &user_text,
             true,
+            lab_unrestricted,
         )
         .await;
     });
@@ -201,6 +206,7 @@ pub async fn process_user_memory_turn(
     conversation_id: &str,
     user_text: &str,
     coding_mode: bool,
+    lab_unrestricted: bool,
 ) {
     let provider = settings.selected_provider();
 
@@ -219,7 +225,15 @@ pub async fn process_user_memory_turn(
 
     if provider != "placeholder" && settings.memory_llm_extraction_enabled() {
         let result = if coding_mode {
-            extract_and_store_coding(http, settings, memory, conversation_id, user_text).await
+            extract_and_store_coding(
+                http,
+                settings,
+                memory,
+                conversation_id,
+                user_text,
+                lab_unrestricted,
+            )
+            .await
         } else {
             extract_and_store(http, settings, memory, conversation_id, user_text, EXTRACT_SYSTEM).await
         };
@@ -253,6 +267,7 @@ async fn extract_and_store(
         user_text,
         system_prompt,
         false,
+        false,
     )
     .await
 }
@@ -263,6 +278,7 @@ async fn extract_and_store_coding(
     memory: &dyn ConversationMemory,
     conversation_id: &str,
     user_text: &str,
+    lab_unrestricted: bool,
 ) -> Result<usize, String> {
     extract_and_store_inner(
         http,
@@ -272,6 +288,7 @@ async fn extract_and_store_coding(
         user_text,
         CODING_EXTRACT_SYSTEM,
         true,
+        lab_unrestricted,
     )
     .await
 }
@@ -284,6 +301,7 @@ async fn extract_and_store_inner(
     user_text: &str,
     system_prompt: &str,
     coding_mode: bool,
+    lab_unrestricted: bool,
 ) -> Result<usize, String> {
     let engine = build_engine(http, settings).map_err(|e| e.to_string())?;
     if engine.provider_id() == "placeholder" {
@@ -329,7 +347,7 @@ async fn extract_and_store_inner(
         if content.chars().count() < 8 {
             continue;
         }
-        if coding_mode && looks_like_code_snippet(content) {
+        if coding_mode && !lab_unrestricted && looks_like_code_snippet(content) {
             continue;
         }
         let ty = parse_anchor_type(&item.memory_type);

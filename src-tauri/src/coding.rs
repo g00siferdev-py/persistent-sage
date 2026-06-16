@@ -60,6 +60,22 @@ You are the **coding agent** for Persistent Sage. The user is working on a softw
 - Ask before destructive git operations (reset, force push, mass delete).
 "#;
 
+/// Appended to the coding system prompt when lab / Project Snowball unrestricted mode is active.
+pub const LAB_SYSTEM_APPENDIX: &str = r#"
+
+## Lab mode (unrestricted — Project Snowball)
+
+Safety limits for this session are **lifted** to support self-modification experiments:
+
+- **Shell:** Any command is allowed (no allowlist or blocklist).
+- **Git:** Force push is permitted when needed.
+- **Files:** Larger read/write and grep/patch size limits.
+- **Tools:** Web, workspace, personality self-edit, and database tools are available alongside coding tools.
+- **Memory:** Code-heavy messages may be stored in Memory Anchor for handoff notes.
+
+Still verify changes with `cargo check`, `npm run build`, and `npm run tauri dev`. Update `lab/HANDOFF.md` at the end of each session.
+"#;
+
 /// User explicitly asked to run a shell command (parsed from the message text).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedRunCommand {

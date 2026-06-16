@@ -298,11 +298,13 @@ pub fn read_repo_file_for_ide(
     if !meta.is_file() {
         return Err(tool_err("path is not a file"));
     }
-    if meta.len() > IDE_READ_MAX_BYTES {
-        return Err(tool_err(format!(
-            "file is {} bytes (max {IDE_READ_MAX_BYTES})",
-            meta.len()
-        )));
+    if meta.len() > crate::lab_mode::ide_read_max_bytes(crate::lab_mode::unrestricted_repo_path(
+        repo_path_rel,
+    )) {
+        let max = crate::lab_mode::ide_read_max_bytes(crate::lab_mode::unrestricted_repo_path(
+            repo_path_rel,
+        ));
+        return Err(tool_err(format!("file is {} bytes (max {max})", meta.len())));
     }
     let bytes = std::fs::read(&path).map_err(|e| tool_err(format!("read: {e}")))?;
     let text = String::from_utf8(bytes).map_err(|_| tool_err("file is not valid UTF-8"))?;
@@ -315,9 +317,11 @@ pub fn write_repo_file_for_ide(
     file_rel: &str,
     content: &str,
 ) -> Result<(), ProviderError> {
-    if content.as_bytes().len() > IDE_WRITE_MAX_BYTES {
+    let unrestricted = crate::lab_mode::unrestricted_repo_path(repo_path_rel);
+    if content.as_bytes().len() > crate::lab_mode::ide_write_max_bytes(unrestricted) {
         return Err(tool_err(format!(
-            "content exceeds {IDE_WRITE_MAX_BYTES} bytes"
+            "content exceeds {} bytes",
+            crate::lab_mode::ide_write_max_bytes(unrestricted)
         )));
     }
     let path = resolve_repo_file_path(workspace_root, repo_path_rel, file_rel)?;
@@ -333,8 +337,9 @@ pub async fn run_shell_for_ide(
     repo_dir: &Path,
     command: &str,
     timeout_secs: Option<u64>,
+    unrestricted: bool,
 ) -> Result<String, ProviderError> {
-    run_shell_in_repo(repo_dir, command, timeout_secs, None, "coding_run_command").await
+    run_shell_in_repo(repo_dir, command, timeout_secs, None, "coding_run_command", unrestricted).await
 }
 
 fn command_base_token(command: &str) -> Option<String> {
@@ -359,7 +364,10 @@ fn normalize_shell_command(command: &str) -> String {
     trimmed.to_string()
 }
 
-fn validate_command(command: &str) -> Result<(), ProviderError> {
+fn validate_command(command: &str, unrestricted: bool) -> Result<(), ProviderError> {
+    if unrestricted {
+        return Ok(());
+    }
     let normalized = normalize_shell_command(command);
     let cmd_lower = normalized.to_ascii_lowercase();
     for pat in BLOCKED_COMMAND_PATTERNS {
@@ -378,8 +386,8 @@ fn validate_command(command: &str) -> Result<(), ProviderError> {
     Ok(())
 }
 
-async fn run_git(repo_dir: &Path, args: &[&str]) -> Result<String, ProviderError> {
-    run_git_with_auth(repo_dir, args, None, None).await
+async fn run_git(repo_dir: &Path, args: &[&str], unrestricted: bool) -> Result<String, ProviderError> {
+    run_git_with_auth(repo_dir, args, None, None, unrestricted).await
 }
 
 async fn run_git_with_auth(
@@ -387,8 +395,12 @@ async fn run_git_with_auth(
     args: &[&str],
     data_dir: Option<&Path>,
     pat: Option<&str>,
+    unrestricted: bool,
 ) -> Result<String, ProviderError> {
-    validate_command(&format!("git {}", args.first().copied().unwrap_or("")))?;
+    validate_command(
+        &format!("git {}", args.first().copied().unwrap_or("")),
+        unrestricted,
+    )?;
     if !repo_dir.is_dir() {
         return Err(tool_err(format!("repo directory not found: {}", repo_dir.display())));
     }
@@ -408,10 +420,10 @@ async fn run_git_with_auth(
     .await
     .map_err(|_| tool_err(format!("git timed out after {COMMAND_TIMEOUT_SECS}s")))?
     .map_err(|e| tool_err(format!("git failed: {e}")))?;
-    format_command_output(&out)
+    format_command_output(&out, unrestricted)
 }
 
-fn format_command_output(out: &std::process::Output) -> Result<String, ProviderError> {
+fn format_command_output(out: &std::process::Output, unrestricted: bool) -> Result<String, ProviderError> {
     let mut text = String::new();
     if !out.stdout.is_empty() {
         text.push_str(&String::from_utf8_lossy(&out.stdout));
@@ -423,8 +435,9 @@ fn format_command_output(out: &std::process::Output) -> Result<String, ProviderE
         text.push_str(&String::from_utf8_lossy(&out.stderr));
     }
     let code = out.status.code().unwrap_or(-1);
-    if text.chars().count() > COMMAND_MAX_OUTPUT_CHARS {
-        text = text.chars().take(COMMAND_MAX_OUTPUT_CHARS).collect::<String>() + "\n… [truncated]";
+    let max_chars = crate::lab_mode::command_max_output_chars(unrestricted);
+    if text.chars().count() > max_chars {
+        text = text.chars().take(max_chars).collect::<String>() + "\n… [truncated]";
     }
     Ok(format!("exit_code: {code}\n{text}"))
 }
@@ -446,17 +459,21 @@ fn is_slow_build_command(command: &str) -> bool {
     .any(|needle| lower.contains(needle))
 }
 
-fn resolve_command_timeout(command: &str, requested: Option<u64>) -> u64 {
+fn resolve_command_timeout(command: &str, requested: Option<u64>, unrestricted: bool) -> u64 {
     let (default, max) = if is_slow_build_command(command) {
         (
             COMMAND_BUILD_TIMEOUT_DEFAULT_SECS,
-            COMMAND_BUILD_TIMEOUT_MAX_SECS,
+            crate::lab_mode::command_build_timeout_max_secs(unrestricted),
         )
     } else {
-        (COMMAND_TIMEOUT_SECS, COMMAND_TIMEOUT_MAX_SECS)
+        (
+            COMMAND_TIMEOUT_SECS,
+            crate::lab_mode::command_timeout_max_secs(unrestricted),
+        )
     };
-    // Models often pass 300 because that was the old hard cap — treat as "use build default".
-    let effective = requested.filter(|&r| !is_slow_build_command(command) || r > COMMAND_TIMEOUT_MAX_SECS);
+    let effective = requested.filter(|&r| {
+        !is_slow_build_command(command) || r > crate::lab_mode::command_timeout_max_secs(unrestricted)
+    });
     effective.unwrap_or(default).clamp(5, max)
 }
 
@@ -487,15 +504,16 @@ async fn run_shell_in_repo(
     timeout_secs: Option<u64>,
     tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     tool_name: &str,
+    unrestricted: bool,
 ) -> Result<String, ProviderError> {
-    validate_command(command)?;
+    validate_command(command, unrestricted)?;
     if !repo_dir.is_dir() {
         return Err(tool_err(format!("repo directory not found: {}", repo_dir.display())));
     }
 
     let shell_command = normalize_shell_command(command);
     let started = std::time::Instant::now();
-    let timeout_secs = resolve_command_timeout(&shell_command, timeout_secs);
+    let timeout_secs = resolve_command_timeout(&shell_command, timeout_secs, unrestricted);
     let mut child = if cfg!(windows) {
         Command::new("cmd")
             .args(["/C", &shell_command])
@@ -555,8 +573,11 @@ async fn run_shell_in_repo(
                 }
                 text.push_str(&stderr_text);
             }
-            if text.chars().count() > COMMAND_MAX_OUTPUT_CHARS {
-                text = text.chars().take(COMMAND_MAX_OUTPUT_CHARS).collect::<String>()
+            if text.chars().count() > crate::lab_mode::command_max_output_chars(unrestricted) {
+                text = text
+                    .chars()
+                    .take(crate::lab_mode::command_max_output_chars(unrestricted))
+                    .collect::<String>()
                     + "\n… [output truncated]";
             }
             let elapsed = started.elapsed().as_secs_f64();
@@ -589,6 +610,7 @@ fn coding_grep(
     subpath: Option<&str>,
     glob: Option<&str>,
     case_insensitive: bool,
+    unrestricted: bool,
 ) -> Result<String, ProviderError> {
     if pattern.trim().is_empty() {
         return Err(tool_err("pattern is empty"));
@@ -616,6 +638,7 @@ fn coding_grep(
         glob,
         &re,
         &mut matches,
+        unrestricted,
     )?;
 
     if matches.is_empty() {
@@ -632,14 +655,17 @@ fn grep_walk(
     glob: Option<&str>,
     re: &regex::Regex,
     out: &mut Vec<String>,
+    unrestricted: bool,
 ) -> Result<(), ProviderError> {
-    if out.len() >= GREP_MAX_MATCHES {
+    let max_matches = crate::lab_mode::grep_max_matches(unrestricted);
+    let max_file_bytes = crate::lab_mode::grep_max_file_bytes(unrestricted);
+    if out.len() >= max_matches {
         return Ok(());
     }
     assert_path_in_workspace(workspace_root, dir)?;
     let entries = std::fs::read_dir(dir).map_err(|e| tool_err(format!("read_dir: {e}")))?;
     for entry in entries.flatten() {
-        if out.len() >= GREP_MAX_MATCHES {
+        if out.len() >= max_matches {
             break;
         }
         let name = entry.file_name().to_string_lossy().to_string();
@@ -653,7 +679,16 @@ fn grep_walk(
             format!("{rel_prefix}/{name}")
         };
         if ft.is_dir() {
-            grep_walk(workspace_root, ctx, &entry.path(), &child_rel, glob, re, out)?;
+            grep_walk(
+                workspace_root,
+                ctx,
+                &entry.path(),
+                &child_rel,
+                glob,
+                re,
+                out,
+                unrestricted,
+            )?;
         } else if ft.is_file() {
             if let Some(g) = glob {
                 if !glob_match(&name, g) {
@@ -661,7 +696,7 @@ fn grep_walk(
                 }
             }
             let meta = entry.metadata().map_err(|e| tool_err(format!("metadata: {e}")))?;
-            if meta.len() > GREP_MAX_FILE_BYTES {
+            if meta.len() > max_file_bytes {
                 continue;
             }
             let Ok(text) = std::fs::read_to_string(entry.path()) else {
@@ -670,7 +705,7 @@ fn grep_walk(
             for (i, line) in text.lines().enumerate() {
                 if re.is_match(line) {
                     out.push(format!("{}:{}:{}", child_rel, i + 1, line.trim()));
-                    if out.len() >= GREP_MAX_MATCHES {
+                    if out.len() >= max_matches {
                         break;
                     }
                 }
@@ -691,6 +726,7 @@ fn coding_apply_patch(
     path: &str,
     old_string: &str,
     new_string: &str,
+    unrestricted: bool,
 ) -> Result<String, ProviderError> {
     if old_string.is_empty() {
         return Err(tool_err("old_string must not be empty"));
@@ -700,7 +736,7 @@ fn coding_apply_patch(
         return Err(tool_err(format!("not a file: {path}")));
     }
     let meta = std::fs::metadata(&file).map_err(|e| tool_err(format!("stat: {e}")))?;
-    if meta.len() > PATCH_MAX_FILE_BYTES {
+    if meta.len() > crate::lab_mode::patch_max_file_bytes(unrestricted) {
         return Err(tool_err("file too large to patch"));
     }
     let content = std::fs::read_to_string(&file).map_err(|e| tool_err(format!("read: {e}")))?;
@@ -771,6 +807,7 @@ pub async fn run_coding_tool(
     }
 
     let repo_dir = workspace_path_for_repo_file(workspace_root, ctx, "")?;
+    let unrestricted = crate::lab_mode::unrestricted_coding(Some(ctx));
 
     match name {
         "coding_grep" => {
@@ -778,13 +815,13 @@ pub async fn run_coding_tool(
             let sub = v["path"].as_str().map(str::trim);
             let glob = v["glob"].as_str().map(str::trim);
             let ci = v["case_insensitive"].as_bool().unwrap_or(false);
-            coding_grep(workspace_root, ctx, pattern, sub, glob, ci)
+            coding_grep(workspace_root, ctx, pattern, sub, glob, ci, unrestricted)
         }
         "coding_apply_patch" => {
             let path = v["path"].as_str().unwrap_or("").trim();
             let old = v["old_string"].as_str().unwrap_or("");
             let new = v["new_string"].as_str().unwrap_or("");
-            coding_apply_patch(workspace_root, ctx, path, old, new)
+            coding_apply_patch(workspace_root, ctx, path, old, new, unrestricted)
         }
         "coding_run_command" => {
             let cmd = v["command"].as_str().unwrap_or("").trim();
@@ -802,9 +839,11 @@ pub async fn run_coding_tool(
             } else {
                 repo_dir
             };
-            run_shell_in_repo(&work_dir, cmd, timeout, tool_stream, name).await
+            run_shell_in_repo(&work_dir, cmd, timeout, tool_stream, name, unrestricted).await
         }
-        "coding_git_status" => run_git(&repo_dir, &["status", "--porcelain=v1", "-b"]).await,
+        "coding_git_status" => {
+            run_git(&repo_dir, &["status", "--porcelain=v1", "-b"], unrestricted).await
+        }
         "coding_git_diff" => {
             let staged = v["staged"].as_bool().unwrap_or(false);
             let path = v["path"].as_str().map(str::trim).filter(|s| !s.is_empty());
@@ -816,15 +855,15 @@ pub async fn run_coding_tool(
                 args.push(p.to_string());
             }
             let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-            run_git(&repo_dir, &arg_refs).await
+            run_git(&repo_dir, &arg_refs, unrestricted).await
         }
         "coding_git_commit" => {
             let msg = v["message"].as_str().unwrap_or("").trim();
             if msg.is_empty() {
                 return Err(tool_err("commit message is required"));
             }
-            run_git(&repo_dir, &["add", "-A"]).await?;
-            run_git(&repo_dir, &["commit", "-m", msg]).await
+            run_git(&repo_dir, &["add", "-A"], unrestricted).await?;
+            run_git(&repo_dir, &["commit", "-m", msg], unrestricted).await
         }
         "coding_git_push" => {
             let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
@@ -835,8 +874,10 @@ pub async fn run_coding_tool(
             if let Some(b) = branch {
                 args.push(b);
             }
-            crate::git_auth::reject_force_git_args(&args)?;
-            run_git_with_auth(&repo_dir, &args, Some(data_directory), Some(&pat)).await
+            if !unrestricted {
+                crate::git_auth::reject_force_git_args(&args)?;
+            }
+            run_git_with_auth(&repo_dir, &args, Some(data_directory), Some(&pat), unrestricted).await
         }
         "coding_git_pull" => {
             let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
@@ -847,7 +888,14 @@ pub async fn run_coding_tool(
             if let Some(b) = branch {
                 args.push(b);
             }
-            run_git_with_auth(&repo_dir, &args, Some(data_directory), Some(&pat)).await
+            run_git_with_auth(
+                &repo_dir,
+                &args,
+                Some(data_directory),
+                Some(&pat),
+                unrestricted,
+            )
+            .await
         }
         "coding_git_fetch" => {
             let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
@@ -858,6 +906,7 @@ pub async fn run_coding_tool(
                 &["fetch", remote],
                 Some(data_directory),
                 Some(&pat),
+                unrestricted,
             )
             .await
         }
@@ -916,11 +965,12 @@ mod tests {
 
     #[test]
     fn validate_blocks_rm_rf() {
-        assert!(validate_command("rm -rf /").is_err());
+        assert!(validate_command("rm -rf /", false).is_err());
+        assert!(validate_command("rm -rf /", true).is_ok());
     }
 
     #[test]
     fn validate_allows_cargo() {
-        assert!(validate_command("cargo test").is_ok());
+        assert!(validate_command("cargo test", false).is_ok());
     }
 }

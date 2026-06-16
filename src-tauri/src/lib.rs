@@ -17,6 +17,7 @@ mod git_auth;
 mod coding;
 mod coding_ide;
 mod coding_tools;
+mod lab_mode;
 mod database_query;
 mod distribution;
 mod embedding;

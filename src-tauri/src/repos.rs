@@ -300,8 +300,9 @@ fn build_repo_tree(
     path_rel: &str,
     depth: usize,
     budget: &mut usize,
+    unrestricted: bool,
 ) -> Result<Vec<RepoTreeNode>, String> {
-    if depth >= MAX_TREE_DEPTH || *budget == 0 {
+    if depth >= crate::lab_mode::tree_max_depth(unrestricted) || *budget == 0 {
         return Ok(Vec::new());
     }
     assert_path_in_workspace(workspace_root, dir).map_err(|e| e.to_string())?;
@@ -330,7 +331,14 @@ fn build_repo_tree(
         let ft = entry.file_type().map_err(|e| e.to_string())?;
         if ft.is_dir() {
             *budget -= 1;
-            let children = build_repo_tree(workspace_root, &full, &child_rel, depth + 1, budget)?;
+            let children = build_repo_tree(
+                workspace_root,
+                &full,
+                &child_rel,
+                depth + 1,
+                budget,
+                unrestricted,
+            )?;
             nodes.push(RepoTreeNode {
                 name,
                 path_rel: child_rel,
@@ -361,8 +369,9 @@ pub fn repo_file_tree(workspace_root: &Path, repo_path_rel: &str) -> Result<Vec<
     if !root.is_dir() {
         return Err(format!("repo path is not a directory: {rel}"));
     }
-    let mut budget = MAX_TREE_NODES;
-    build_repo_tree(workspace_root, &root, rel, 0, &mut budget)
+    let unrestricted = crate::lab_mode::unrestricted_repo_path(rel);
+    let mut budget = crate::lab_mode::tree_max_nodes(unrestricted);
+    build_repo_tree(workspace_root, &root, rel, 0, &mut budget, unrestricted)
 }
 
 /// Resolve a registered repo by id (syncs disk → index first).
