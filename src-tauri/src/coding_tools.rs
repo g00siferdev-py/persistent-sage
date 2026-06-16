@@ -35,10 +35,48 @@ const SKIP_DIR_NAMES: &[&str] = &[
 ];
 
 const ALLOWED_COMMAND_BASES: &[&str] = &[
-    "git", "npm", "npx", "node", "cargo", "rustc", "python", "py", "pytest", "pip", "tsc",
-    "eslint", "prettier", "make", "dotnet", "go", "javac", "java", "mvn", "gradle", "cmake",
-    "vite", "vitest", "jest", "pnpm", "yarn", "bun", "deno", "rg", "grep", "find", "type",
-    "cat", "dir", "echo", "where", "which", "cmd", "powershell", "pwsh", "ping", "timeout",
+    "git",
+    "npm",
+    "npx",
+    "node",
+    "cargo",
+    "rustc",
+    "python",
+    "py",
+    "pytest",
+    "pip",
+    "tsc",
+    "eslint",
+    "prettier",
+    "make",
+    "dotnet",
+    "go",
+    "javac",
+    "java",
+    "mvn",
+    "gradle",
+    "cmake",
+    "vite",
+    "vitest",
+    "jest",
+    "pnpm",
+    "yarn",
+    "bun",
+    "deno",
+    "rg",
+    "grep",
+    "find",
+    "type",
+    "cat",
+    "dir",
+    "echo",
+    "where",
+    "which",
+    "cmd",
+    "powershell",
+    "pwsh",
+    "ping",
+    "timeout",
     "for",
 ];
 
@@ -288,6 +326,19 @@ pub fn resolve_repo_file_path(
 const IDE_READ_MAX_BYTES: u64 = 512_000;
 const IDE_WRITE_MAX_BYTES: usize = 900_000;
 
+fn ensure_repo_write_path_allowed(file_rel: &str) -> Result<(), ProviderError> {
+    let rel = file_rel.trim().trim_start_matches('/');
+    if rel
+        .split('/')
+        .next()
+        .map(|s| s.eq_ignore_ascii_case(".git"))
+        .unwrap_or(false)
+    {
+        return Err(tool_err("writes under .git are blocked"));
+    }
+    Ok(())
+}
+
 pub fn read_repo_file_for_ide(
     workspace_root: &Path,
     repo_path_rel: &str,
@@ -315,6 +366,7 @@ pub fn write_repo_file_for_ide(
     file_rel: &str,
     content: &str,
 ) -> Result<(), ProviderError> {
+    ensure_repo_write_path_allowed(file_rel)?;
     if content.as_bytes().len() > IDE_WRITE_MAX_BYTES {
         return Err(tool_err(format!(
             "content exceeds {IDE_WRITE_MAX_BYTES} bytes"
@@ -345,7 +397,12 @@ fn command_base_token(command: &str) -> Option<String> {
         .and_then(|s| s.to_str())
         .unwrap_or(first);
     let lower = name.to_ascii_lowercase();
-    Some(lower.trim_end_matches(".exe").trim_end_matches(".cmd").to_string())
+    Some(
+        lower
+            .trim_end_matches(".exe")
+            .trim_end_matches(".cmd")
+            .to_string(),
+    )
 }
 
 fn normalize_shell_command(command: &str) -> String {
@@ -359,16 +416,44 @@ fn normalize_shell_command(command: &str) -> String {
     trimmed.to_string()
 }
 
+fn reject_force_git_push_command(command: &str) -> Result<(), ProviderError> {
+    let tokens: Vec<String> = command
+        .split_whitespace()
+        .map(|s| s.trim_matches(['"', '\'']).to_ascii_lowercase())
+        .collect();
+    for (i, token) in tokens.iter().enumerate() {
+        let base = Path::new(token)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or(token)
+            .trim_end_matches(".exe")
+            .to_string();
+        if base != "git" || tokens.get(i + 1).map(String::as_str) != Some("push") {
+            continue;
+        }
+        for arg in &tokens[i + 2..] {
+            if arg == "-f" || arg.starts_with("--force") || arg.contains("force-with-lease") {
+                return Err(tool_err(
+                    "force push is blocked. Remove --force / -f from the request.",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn validate_command(command: &str) -> Result<(), ProviderError> {
     let normalized = normalize_shell_command(command);
     let cmd_lower = normalized.to_ascii_lowercase();
     for pat in BLOCKED_COMMAND_PATTERNS {
         if cmd_lower.contains(pat) {
-            return Err(tool_err(format!("command blocked by safety policy: contains `{pat}`")));
+            return Err(tool_err(format!(
+                "command blocked by safety policy: contains `{pat}`"
+            )));
         }
     }
-    let base = command_base_token(&normalized)
-        .ok_or_else(|| tool_err("command is empty"))?;
+    reject_force_git_push_command(&normalized)?;
+    let base = command_base_token(&normalized).ok_or_else(|| tool_err("command is empty"))?;
     if !ALLOWED_COMMAND_BASES.iter().any(|a| *a == base.as_str()) {
         return Err(tool_err(format!(
             "command not allowlisted (first token `{base}`). Allowed: {}",
@@ -390,7 +475,10 @@ async fn run_git_with_auth(
 ) -> Result<String, ProviderError> {
     validate_command(&format!("git {}", args.first().copied().unwrap_or("")))?;
     if !repo_dir.is_dir() {
-        return Err(tool_err(format!("repo directory not found: {}", repo_dir.display())));
+        return Err(tool_err(format!(
+            "repo directory not found: {}",
+            repo_dir.display()
+        )));
     }
     let mut cmd = Command::new("git");
     cmd.args(args)
@@ -401,13 +489,10 @@ async fn run_git_with_auth(
     if let (Some(dir), Some(token)) = (data_dir, pat) {
         crate::git_auth::apply_git_auth_tokio(&mut cmd, dir, token)?;
     }
-    let out = tokio::time::timeout(
-        Duration::from_secs(COMMAND_TIMEOUT_SECS),
-        cmd.output(),
-    )
-    .await
-    .map_err(|_| tool_err(format!("git timed out after {COMMAND_TIMEOUT_SECS}s")))?
-    .map_err(|e| tool_err(format!("git failed: {e}")))?;
+    let out = tokio::time::timeout(Duration::from_secs(COMMAND_TIMEOUT_SECS), cmd.output())
+        .await
+        .map_err(|_| tool_err(format!("git timed out after {COMMAND_TIMEOUT_SECS}s")))?
+        .map_err(|e| tool_err(format!("git failed: {e}")))?;
     format_command_output(&out)
 }
 
@@ -424,7 +509,11 @@ fn format_command_output(out: &std::process::Output) -> Result<String, ProviderE
     }
     let code = out.status.code().unwrap_or(-1);
     if text.chars().count() > COMMAND_MAX_OUTPUT_CHARS {
-        text = text.chars().take(COMMAND_MAX_OUTPUT_CHARS).collect::<String>() + "\n… [truncated]";
+        text = text
+            .chars()
+            .take(COMMAND_MAX_OUTPUT_CHARS)
+            .collect::<String>()
+            + "\n… [truncated]";
     }
     Ok(format!("exit_code: {code}\n{text}"))
 }
@@ -456,7 +545,8 @@ fn resolve_command_timeout(command: &str, requested: Option<u64>) -> u64 {
         (COMMAND_TIMEOUT_SECS, COMMAND_TIMEOUT_MAX_SECS)
     };
     // Models often pass 300 because that was the old hard cap — treat as "use build default".
-    let effective = requested.filter(|&r| !is_slow_build_command(command) || r > COMMAND_TIMEOUT_MAX_SECS);
+    let effective =
+        requested.filter(|&r| !is_slow_build_command(command) || r > COMMAND_TIMEOUT_MAX_SECS);
     effective.unwrap_or(default).clamp(5, max)
 }
 
@@ -466,6 +556,8 @@ async fn read_stream_to_string(
     tool_stream: Option<(crate::tool_stream::ToolStreamEmitter, String)>,
 ) -> std::io::Result<String> {
     let mut buf = String::new();
+    let mut buffered_chars = 0usize;
+    let mut truncated = false;
     let mut lines = BufReader::new(stream).lines();
     while let Some(line) = lines.next_line().await? {
         let chunk = if stderr {
@@ -473,7 +565,18 @@ async fn read_stream_to_string(
         } else {
             format!("{line}\n")
         };
-        buf.push_str(&chunk);
+        if !truncated {
+            let remaining = COMMAND_MAX_OUTPUT_CHARS.saturating_sub(buffered_chars);
+            let chunk_chars = chunk.chars().count();
+            if chunk_chars <= remaining {
+                buf.push_str(&chunk);
+                buffered_chars += chunk_chars;
+            } else {
+                buf.extend(chunk.chars().take(remaining));
+                buf.push_str("\n… [output truncated]\n");
+                truncated = true;
+            }
+        }
         if let Some((ref ts, ref name)) = tool_stream {
             ts.output(name, &chunk);
         }
@@ -490,7 +593,10 @@ async fn run_shell_in_repo(
 ) -> Result<String, ProviderError> {
     validate_command(command)?;
     if !repo_dir.is_dir() {
-        return Err(tool_err(format!("repo directory not found: {}", repo_dir.display())));
+        return Err(tool_err(format!(
+            "repo directory not found: {}",
+            repo_dir.display()
+        )));
     }
 
     let shell_command = normalize_shell_command(command);
@@ -529,17 +635,14 @@ async fn run_shell_in_repo(
     let stream_out = stream_ctx.clone();
     let stream_err = stream_ctx;
 
-    let io_result = tokio::time::timeout(
-        Duration::from_secs(timeout_secs),
-        async {
-            let (stdout_text, stderr_text) = tokio::try_join!(
-                read_stream_to_string(stdout, false, stream_out),
-                read_stream_to_string(stderr, true, stream_err),
-            )?;
-            let status = child.wait().await?;
-            Ok::<_, std::io::Error>((stdout_text, stderr_text, status))
-        },
-    )
+    let io_result = tokio::time::timeout(Duration::from_secs(timeout_secs), async {
+        let (stdout_text, stderr_text) = tokio::try_join!(
+            read_stream_to_string(stdout, false, stream_out),
+            read_stream_to_string(stderr, true, stream_err),
+        )?;
+        let status = child.wait().await?;
+        Ok::<_, std::io::Error>((stdout_text, stderr_text, status))
+    })
     .await;
 
     match io_result {
@@ -556,18 +659,21 @@ async fn run_shell_in_repo(
                 text.push_str(&stderr_text);
             }
             if text.chars().count() > COMMAND_MAX_OUTPUT_CHARS {
-                text = text.chars().take(COMMAND_MAX_OUTPUT_CHARS).collect::<String>()
+                text = text
+                    .chars()
+                    .take(COMMAND_MAX_OUTPUT_CHARS)
+                    .collect::<String>()
                     + "\n… [output truncated]";
             }
             let elapsed = started.elapsed().as_secs_f64();
-            Ok(format!("exit_code: {code}\nelapsed_secs: {elapsed:.2}\n{text}"))
+            Ok(format!(
+                "exit_code: {code}\nelapsed_secs: {elapsed:.2}\n{text}"
+            ))
         }
         Ok(Err(e)) => Err(tool_err(format!("command failed: {e}"))),
         Err(_) => {
             let _ = child.kill().await;
-            Err(tool_err(format!(
-                "command timed out after {timeout_secs}s"
-            )))
+            Err(tool_err(format!("command timed out after {timeout_secs}s")))
         }
     }
 }
@@ -598,11 +704,7 @@ fn coding_grep(
         .build()
         .map_err(|e| tool_err(format!("invalid regex: {e}")))?;
 
-    let start = workspace_path_for_repo_file(
-        workspace_root,
-        ctx,
-        subpath.unwrap_or(""),
-    )?;
+    let start = workspace_path_for_repo_file(workspace_root, ctx, subpath.unwrap_or(""))?;
     if !start.is_dir() {
         return Err(tool_err("grep path must be a directory"));
     }
@@ -646,21 +748,33 @@ fn grep_walk(
         if should_skip_tree_entry(&name) {
             continue;
         }
-        let ft = entry.file_type().map_err(|e| tool_err(format!("file_type: {e}")))?;
+        let ft = entry
+            .file_type()
+            .map_err(|e| tool_err(format!("file_type: {e}")))?;
         let child_rel = if rel_prefix.is_empty() {
             name.clone()
         } else {
             format!("{rel_prefix}/{name}")
         };
         if ft.is_dir() {
-            grep_walk(workspace_root, ctx, &entry.path(), &child_rel, glob, re, out)?;
+            grep_walk(
+                workspace_root,
+                ctx,
+                &entry.path(),
+                &child_rel,
+                glob,
+                re,
+                out,
+            )?;
         } else if ft.is_file() {
             if let Some(g) = glob {
                 if !glob_match(&name, g) {
                     continue;
                 }
             }
-            let meta = entry.metadata().map_err(|e| tool_err(format!("metadata: {e}")))?;
+            let meta = entry
+                .metadata()
+                .map_err(|e| tool_err(format!("metadata: {e}")))?;
             if meta.len() > GREP_MAX_FILE_BYTES {
                 continue;
             }
@@ -695,6 +809,7 @@ fn coding_apply_patch(
     if old_string.is_empty() {
         return Err(tool_err("old_string must not be empty"));
     }
+    ensure_repo_write_path_allowed(path)?;
     let file = workspace_path_for_repo_file(workspace_root, ctx, path)?;
     if !file.is_file() {
         return Err(tool_err(format!("not a file: {path}")));
@@ -743,6 +858,18 @@ pub fn repo_layout_hints(workspace_root: &Path, ctx: &CodingTurnContext) -> Stri
     lines.join("\n")
 }
 
+fn require_coding_setting(
+    settings: Option<&crate::settings::SettingsManager>,
+    enabled: impl FnOnce(&crate::settings::SettingsManager) -> bool,
+    disabled_message: &str,
+) -> Result<(), ProviderError> {
+    let settings = settings.ok_or_else(|| tool_err(disabled_message))?;
+    if !enabled(settings) {
+        return Err(tool_err(disabled_message));
+    }
+    Ok(())
+}
+
 pub async fn run_coding_tool(
     workspace_root: &Path,
     ctx: &CodingTurnContext,
@@ -760,7 +887,10 @@ pub async fn run_coding_tool(
         if project_name.is_empty() {
             return Err(tool_err("name is required"));
         }
-        let template = v["template"].as_str().map(str::trim).filter(|s| !s.is_empty());
+        let template = v["template"]
+            .as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
         let meta = crate::repos::create_repository(workspace_root, project_name, template)
             .map_err(tool_err)?;
         let template_label = template.unwrap_or("empty");
@@ -774,6 +904,11 @@ pub async fn run_coding_tool(
 
     match name {
         "coding_grep" => {
+            require_coding_setting(
+                settings,
+                |s| s.agent_coding_tools_enabled(),
+                "coding search/patch tools are disabled in Settings",
+            )?;
             let pattern = v["pattern"].as_str().unwrap_or("").trim();
             let sub = v["path"].as_str().map(str::trim);
             let glob = v["glob"].as_str().map(str::trim);
@@ -781,12 +916,22 @@ pub async fn run_coding_tool(
             coding_grep(workspace_root, ctx, pattern, sub, glob, ci)
         }
         "coding_apply_patch" => {
+            require_coding_setting(
+                settings,
+                |s| s.agent_coding_tools_enabled(),
+                "coding search/patch tools are disabled in Settings",
+            )?;
             let path = v["path"].as_str().unwrap_or("").trim();
             let old = v["old_string"].as_str().unwrap_or("");
             let new = v["new_string"].as_str().unwrap_or("");
             coding_apply_patch(workspace_root, ctx, path, old, new)
         }
         "coding_run_command" => {
+            require_coding_setting(
+                settings,
+                |s| s.agent_coding_shell_enabled(),
+                "Shell is disabled. Enable Run Command in Settings → Tools → Coding mode (v2).",
+            )?;
             let cmd = v["command"].as_str().unwrap_or("").trim();
             let timeout = v["timeout_secs"].as_u64();
             let cwd = v["cwd"].as_str().map(str::trim).filter(|s| !s.is_empty());
@@ -804,8 +949,20 @@ pub async fn run_coding_tool(
             };
             run_shell_in_repo(&work_dir, cmd, timeout, tool_stream, name).await
         }
-        "coding_git_status" => run_git(&repo_dir, &["status", "--porcelain=v1", "-b"]).await,
+        "coding_git_status" => {
+            require_coding_setting(
+                settings,
+                |s| s.agent_coding_git_enabled(),
+                "Git tools are disabled in Settings → Tools → Coding mode (v2).",
+            )?;
+            run_git(&repo_dir, &["status", "--porcelain=v1", "-b"]).await
+        }
         "coding_git_diff" => {
+            require_coding_setting(
+                settings,
+                |s| s.agent_coding_git_enabled(),
+                "Git tools are disabled in Settings → Tools → Coding mode (v2).",
+            )?;
             let staged = v["staged"].as_bool().unwrap_or(false);
             let path = v["path"].as_str().map(str::trim).filter(|s| !s.is_empty());
             let mut args: Vec<String> = vec!["diff".into()];
@@ -819,6 +976,11 @@ pub async fn run_coding_tool(
             run_git(&repo_dir, &arg_refs).await
         }
         "coding_git_commit" => {
+            require_coding_setting(
+                settings,
+                |s| s.agent_coding_git_enabled(),
+                "Git tools are disabled in Settings → Tools → Coding mode (v2).",
+            )?;
             let msg = v["message"].as_str().unwrap_or("").trim();
             if msg.is_empty() {
                 return Err(tool_err("commit message is required"));
@@ -828,9 +990,17 @@ pub async fn run_coding_tool(
         }
         "coding_git_push" => {
             let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
+            if !settings.agent_coding_git_remote_enabled() {
+                return Err(tool_err(
+                    "Remote git tools are disabled in Settings → Tools → Coding mode (v2).",
+                ));
+            }
             let pat = crate::git_auth::require_github_pat(settings)?;
             let remote = v["remote"].as_str().unwrap_or("origin").trim();
-            let branch = v["branch"].as_str().map(str::trim).filter(|s| !s.is_empty());
+            let branch = v["branch"]
+                .as_str()
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
             let mut args = vec!["push", remote];
             if let Some(b) = branch {
                 args.push(b);
@@ -840,9 +1010,17 @@ pub async fn run_coding_tool(
         }
         "coding_git_pull" => {
             let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
+            if !settings.agent_coding_git_remote_enabled() {
+                return Err(tool_err(
+                    "Remote git tools are disabled in Settings → Tools → Coding mode (v2).",
+                ));
+            }
             let pat = crate::git_auth::require_github_pat(settings)?;
             let remote = v["remote"].as_str().unwrap_or("origin").trim();
-            let branch = v["branch"].as_str().map(str::trim).filter(|s| !s.is_empty());
+            let branch = v["branch"]
+                .as_str()
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
             let mut args = vec!["pull", remote];
             if let Some(b) = branch {
                 args.push(b);
@@ -851,6 +1029,11 @@ pub async fn run_coding_tool(
         }
         "coding_git_fetch" => {
             let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
+            if !settings.agent_coding_git_remote_enabled() {
+                return Err(tool_err(
+                    "Remote git tools are disabled in Settings → Tools → Coding mode (v2).",
+                ));
+            }
             let pat = crate::git_auth::require_github_pat(settings)?;
             let remote = v["remote"].as_str().unwrap_or("origin").trim();
             run_git_with_auth(
@@ -863,17 +1046,17 @@ pub async fn run_coding_tool(
         }
         "coding_git_clone" => {
             let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
+            if !settings.agent_coding_git_remote_enabled() {
+                return Err(tool_err(
+                    "Remote git tools are disabled in Settings → Tools → Coding mode (v2).",
+                ));
+            }
             let url = v["url"].as_str().unwrap_or("").trim();
             let name = v["name"].as_str().map(str::trim).filter(|s| !s.is_empty());
-            let meta = crate::repos::clone_repository(
-                workspace_root,
-                data_directory,
-                settings,
-                url,
-                name,
-            )
-            .await
-            .map_err(tool_err)?;
+            let meta =
+                crate::repos::clone_repository(workspace_root, data_directory, settings, url, name)
+                    .await
+                    .map_err(tool_err)?;
             Ok(format!(
                 "Cloned `{}` into `{}` (id: {}).",
                 url, meta.path_rel, meta.id
@@ -881,6 +1064,11 @@ pub async fn run_coding_tool(
         }
         "coding_github_save_pat" => {
             let settings = settings.ok_or_else(|| tool_err("settings unavailable"))?;
+            if !settings.agent_coding_git_remote_enabled() {
+                return Err(tool_err(
+                    "Remote git tools are disabled in Settings → Tools → Coding mode (v2).",
+                ));
+            }
             let token = v["token"].as_str().unwrap_or("").trim();
             if token.is_empty() {
                 return Err(tool_err("token is required"));
@@ -922,5 +1110,17 @@ mod tests {
     #[test]
     fn validate_allows_cargo() {
         assert!(validate_command("cargo test").is_ok());
+    }
+
+    #[test]
+    fn validate_blocks_force_push_via_shell_tool() {
+        assert!(validate_command("git push origin main -f").is_err());
+        assert!(validate_command("git push origin main --force-with-lease").is_err());
+    }
+
+    #[test]
+    fn write_paths_block_git_directory() {
+        assert!(ensure_repo_write_path_allowed(".git/hooks/pre-push").is_err());
+        assert!(ensure_repo_write_path_allowed("src/main.rs").is_ok());
     }
 }
