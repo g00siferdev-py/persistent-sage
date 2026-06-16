@@ -267,10 +267,7 @@ async fn apply_tool_round_messages(
         database_allow_write: bool,
         browser_ignore_robots: bool,
         personality: Option<&crate::personality::PersonalityManager>,
-        memory_tools: Option<(
-            &crate::settings::SettingsManager,
-            &dyn ConversationMemory,
-        )>,
+        memory_tools: Option<(&crate::settings::SettingsManager, &dyn ConversationMemory)>,
         coding_ctx: Option<&crate::coding::CodingTurnContext>,
         tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
         settings: Option<&crate::settings::SettingsManager>,
@@ -278,7 +275,10 @@ async fn apply_tool_round_messages(
         arguments_json: &str,
     ) -> String {
         if let Some(ts) = tool_stream {
-            ts.start(name, &crate::tool_stream::tool_start_detail(name, arguments_json));
+            ts.start(
+                name,
+                &crate::tool_stream::tool_start_detail(name, arguments_json),
+            );
         }
         let body = crate::agent_tools::run_builtin_tool(
             http,
@@ -508,9 +508,9 @@ async fn agent_complete_with_tools(
         )
         .await?;
     }
-    Err(ProviderError::Api(
-        format!("Agent stopped after maximum tool rounds ({max_tool_rounds}) — try a narrower question."),
-    ))
+    Err(ProviderError::Api(format!(
+        "Agent stopped after maximum tool rounds ({max_tool_rounds}) — try a narrower question."
+    )))
 }
 
 /// If the model printed tool XML on a non-tool code path, run tools and ask the model again.
@@ -1159,8 +1159,8 @@ pub async fn execute_chat_turn(
     } else {
         pid
     };
-    let companion_linked = options.coding_context.is_some()
-        && state.settings.agent_coding_companion_linked_enabled();
+    let companion_linked =
+        options.coding_context.is_some() && state.settings.agent_coding_companion_linked_enabled();
 
     if options.emit_stream {
         crate::tool_stream::emit_chat_event(
@@ -1497,7 +1497,10 @@ pub async fn chat_send_message(
 ) -> Result<ChatSendResult, String> {
     let is_coding = app_mode
         .as_deref()
-        .map(|m| m.trim().eq_ignore_ascii_case(crate::coding::APP_MODE_CODING))
+        .map(|m| {
+            m.trim()
+                .eq_ignore_ascii_case(crate::coding::APP_MODE_CODING)
+        })
         .unwrap_or(false);
 
     let turn_options = if is_coding {
@@ -1508,6 +1511,15 @@ pub async fn chat_send_message(
             .ok_or_else(|| "coding mode requires codingRepoId".to_string())?;
         let meta = crate::repos::get_repo_meta(&state.workspace_root, repo_id)
             .map_err(|e| e.to_string())?;
+        let conversation_matches_repo = state
+            .memory
+            .list_coding_conversations(&meta.id)
+            .map_err(|e| e.to_string())?
+            .iter()
+            .any(|c| c.id == conversation_id);
+        if !conversation_matches_repo {
+            return Err("coding conversation does not belong to the selected repository".into());
+        }
         ChatTurnOptions::coding(CodingTurnContext {
             repo_id: meta.id.clone(),
             repo_name: meta.name.clone(),

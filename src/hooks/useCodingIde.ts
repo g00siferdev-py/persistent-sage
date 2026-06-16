@@ -83,6 +83,7 @@ export function useCodingIde(activeRepoId: string | null) {
   }, []);
 
   useEffect(() => {
+    openSeq.current += 1;
     setOpenFiles([]);
     setActivePath(null);
   }, [activeRepoId]);
@@ -244,7 +245,7 @@ export function useCodingIde(activeRepoId: string | null) {
         });
         setOpenFiles((prev) =>
           prev.map((x) =>
-            x.pathRel === f.pathRel
+            x.pathRel === f.pathRel && x.content === x.savedContent && !x.loading
               ? {
                   ...x,
                   content: file.content,

@@ -68,8 +68,8 @@ pub struct ParsedRunCommand {
 }
 
 const COMMAND_LINE_PREFIXES: &[&str] = &[
-    "timeout", "cargo", "npm", "pnpm", "yarn", "git", "node", "echo", "for", "ping",
-    "python", "pytest", "make", "dotnet", "go", "rustc", "tsc", "vitest", "jest",
+    "timeout", "cargo", "npm", "pnpm", "yarn", "git", "node", "echo", "for", "ping", "python",
+    "pytest", "make", "dotnet", "go", "rustc", "tsc", "vitest", "jest",
 ];
 
 /// When the user clearly wants a shell command executed, parse cwd + command so the backend
@@ -80,15 +80,7 @@ pub fn parse_direct_run_command(text: &str) -> Option<ParsedRunCommand> {
         return None;
     }
     let lower = t.to_ascii_lowercase();
-    let wants_run = lower.contains("coding_run_command")
-        || lower.contains("to run:")
-        || lower.contains("run command")
-        || lower.contains("run this command")
-        || lower.contains("run the command")
-        || lower.contains("run `")
-        || lower.contains("run '")
-        || lower.starts_with("run ");
-    if !wants_run {
+    if !lower.contains("to run:") {
         return None;
     }
 
@@ -100,19 +92,6 @@ pub fn parse_direct_run_command(text: &str) -> Option<ParsedRunCommand> {
         }
     }
 
-    if let Some(cmd) = t
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .rev()
-        .find(|line| looks_like_shell_command(line))
-    {
-        return Some(ParsedRunCommand {
-            cwd,
-            command: cmd.to_string(),
-        });
-    }
-
     None
 }
 
@@ -122,10 +101,11 @@ fn extract_cwd(text: &str, lower: &str) -> Option<String> {
             continue;
         };
         let rest = text[pos + needle.len()..].trim();
-        let end = rest
-            .find(['\n', '\r'])
-            .unwrap_or(rest.len());
-        let mut c = rest[..end].trim().trim_matches(['`', '\'', '"']).to_string();
+        let end = rest.find(['\n', '\r']).unwrap_or(rest.len());
+        let mut c = rest[..end]
+            .trim()
+            .trim_matches(['`', '\'', '"'])
+            .to_string();
         if let Some(pos) = c.to_ascii_lowercase().find(" to run:") {
             c.truncate(pos);
             c = c.trim().to_string();
@@ -146,10 +126,12 @@ fn first_command_line(block: &str) -> Option<String> {
 }
 
 fn looks_like_shell_command(line: &str) -> bool {
-    let first = line.split_whitespace().next().unwrap_or("").to_ascii_lowercase();
-    let base = first
-        .trim_end_matches(".exe")
-        .trim_end_matches(".cmd");
+    let first = line
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let base = first.trim_end_matches(".exe").trim_end_matches(".cmd");
     COMMAND_LINE_PREFIXES.iter().any(|p| base == *p)
 }
 
@@ -168,6 +150,12 @@ mod tests {
     #[test]
     fn parse_cargo_check_request() {
         let msg = "Please run cargo check in src-tauri";
+        assert!(parse_direct_run_command(msg).is_none());
+    }
+
+    #[test]
+    fn does_not_parse_prose_with_command_like_line() {
+        let msg = "We discussed run command hooks earlier.\n\nExample cleanup:\ngit reset --hard";
         assert!(parse_direct_run_command(msg).is_none());
     }
 }

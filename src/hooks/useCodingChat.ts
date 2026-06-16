@@ -68,13 +68,22 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
   }, []);
 
   useEffect(() => {
+    loadSeq.current += 1;
     if (!activeRepo) {
+      conversationIdRef.current = null;
       setConversationId(null);
       setMessages([]);
+      setStreamAssistant(null);
       setError(null);
+      setLoading(false);
       return;
     }
+    const seq = loadSeq.current;
     let cancelled = false;
+    conversationIdRef.current = null;
+    setConversationId(null);
+    setMessages([]);
+    setStreamAssistant(null);
     (async () => {
       setLoading(true);
       setError(null);
@@ -83,21 +92,23 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
           repoId: activeRepo.id,
           repoName: activeRepo.name,
         });
-        if (cancelled) return;
+        if (cancelled || seq !== loadSeq.current) return;
+        conversationIdRef.current = convId;
         setConversationId(convId);
         const recent = await invoke<StoredMessage[]>("memory_get_recent", {
           conversationId: convId,
           limit: 200,
         });
-        if (cancelled) return;
+        if (cancelled || seq !== loadSeq.current) return;
         setMessages(recent.map(storedToChatMessage));
       } catch (e) {
-        if (cancelled) return;
+        if (cancelled || seq !== loadSeq.current) return;
         setError(e instanceof Error ? e.message : String(e));
+        conversationIdRef.current = null;
         setConversationId(null);
         setMessages([]);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && seq === loadSeq.current) setLoading(false);
       }
     })();
     return () => {
@@ -183,8 +194,9 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
       const trimmed = text.trim();
       const convId = conversationId;
       const repoId = activeRepo?.id;
-      if (!trimmed || sending || !convId || !repoId) return;
+      if (!trimmed || loading || sending || !convId || !repoId) return;
 
+      loadSeq.current += 1;
       setMessages((prev) => [
         ...prev,
         { id: `local-${Date.now()}`, role: "user", content: trimmed },
@@ -206,6 +218,7 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
           appMode: "coding",
           codingRepoId: repoId,
         });
+        if (conversationIdRef.current !== convId) return;
         setStreamAssistant({
           thinking: false,
           text: result.reply,
@@ -214,6 +227,7 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
         });
         await loadMessages(convId, { silent: true });
       } catch (e) {
+        if (conversationIdRef.current !== convId) return;
         setError(e instanceof Error ? e.message : String(e));
         await loadMessages(convId, { silent: true });
       } finally {
@@ -222,7 +236,7 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
         setSending(false);
       }
     },
-    [activeRepo?.id, conversationId, loadMessages, sending],
+    [activeRepo?.id, conversationId, loadMessages, loading, sending],
   );
 
   return {
