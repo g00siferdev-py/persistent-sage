@@ -73,11 +73,7 @@ pub fn ensure_askpass_script(data_dir: &Path) -> Result<std::path::PathBuf, Prov
     Ok(path)
 }
 
-fn apply_git_auth_env(
-    cmd: &mut impl GitAuthCommand,
-    data_dir: &Path,
-    pat: &str,
-) -> Result<(), ProviderError> {
+fn apply_git_auth_env(cmd: &mut impl GitAuthCommand, data_dir: &Path, pat: &str) -> Result<(), ProviderError> {
     let script = ensure_askpass_script(data_dir)?;
     cmd.set_env("GIT_TERMINAL_PROMPT", "0");
     cmd.set_env("GIT_ASKPASS_NO_TTY", "1");
@@ -113,11 +109,7 @@ impl GitAuthCommand for tokio::process::Command {
     }
 }
 
-pub fn apply_git_auth(
-    cmd: &mut StdCommand,
-    data_dir: &Path,
-    pat: &str,
-) -> Result<(), ProviderError> {
+pub fn apply_git_auth(cmd: &mut StdCommand, data_dir: &Path, pat: &str) -> Result<(), ProviderError> {
     apply_git_auth_env(cmd, data_dir, pat)
 }
 
@@ -130,10 +122,12 @@ pub fn apply_git_auth_tokio(
 }
 
 pub fn save_github_pat(settings: &SettingsManager, token: &str) -> Result<(), ProviderError> {
-    settings.save_api_key("github", token).map_err(|e| match e {
-        SettingsError::InvalidKeySlot(s) => tool_err(format!("invalid key slot: {s}")),
-        other => tool_err(other.to_string()),
-    })
+    settings
+        .save_api_key("github", token)
+        .map_err(|e| match e {
+            SettingsError::InvalidKeySlot(s) => tool_err(format!("invalid key slot: {s}")),
+            other => tool_err(other.to_string()),
+        })
 }
 
 pub fn validate_https_git_url(url: &str) -> Result<(), ProviderError> {
