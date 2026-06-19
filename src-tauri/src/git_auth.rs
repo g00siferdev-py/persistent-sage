@@ -140,8 +140,86 @@ pub fn validate_https_git_url(url: &str) -> Result<(), ProviderError> {
             "SSH git URLs are not supported. Use HTTPS (https://github.com/owner/repo.git).",
         ));
     }
-    if !(u.starts_with("https://") || u.starts_with("http://")) {
+    let parsed = url::Url::parse(u).map_err(|_| tool_err("git URL must be a valid HTTPS URL"))?;
+    if parsed.scheme() != "https" {
         return Err(tool_err("git URL must start with https://"));
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err(tool_err("git URL must not include embedded credentials"));
+    }
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| tool_err("git URL must include a host"))?;
+    if !host.eq_ignore_ascii_case("github.com") {
+        return Err(tool_err(
+            "GitHub PATs may only be used with https://github.com/ remotes",
+        ));
+    }
+    if parsed.path().trim_matches('/').is_empty() {
+        return Err(tool_err("git URL must include an owner/repo path"));
+    }
+    Ok(())
+}
+
+pub fn validate_git_remote_name(remote: &str) -> Result<(), ProviderError> {
+    let r = remote.trim();
+    if r.is_empty() {
+        return Err(tool_err("remote name is required"));
+    }
+    if r.starts_with('-') {
+        return Err(tool_err("remote name must not start with '-'"));
+    }
+    if r == "." || r == ".." {
+        return Err(tool_err("remote name is invalid"));
+    }
+    if r.chars().any(|c| {
+        c.is_ascii_whitespace()
+            || c.is_ascii_control()
+            || matches!(c, '/' | '\\' | ':' | '*' | '?' | '[' | ']')
+    }) {
+        return Err(tool_err(
+            "remote must be a simple configured remote name (for example, origin)",
+        ));
+    }
+    if !r
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+    {
+        return Err(tool_err("remote name contains unsupported characters"));
+    }
+    Ok(())
+}
+
+pub fn validate_git_branch_name(branch: &str) -> Result<(), ProviderError> {
+    let b = branch.trim();
+    if b.is_empty() {
+        return Err(tool_err("branch name is required"));
+    }
+    if b.eq_ignore_ascii_case("head") {
+        return Err(tool_err("branch must be a branch name, not HEAD"));
+    }
+    if b.starts_with('-') || b.starts_with(':') || b.starts_with('/') {
+        return Err(tool_err("branch name is invalid"));
+    }
+    if b.ends_with('/') || b.ends_with('.') || b.ends_with(".lock") {
+        return Err(tool_err("branch name is invalid"));
+    }
+    if b.contains("..") || b.contains("//") || b.contains("@{") {
+        return Err(tool_err("branch name is invalid"));
+    }
+    if b.chars().any(|c| {
+        c.is_ascii_whitespace()
+            || c.is_ascii_control()
+            || matches!(c, '\\' | ':' | '~' | '^' | '?' | '*' | '[' | ']')
+    }) {
+        return Err(tool_err(
+            "branch must be a simple branch name, not a refspec or option",
+        ));
+    }
+    for part in b.split('/') {
+        if part.is_empty() || part == "." || part == ".." || part.starts_with('.') {
+            return Err(tool_err("branch name is invalid"));
+        }
     }
     Ok(())
 }
@@ -156,4 +234,37 @@ pub fn reject_force_git_args(args: &[&str]) -> Result<(), ProviderError> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_github_https_urls_without_credentials() {
+        assert!(validate_https_git_url("https://github.com/owner/repo.git").is_ok());
+        assert!(validate_https_git_url("http://github.com/owner/repo.git").is_err());
+        assert!(validate_https_git_url("https://evil.example/owner/repo.git").is_err());
+        assert!(validate_https_git_url("https://token@github.com/owner/repo.git").is_err());
+        assert!(validate_https_git_url("git@github.com:owner/repo.git").is_err());
+    }
+
+    #[test]
+    fn validates_remote_names_as_plain_names() {
+        assert!(validate_git_remote_name("origin").is_ok());
+        assert!(validate_git_remote_name("upstream-1").is_ok());
+        assert!(validate_git_remote_name("https://github.com/owner/repo.git").is_err());
+        assert!(validate_git_remote_name("--mirror").is_err());
+        assert!(validate_git_remote_name("origin main").is_err());
+    }
+
+    #[test]
+    fn validates_branch_names_without_refspecs_or_options() {
+        assert!(validate_git_branch_name("main").is_ok());
+        assert!(validate_git_branch_name("feature/safe-name_1").is_ok());
+        assert!(validate_git_branch_name(":main").is_err());
+        assert!(validate_git_branch_name("--delete").is_err());
+        assert!(validate_git_branch_name("main:main").is_err());
+        assert!(validate_git_branch_name("HEAD").is_err());
+    }
 }
