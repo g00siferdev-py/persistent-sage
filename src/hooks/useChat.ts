@@ -74,6 +74,7 @@ export function useChat() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
   const loadSeq = useRef(0);
+  const threadLoadingSeq = useRef<number | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
   /** Mirrors `activePersonalityId` for invoke payloads (always read right before IPC). */
   const activePersonalityIdRef = useRef(activePersonalityId);
@@ -137,13 +138,17 @@ export function useChat() {
   }, []);
 
   const loadActiveThread = useCallback(async (conversationId: string) => {
+    if (conversationId !== activeConversationIdRef.current) return;
     const seq = ++loadSeq.current;
+    const isCurrentLoad = () =>
+      seq === loadSeq.current && conversationId === activeConversationIdRef.current;
+    threadLoadingSeq.current = seq;
     setThreadLoading(true);
     setError(null);
     let messagesLoaded = false;
     try {
       const recent = await memoryGetRecent(conversationId, RECENT_LIMIT);
-      if (seq !== loadSeq.current) return;
+      if (!isCurrentLoad()) return;
       setMessages(recent.map(storedToChatMessage));
       messagesLoaded = true;
 
@@ -152,11 +157,11 @@ export function useChat() {
           memoryStartupBriefing(conversationId),
           memoryListAnchors(conversationId, 48),
         ]);
-        if (seq !== loadSeq.current) return;
+        if (!isCurrentLoad()) return;
         setBriefing(brief);
         setAnchors(anchorList);
       } catch (sidebarErr) {
-        if (seq !== loadSeq.current) return;
+        if (!isCurrentLoad()) return;
         const sidebarMsg =
           sidebarErr instanceof Error
             ? sidebarErr.message
@@ -166,7 +171,7 @@ export function useChat() {
         setAnchors([]);
       }
     } catch (e) {
-      if (seq !== loadSeq.current) return;
+      if (!isCurrentLoad()) return;
       const msg =
         e instanceof Error
           ? e.message
@@ -178,9 +183,10 @@ export function useChat() {
         setAnchors([]);
       }
     } finally {
-      // Always clear: a newer `loadSeq` (e.g. from an in-flight send) may have invalidated this load
-      // while it still held threadLoading true.
-      setThreadLoading(false);
+      if (threadLoadingSeq.current === seq) {
+        threadLoadingSeq.current = null;
+        setThreadLoading(false);
+      }
     }
   }, []);
 
@@ -301,10 +307,13 @@ export function useChat() {
       loadSeq.current += 1;
       setActivePersonalityId(id);
       const list = await refreshConversations();
-      setActiveConversationId((prev) => {
-        if (prev && list.some((c) => c.id === prev)) return prev;
-        return list[0]?.id ?? null;
-      });
+      const currentConversationId = activeConversationIdRef.current;
+      const nextConversationId =
+        currentConversationId && list.some((c) => c.id === currentConversationId)
+          ? currentConversationId
+          : list[0]?.id ?? null;
+      activeConversationIdRef.current = nextConversationId;
+      setActiveConversationId(nextConversationId);
       await refreshPersonalityFile();
       console.info("[persistent-sage-chat] applyActivePersonality: memory + UI active personality_id", {
         personalityId: id,
@@ -341,13 +350,17 @@ export function useChat() {
         if (cancelled) return;
         setListLoading(false);
         if (list.length === 0) {
+          activeConversationIdRef.current = null;
           setActiveConversationId(null);
           return;
         }
-        setActiveConversationId((prev) => {
-          if (prev && list.some((c) => c.id === prev)) return prev;
-          return list[0]?.id ?? null;
-        });
+        const currentConversationId = activeConversationIdRef.current;
+        const nextConversationId =
+          currentConversationId && list.some((c) => c.id === currentConversationId)
+            ? currentConversationId
+            : list[0]?.id ?? null;
+        activeConversationIdRef.current = nextConversationId;
+        setActiveConversationId(nextConversationId);
       } catch (e) {
         if (cancelled) return;
         const msg =
@@ -368,6 +381,7 @@ export function useChat() {
       setBriefing("");
       setAnchors([]);
       setMessages([]);
+      setThreadLoading(false);
       return;
     }
     // Clear immediately so we never show the previous thread's bubbles while the new id loads
@@ -380,17 +394,21 @@ export function useChat() {
 
   const selectConversation = useCallback((id: string) => {
     setThreadListHiddenFromSidebar(false);
+    activeConversationIdRef.current = id;
     setActiveConversationId(id);
   }, []);
 
   /** Hides the conversation list and active thread in the UI only; does not call delete or touch the DB. */
   const clearConversationSidebarView = useCallback(() => {
     loadSeq.current += 1;
+    activeConversationIdRef.current = null;
+    threadLoadingSeq.current = null;
     setThreadListHiddenFromSidebar(true);
     setActiveConversationId(null);
     setBriefing("");
     setAnchors([]);
     setMessages([]);
+    setThreadLoading(false);
     setError(null);
   }, []);
 
@@ -400,13 +418,17 @@ export function useChat() {
     setThreadListHiddenFromSidebar(false);
     const list = await refreshConversations();
     if (list.length === 0) {
+      activeConversationIdRef.current = null;
       setActiveConversationId(null);
       return;
     }
-    setActiveConversationId((prev) => {
-      if (prev && list.some((c) => c.id === prev)) return prev;
-      return list[0]?.id ?? null;
-    });
+    const currentConversationId = activeConversationIdRef.current;
+    const nextConversationId =
+      currentConversationId && list.some((c) => c.id === currentConversationId)
+        ? currentConversationId
+        : list[0]?.id ?? null;
+    activeConversationIdRef.current = nextConversationId;
+    setActiveConversationId(nextConversationId);
   }, [refreshConversations]);
 
   const startNewConversation = useCallback(async () => {
@@ -425,6 +447,7 @@ export function useChat() {
       console.info("[persistent-sage-chat] startNewConversation: creating conversation", { personalityId: pid, title });
       const id = await memoryCreateConversation(title);
       await refreshConversations();
+      activeConversationIdRef.current = id;
       setActiveConversationId(id);
     } catch (e) {
       const msg =
@@ -496,11 +519,15 @@ export function useChat() {
         await memoryDeleteConversation(conversationId);
         setConversations((prev) => prev.filter((c) => c.id !== conversationId));
         const list = await refreshConversations();
-        setActiveConversationId((prev) => {
-          if (prev !== conversationId) return prev;
-          if (list.length === 0) return null;
-          return list[0]?.id ?? null;
-        });
+        const currentConversationId = activeConversationIdRef.current;
+        const nextConversationId =
+          currentConversationId !== conversationId
+            ? currentConversationId
+            : list.length === 0
+              ? null
+              : list[0]?.id ?? null;
+        activeConversationIdRef.current = nextConversationId;
+        setActiveConversationId(nextConversationId);
       } catch (e) {
         const msg =
           e instanceof Error ? e.message : "Could not delete conversation (run in Tauri?)";
