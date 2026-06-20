@@ -6,6 +6,7 @@ use std::process::Command as StdCommand;
 use crate::agent_tools::tool_err;
 use crate::provider::ProviderError;
 use crate::settings::{SettingsError, SettingsManager};
+use url::Url;
 
 const PS_GIT_PAT_ENV: &str = "PS_GIT_PAT";
 
@@ -73,7 +74,11 @@ pub fn ensure_askpass_script(data_dir: &Path) -> Result<std::path::PathBuf, Prov
     Ok(path)
 }
 
-fn apply_git_auth_env(cmd: &mut impl GitAuthCommand, data_dir: &Path, pat: &str) -> Result<(), ProviderError> {
+fn apply_git_auth_env(
+    cmd: &mut impl GitAuthCommand,
+    data_dir: &Path,
+    pat: &str,
+) -> Result<(), ProviderError> {
     let script = ensure_askpass_script(data_dir)?;
     cmd.set_env("GIT_TERMINAL_PROMPT", "0");
     cmd.set_env("GIT_ASKPASS_NO_TTY", "1");
@@ -109,7 +114,11 @@ impl GitAuthCommand for tokio::process::Command {
     }
 }
 
-pub fn apply_git_auth(cmd: &mut StdCommand, data_dir: &Path, pat: &str) -> Result<(), ProviderError> {
+pub fn apply_git_auth(
+    cmd: &mut StdCommand,
+    data_dir: &Path,
+    pat: &str,
+) -> Result<(), ProviderError> {
     apply_git_auth_env(cmd, data_dir, pat)
 }
 
@@ -122,12 +131,10 @@ pub fn apply_git_auth_tokio(
 }
 
 pub fn save_github_pat(settings: &SettingsManager, token: &str) -> Result<(), ProviderError> {
-    settings
-        .save_api_key("github", token)
-        .map_err(|e| match e {
-            SettingsError::InvalidKeySlot(s) => tool_err(format!("invalid key slot: {s}")),
-            other => tool_err(other.to_string()),
-        })
+    settings.save_api_key("github", token).map_err(|e| match e {
+        SettingsError::InvalidKeySlot(s) => tool_err(format!("invalid key slot: {s}")),
+        other => tool_err(other.to_string()),
+    })
 }
 
 pub fn validate_https_git_url(url: &str) -> Result<(), ProviderError> {
@@ -140,8 +147,27 @@ pub fn validate_https_git_url(url: &str) -> Result<(), ProviderError> {
             "SSH git URLs are not supported. Use HTTPS (https://github.com/owner/repo.git).",
         ));
     }
-    if !(u.starts_with("https://") || u.starts_with("http://")) {
-        return Err(tool_err("git URL must start with https://"));
+    let parsed = Url::parse(u).map_err(|e| tool_err(format!("invalid git URL: {e}")))?;
+    if parsed.scheme() != "https" {
+        return Err(tool_err(
+            "GitHub PAT git URLs must use https://github.com/owner/repo.git",
+        ));
+    }
+    if parsed.host_str() != Some("github.com") {
+        return Err(tool_err(
+            "GitHub PAT git operations are limited to https://github.com remotes",
+        ));
+    }
+    let mut segments = parsed
+        .path_segments()
+        .ok_or_else(|| tool_err("git URL path is invalid"))?
+        .filter(|s| !s.is_empty());
+    let owner = segments.next();
+    let repo = segments.next();
+    if owner.is_none() || repo.is_none() {
+        return Err(tool_err(
+            "GitHub git URL must include an owner and repository path",
+        ));
     }
     Ok(())
 }
@@ -156,4 +182,22 @@ pub fn reject_force_git_args(args: &[&str]) -> Result<(), ProviderError> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_https_git_url;
+
+    #[test]
+    fn validate_accepts_github_https_urls() {
+        assert!(validate_https_git_url("https://github.com/owner/repo.git").is_ok());
+        assert!(validate_https_git_url("https://github.com/owner/repo").is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_plaintext_or_non_github_urls() {
+        assert!(validate_https_git_url("http://github.com/owner/repo.git").is_err());
+        assert!(validate_https_git_url("https://example.com/owner/repo.git").is_err());
+        assert!(validate_https_git_url("git@github.com:owner/repo.git").is_err());
+    }
 }

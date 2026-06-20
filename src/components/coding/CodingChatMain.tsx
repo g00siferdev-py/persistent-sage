@@ -9,6 +9,7 @@ type Props = {
   messages: ChatMessage[];
   loading: boolean;
   sending: boolean;
+  canSend: boolean;
   streamAssistant: CodingStreamState;
   error: string | null;
   onSendMessage: (text: string) => void;
@@ -19,6 +20,7 @@ export function CodingChatMain({
   messages,
   loading,
   sending,
+  canSend,
   streamAssistant,
   error,
   onSendMessage,
@@ -34,7 +36,7 @@ export function CodingChatMain({
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const text = draft.trim();
-    if (!text || sending) return;
+    if (!text || !canSend) return;
     setDraft("");
     onSendMessage(text);
   };
@@ -127,7 +129,7 @@ export function CodingChatMain({
           />
           <button
             type="submit"
-            disabled={sending || !draft.trim()}
+            disabled={!canSend || !draft.trim()}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-700 text-white hover:bg-violet-600 disabled:opacity-40"
             title="Send"
           >

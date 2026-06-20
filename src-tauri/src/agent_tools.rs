@@ -411,6 +411,30 @@ fn workspace_list_directory(workspace_root: &Path, rel: &str) -> Result<String, 
     }
 }
 
+fn scope_workspace_path_for_coding(
+    ctx: Option<&crate::coding::CodingTurnContext>,
+    rel: &str,
+) -> Result<String, ProviderError> {
+    let Some(ctx) = ctx else {
+        return Ok(rel.trim().to_string());
+    };
+    let repo_root = ctx.path_rel.trim().trim_matches('/');
+    if repo_root.is_empty() {
+        return Err(tool_err("active repo path is empty"));
+    }
+    let requested = rel.trim().trim_start_matches('/');
+    if requested.is_empty() || requested == "." {
+        return Ok(repo_root.to_string());
+    }
+    if requested.contains('\\') || requested.split('/').any(|s| s == "..") {
+        return Err(tool_err("path must stay inside the active coding repo"));
+    }
+    if requested == repo_root || requested.starts_with(&format!("{repo_root}/")) {
+        return Ok(requested.to_string());
+    }
+    Ok(format!("{repo_root}/{requested}"))
+}
+
 pub(crate) fn tool_err(msg: impl Into<String>) -> ProviderError {
     ProviderError::Api(msg.into())
 }
@@ -1297,8 +1321,9 @@ pub async fn run_builtin_tool(
         "workspace_read_file" => {
             let root = workspace_root.ok_or_else(|| tool_err("workspace tools are not enabled"))?;
             let p = v["path"].as_str().unwrap_or("").trim();
+            let p = scope_workspace_path_for_coding(coding_ctx, p)?;
             let max_bytes = v.get("max_bytes").and_then(|x| x.as_u64());
-            let text = workspace_read_file(root, p, max_bytes)?;
+            let text = workspace_read_file(root, &p, max_bytes)?;
             const TOOL_OUT_MAX: usize = 48_000;
             if text.chars().count() > TOOL_OUT_MAX {
                 Ok(text.chars().take(TOOL_OUT_MAX).collect::<String>() + "\n… [truncated]")
@@ -1309,15 +1334,18 @@ pub async fn run_builtin_tool(
         "workspace_write_file" => {
             let root = workspace_root.ok_or_else(|| tool_err("workspace tools are not enabled"))?;
             let p = v["path"].as_str().unwrap_or("").trim();
+            let p = scope_workspace_path_for_coding(coding_ctx, p)?;
             let c = v["content"].as_str().unwrap_or("");
-            workspace_write_file(root, p, c)
+            workspace_write_file(root, &p, c)
         }
         "workspace_list_directory" => {
             let root = workspace_root.ok_or_else(|| tool_err("workspace tools are not enabled"))?;
             let p = v["path"].as_str().unwrap_or("").trim();
-            workspace_list_directory(root, p)
+            let p = scope_workspace_path_for_coding(coding_ctx, p)?;
+            workspace_list_directory(root, &p)
         }
-        "project_list" | "project_create" | "project_read" | "project_write" | "project_set_active" => {
+        "project_list" | "project_create" | "project_read" | "project_write"
+        | "project_set_active" => {
             let root = workspace_root.ok_or_else(|| tool_err("project tools are not available"))?;
             crate::projects::run_project_tool(root, n, arguments_json, memory_tools, None).await
         }
@@ -1399,6 +1427,29 @@ mod tests {
         let p = resolve_workspace_subpath(&tmp, "./notes/./file.txt").unwrap();
         assert!(p.ends_with("file.txt"), "{p:?}");
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn coding_workspace_paths_are_scoped_to_active_repo() {
+        let ctx = crate::coding::CodingTurnContext {
+            repo_id: "active".into(),
+            repo_name: "Active".into(),
+            path_rel: "repos/active".into(),
+        };
+
+        assert_eq!(
+            scope_workspace_path_for_coding(Some(&ctx), "src/main.rs").unwrap(),
+            "repos/active/src/main.rs"
+        );
+        assert_eq!(
+            scope_workspace_path_for_coding(Some(&ctx), "repos/active/src/main.rs").unwrap(),
+            "repos/active/src/main.rs"
+        );
+        assert_eq!(
+            scope_workspace_path_for_coding(Some(&ctx), "repos/other/src/main.rs").unwrap(),
+            "repos/active/repos/other/src/main.rs"
+        );
+        assert!(scope_workspace_path_for_coding(Some(&ctx), "../other").is_err());
     }
 
     #[test]

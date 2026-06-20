@@ -182,15 +182,16 @@ export function useCodingIde(activeRepoId: string | null) {
     if (!activeRepoId || !activePath) return false;
     const file = openFiles.find((f) => f.pathRel === activePath);
     if (!file || file.loading || file.error) return false;
+    const writtenContent = file.content;
     try {
       await invoke("coding_write_file", {
         repoId: activeRepoId,
         pathRel: file.pathRel,
-        content: file.content,
+        content: writtenContent,
       });
       setOpenFiles((prev) =>
         prev.map((f) =>
-          f.pathRel === file.pathRel ? { ...f, savedContent: f.content } : f,
+          f.pathRel === file.pathRel ? { ...f, savedContent: writtenContent } : f,
         ),
       );
       appendTerminal("info", `Saved ${file.pathRel}`);
@@ -243,16 +244,22 @@ export function useCodingIde(activeRepoId: string | null) {
           pathRel: f.pathRel,
         });
         setOpenFiles((prev) =>
-          prev.map((x) =>
-            x.pathRel === f.pathRel
-              ? {
-                  ...x,
-                  content: file.content,
-                  savedContent: file.content,
-                  language: file.language,
-                }
-              : x,
-          ),
+          prev.map((x) => {
+            if (
+              x.pathRel !== f.pathRel ||
+              x.loading ||
+              x.content !== x.savedContent ||
+              x.savedContent !== f.savedContent
+            ) {
+              return x;
+            }
+            return {
+              ...x,
+              content: file.content,
+              savedContent: file.content,
+              language: file.language,
+            };
+          }),
         );
       } catch {
         /* ignore stale paths */

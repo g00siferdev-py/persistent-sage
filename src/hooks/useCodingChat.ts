@@ -30,24 +30,30 @@ type ActiveRepo = {
 
 export function useCodingChat(activeRepo: ActiveRepo | null) {
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationRepoId, setConversationRepoId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [streamAssistant, setStreamAssistant] = useState<CodingStreamState>(null);
   const [error, setError] = useState<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
+  const activeRepoIdRef = useRef<string | null>(null);
   const sendingRef = useRef(false);
   const loadSeq = useRef(0);
 
   const eventConversationMatches = useCallback((id: string) => {
     const active = conversationIdRef.current;
-    if (!active) return sendingRef.current;
+    if (!active) return false;
     return id === active;
   }, []);
 
   useEffect(() => {
     conversationIdRef.current = conversationId;
   }, [conversationId]);
+
+  useEffect(() => {
+    activeRepoIdRef.current = activeRepo?.id ?? null;
+  }, [activeRepo?.id]);
 
   const loadMessages = useCallback(async (convId: string, options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
@@ -68,16 +74,18 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
   }, []);
 
   useEffect(() => {
+    setConversationId(null);
+    setConversationRepoId(null);
+    setMessages([]);
+    setStreamAssistant(null);
+    setError(null);
     if (!activeRepo) {
-      setConversationId(null);
-      setMessages([]);
-      setError(null);
+      setLoading(false);
       return;
     }
     let cancelled = false;
     (async () => {
       setLoading(true);
-      setError(null);
       try {
         const convId = await invoke<string>("memory_get_or_create_coding_conversation", {
           repoId: activeRepo.id,
@@ -85,6 +93,7 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
         });
         if (cancelled) return;
         setConversationId(convId);
+        setConversationRepoId(activeRepo.id);
         const recent = await invoke<StoredMessage[]>("memory_get_recent", {
           conversationId: convId,
           limit: 200,
@@ -95,6 +104,7 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
         setConversationId(null);
+        setConversationRepoId(null);
         setMessages([]);
       } finally {
         if (!cancelled) setLoading(false);
@@ -183,7 +193,16 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
       const trimmed = text.trim();
       const convId = conversationId;
       const repoId = activeRepo?.id;
-      if (!trimmed || sending || !convId || !repoId) return;
+      if (
+        !trimmed ||
+        sending ||
+        loading ||
+        !convId ||
+        !repoId ||
+        conversationRepoId !== repoId
+      ) {
+        return;
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -206,30 +225,42 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
           appMode: "coding",
           codingRepoId: repoId,
         });
-        setStreamAssistant({
-          thinking: false,
-          text: result.reply,
-          statusDetail: null,
-          toolActivity: null,
-        });
-        await loadMessages(convId, { silent: true });
+        if (activeRepoIdRef.current === repoId && conversationIdRef.current === convId) {
+          setStreamAssistant({
+            thinking: false,
+            text: result.reply,
+            statusDetail: null,
+            toolActivity: null,
+          });
+          await loadMessages(convId, { silent: true });
+        }
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-        await loadMessages(convId, { silent: true });
+        if (activeRepoIdRef.current === repoId && conversationIdRef.current === convId) {
+          setError(e instanceof Error ? e.message : String(e));
+          await loadMessages(convId, { silent: true });
+        }
       } finally {
         sendingRef.current = false;
         setStreamAssistant(null);
         setSending(false);
       }
     },
-    [activeRepo?.id, conversationId, loadMessages, sending],
+    [activeRepo?.id, conversationId, conversationRepoId, loadMessages, loading, sending],
   );
+
+  const canSend =
+    !loading &&
+    !sending &&
+    !!conversationId &&
+    !!activeRepo?.id &&
+    conversationRepoId === activeRepo.id;
 
   return {
     conversationId,
     messages,
     loading,
     sending,
+    canSend,
     streamAssistant,
     error,
     sendMessage,
