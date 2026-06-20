@@ -396,6 +396,7 @@ export function CodingLayout({ onModeChange }: Props) {
                       messages={codingChat.messages}
                       loading={codingChat.loading}
                       sending={codingChat.sending}
+                      canSend={codingChat.canSend}
                       streamAssistant={codingChat.streamAssistant}
                       error={codingChat.error}
                       onSendMessage={(text) => void codingChat.sendMessage(text)}
