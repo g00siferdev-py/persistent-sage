@@ -241,16 +241,16 @@ Then run `npm run tauri dev`, send a test message, and confirm the sidebar shows
 
 ---
 
-## 12. Beta testing
+## 12. After install
 
-Persistent Sage **0.2.0-beta.8** is in **open beta**. After you complete § 11 (verify install):
+After you complete § 11 (verify install):
 
 1. Configure a live provider and send several chat turns.
-2. Try **Settings → Companion** (personalities, optional OpenClaw import).
-3. If you use OpenClaw today, follow **[USER-GUIDE.md § Migrating from OpenClaw](./USER-GUIDE.md#11-migrating-from-openclaw)** and report results on GitHub.
-4. File issues at [github.com/g00siferdev-py/persistent-sage/issues](https://github.com/g00siferdev-py/persistent-sage/issues).
+2. Try **Companion** and **Coding** modes; explore **Settings → General** (Appearance, Cache, Updates).
+3. If you use OpenClaw today, follow **[USER-GUIDE.md § Migrating from OpenClaw](./USER-GUIDE.md#11-migrating-from-openclaw)**.
+4. File issues at [github.com/g00siferdev-py/persistent-sage/issues](https://github.com/g00siferdev-py/persistent-sage/issues) or use **Settings → General → Send feedback**.
 
-See also [CONTRIBUTING.md](../CONTRIBUTING.md) and [README.md § Beta testing](../README.md#beta-testing).
+See also [CONTRIBUTING.md](../CONTRIBUTING.md) and [README.md § Get Persistent Sage](../README.md#get-persistent-sage).
 
 ---
 

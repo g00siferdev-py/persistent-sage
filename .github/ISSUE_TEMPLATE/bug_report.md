@@ -2,7 +2,7 @@
 name: Bug report
 about: Report something broken in Persistent Sage
 title: "[Bug] "
-labels: bug, beta-feedback
+labels: bug, feedback
 assignees: ""
 ---
 

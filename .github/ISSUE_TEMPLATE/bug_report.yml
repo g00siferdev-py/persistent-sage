@@ -1,18 +1,18 @@
 name: Bug report
 description: Report something broken in Persistent Sage
 title: "[Bug] "
-labels: ["bug", "beta-feedback"]
+labels: ["bug", "feedback"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for testing Persistent Sage. Do not paste API keys, private chats, Memory Anchors, or sensitive personal information.
+        Thanks for reporting an issue. Do not paste API keys, private chats, Memory Anchors, or sensitive personal information.
   - type: input
     id: version
     attributes:
       label: Persistent Sage version
       description: Find this in Settings > General > About.
-      placeholder: "0.2.0-beta.9"
+      placeholder: "2.1.0"
     validations:
       required: true
   - type: dropdown
@@ -20,7 +20,8 @@ body:
     attributes:
       label: Install type
       options:
-        - Windows installer
+        - Microsoft Store
+        - Windows installer (GitHub)
         - Portable zip
         - Built from source
         - Other

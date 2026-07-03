@@ -16,7 +16,7 @@
 
 When acting as a Persistent Sage marketing or support agent:
 
-1. **Be accurate.** Persistent Sage is open beta software. Do not claim features that are not shipped or imply enterprise-grade security (database encryption, multi-user ACLs, audit logs are not implemented).
+1. **Be accurate.** Persistent Sage is local-first desktop software (2.1.0). Do not claim features that are not shipped or imply enterprise-grade security (database encryption, multi-user ACLs, audit logs are not implemented).
 2. **Lead with privacy and local-first.** This is a core differentiator: chats and memory stay on the user's machine; there is no Persistent Sage cloud for conversation storage.
 3. **Be honest about cloud providers.** When users choose OpenAI, Anthropic, Gemini, xAI, or Ollama Cloud, their messages leave the device to that provider. Local Ollama keeps inference on the user's machine.
 4. **Never ask for or repeat API keys, passwords, or private chat content** in public channels.
@@ -51,7 +51,7 @@ When acting as a Persistent Sage marketing or support agent:
 |--------|--------|
 | **Category** | Desktop AI companion application |
 | **Platform** | Tauri 2 (Rust backend + React 19 webview UI) |
-| **Distribution** | Open beta via GitHub Releases (Windows installer + portable zip); build from source on Linux/macOS |
+| **Distribution** | Microsoft Store (MSIX) + GitHub Releases (Windows NSIS installer + portable zip); build from source on Linux/macOS |
 | **Business model** | Open-source (MIT); users bring their own API keys for cloud providers |
 | **Cloud service** | **None** for chat/memory storage—Persistent Sage does not operate a backend that stores user conversations |
 | **Default companion** | **Sage** — shipped default personality; also acts as in-app support bot when workspace tools are enabled |
@@ -63,7 +63,7 @@ When acting as a Persistent Sage marketing or support agent:
 - Not a hosted SaaS chat product with Persistent Sage accounts
 - Not a replacement for your LLM provider—you still need OpenAI/Anthropic/Gemini/xAI keys or local Ollama for real AI responses
 - Not end-to-end encrypted chat storage (SQLite database is **not encrypted**)
-- Not code-signed for Windows yet (SmartScreen may warn on beta installers)
+- Not code-signed for **direct-download** Windows NSIS yet (SmartScreen may warn; Store MSIX is Microsoft-signed)
 - Not a mobile app (desktop only today)
 - Not fully automated OpenClaw migration (workspace workflow is the gold standard for fidelity)
 
@@ -103,6 +103,21 @@ When acting as a Persistent Sage marketing or support agent:
 6. **Pulse** — Timer-driven check-ins in the user's selected sidebar thread; instructions stay hidden; replies prefixed `Pulse Response : [timestamp]`.
 7. **No analytics SDK** — No telemetry to a Persistent Sage-operated server.
 8. **Open source** — MIT license; inspectable codebase.
+9. **Dual distribution (2.1+)** — Microsoft Store MSIX and GitHub direct download with Tauri updater.
+10. **Optional support** — Voluntary PayPal / Cash App donations; no in-app paywall.
+
+---
+
+## Version 2.1 feature summary
+
+| Area | New in 2.1 |
+|------|------------|
+| **Companion UX** | Message timestamps, MessageContent + copy buttons, abort turn, token counter, Help menu |
+| **Appearance** | Light/dark theme (Settings → General → Appearance) |
+| **Coding UX** | Playground, notepad, Agent Action Stream, Event Stream Debugger, Settings in coding, resizable panels |
+| **Reliability** | ErrorBoundary, single-instance guard, cache manager |
+| **Context** | Unified active conversation when switching Companion ↔ Coding |
+| **Support** | Send feedback buttons, optional donation footer, external URL IPC for PayPal/Cash App |
 
 ---
 
@@ -288,8 +303,10 @@ Companion web/workspace toggles and coding toggles are separate. Coding toggles 
 | **Generation** | Temperature, max output tokens |
 | **Memory** | LLM extraction, semantic recall, embedding model override, re-index embeddings |
 | **Pulse** | Enable, interval, instructions, Send Pulse now |
-| **Updates** | Check GitHub Releases for signed Tauri updater packages |
-| **Open beta feedback** | Prefilled GitHub Issues (bug, idea, beta tester) |
+| **Updates** | **Store:** Microsoft Store updates. **GitHub:** Tauri updater checks Releases for `latest.json` |
+| **Send feedback** | Prefilled GitHub Issues (bug, idea, general feedback) |
+| **Donate** | Optional PayPal / Cash App (footer, onboarding); no digital unlock |
+| **Cache** | View size, open folder, clear tool/runtime cache |
 | **Data** | Reveal data folder, wipe memories, factory reset |
 | **Setup** | Run setup wizard again |
 | **About** | Backend version |
@@ -302,9 +319,10 @@ Can rerun from Settings → General.
 
 ### In-app updates
 
-- Tauri updater checks GitHub Releases for `latest.json` and signed packages
+- **Microsoft Store installs:** Settings → General → Updates → open Store updates
+- **GitHub installs:** Tauri updater checks GitHub Releases for `latest.json` and signed packages
 - Settings → General → Updates → Check for updates
-- Updater-enabled releases must be **normal** GitHub releases (not marked prerelease)
+- Updater-enabled GitHub releases must be **normal** GitHub releases (not marked prerelease)
 
 ### What's new dialog
 
@@ -395,9 +413,9 @@ Full policy: [PRIVACY.md](../PRIVACY.md)
 
 ### Windows (recommended for most users)
 
-1. Download from **GitHub Releases**: https://github.com/g00siferdev-py/persistent-sage/releases
-2. Run `Persistent.Sage_*_x64-setup.exe`
-3. SmartScreen may warn (unsigned beta) → **More info → Run anyway**
+1. **Microsoft Store** — search for Persistent Sage (when listed), or
+2. **GitHub Releases**: https://github.com/g00siferdev-py/persistent-sage/releases → `Persistent.Sage_*_x64-setup.exe`
+3. Direct-download installer: SmartScreen may warn (unsigned NSIS) → **More info → Run anyway**
 4. Complete setup wizard
 
 **Start Menu shortcuts:**
@@ -425,7 +443,7 @@ Requires Node.js LTS, Rust 1.77+, and [Tauri prerequisites](https://v2.tauri.app
 
 ### Microsoft Store
 
-MSIX packaging is in progress; see [MICROSOFT-STORE.md](./MICROSOFT-STORE.md). Primary distribution today is GitHub Releases.
+MSIX builds ship through Partner Center. See [MICROSOFT-STORE.md](./MICROSOFT-STORE.md). Store users update via the Microsoft Store, not the GitHub Tauri updater.
 
 ---
 
@@ -460,7 +478,7 @@ Streamlined one-click migration is **in progress**.
 
 ---
 
-## Known limitations (beta honesty)
+## Known limitations
 
 | Topic | Status |
 |-------|--------|
@@ -494,7 +512,7 @@ Use **Placeholder** for UI testing only (no real AI), or **local Ollama** for of
 
 ### Is it safe for sensitive data?
 
-Open beta software. The SQLite database and attachments are **not encrypted**. Evaluate your threat model; use full-disk encryption (BitLocker, FileVault, LUKS) for additional protection. Do not store regulated/high-risk data unless you accept current limitations.
+Local-first desktop software. The SQLite database and attachments are **not encrypted**. Evaluate your threat model; use full-disk encryption (BitLocker, FileVault, LUKS) for additional protection. Do not store regulated/high-risk data unless you accept current limitations.
 
 ---
 
@@ -518,7 +536,7 @@ Keys are stored per data directory. Fresh install or new data path requires re-e
 
 ### OpenAI key overwrote Ollama key
 
-Fixed in 0.2.0-beta.9. Update if on older beta.
+Fixed in 0.2.0-beta.9 and later. Update if on an older build.
 
 ### Model ignores attached image
 
@@ -556,7 +574,7 @@ Fixed in 0.2.0-beta.9. Update if on older beta.
 
 ### Windows SmartScreen warning
 
-Beta installer is unsigned. Click **More info → Run anyway**. Code signing planned for future releases.
+Direct-download NSIS installer may be unsigned. Click **More info → Run anyway**. Microsoft Store MSIX is signed through Partner Center. Authenticode signing planned for future GitHub installer releases.
 
 ### Data not on USB drive
 
@@ -572,7 +590,7 @@ Quit app; copy entire data folder including `nova_memory.sqlite`, `settings.json
 
 ### How do I report a bug?
 
-Settings → General → Open beta feedback, or https://github.com/g00siferdev-py/persistent-sage/issues  
+Settings → General → Send feedback, or https://github.com/g00siferdev-py/persistent-sage/issues  
 Include: OS, app version, provider, model, steps to reproduce. **Do not paste API keys or private chats in public issues.**
 
 ### Thinking control causes errors
@@ -637,7 +655,7 @@ Introducing Persistent Sage — a local-first desktop AI companion. 🌿
 
 Your chats and Memory Anchors stay on *your* machine. Pick OpenAI, Claude, Gemini, Grok, or local Ollama. Optional tools, custom personalities, and Pulse check-ins.
 
-Open beta for Windows: github.com/g00siferdev-py/persistent-sage
+Download for Windows: Microsoft Store or github.com/g00siferdev-py/persistent-sage/releases
 
 #LocalFirst #AI #OpenSource #Privacy
 
@@ -647,7 +665,7 @@ Open beta for Windows: github.com/g00siferdev-py/persistent-sage
 
 | Version | Date | Notable changes |
 |---------|------|-----------------|
-| **2.1.0** | 2026-07-03 | UX polish — timestamps, playground, notepad, debug panels, Help, cache, light/dark, unified context |
+| **2.1.0** | 2026-07-03 | UX polish — timestamps, playground, notepad, debug panels, Help, cache, donations, light/dark, unified context |
 | **2.0.0** | 2026-06-13 | Coding mode — repos, IDE, terminal, coding agent tools, GitHub PAT, companion link |
 | **1.0.0** | 2026-06-05 | GA — artifacts, projects, browser fetch, dual update channels |
 | **0.2.0-beta.9** | 2026-05-27 | Pulse improvements, What's new dialog, Ollama Cloud model split, OpenAI key fix |
@@ -702,4 +720,4 @@ Update this file when:
 
 Align with [USER-GUIDE.md](./USER-GUIDE.md), [SAGE-GUIDE.md](./SAGE-GUIDE.md), and [CHANGELOG.md](../CHANGELOG.md).
 
-*Persistent Sage 0.2.0-beta.9 — open beta. MIT License.*
+*Persistent Sage 2.1.0. MIT License.*

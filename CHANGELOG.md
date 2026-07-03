@@ -193,7 +193,7 @@ Post-beta polish: semantic memory, UI theme, settings clarity, and anchor extrac
 
 ## [0.2.0-beta.1] — 2026-05-19
 
-**Persistent Sage is ready for beta testing.** See [README.md](./README.md#beta-testing) for how to install from source, report issues, and contribute.
+**Persistent Sage is ready for beta testing.** See [README.md](./README.md#get-persistent-sage) for how to install, report issues, and contribute.
 
 ### Migrating from OpenClaw (recommended workflow)
 

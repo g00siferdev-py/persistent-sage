@@ -1,8 +1,8 @@
 # Persistent Sage Privacy Policy
 
-**Last updated:** May 26, 2026
+**Last updated:** July 3, 2026
 
-Persistent Sage is a **local-first** desktop AI companion for Windows (and other platforms when built from source). This policy explains what information the app handles, why, where it is stored, who may receive it, and what you can do about it.
+Persistent Sage is a **local-first** desktop AI companion for Windows (Microsoft Store and direct download) and other platforms when built from source. This policy explains what information the app handles, why, where it is stored, who may receive it, and what you can do about it.
 
 We wrote this in plain language to meet common app-store requirements, including the [Microsoft Store Policies](https://learn.microsoft.com/en-us/windows/apps/publish/store-policies) (Section 10.5 — Privacy).
 
@@ -14,6 +14,7 @@ We wrote this in plain language to meet common app-store requirements, including
 - By default, your data stays **on the device** where you run the app.
 - If you turn on a **cloud AI provider** or optional **network tools**, the content you send (messages, images, tool results) goes to those services under **their** privacy policies.
 - Persistent Sage **does not** sell your data, show ads, or use the Windows advertising ID for tracking.
+- Optional **donation links** (PayPal, Cash App) open in your **system browser** via third-party sites; Microsoft is not the fundraiser or sponsor of voluntary contributions.
 
 ---
 
@@ -30,14 +31,16 @@ The app **does** store and process the following **on your device** when you use
 | **Companion settings** | Personality names, tone, instructions | You configure them; saved in `personality.json` |
 | **App settings** | Provider choice, model names, feature toggles | You change them in Settings; saved in `settings.json` |
 | **API keys** | Keys for OpenAI, Anthropic, Gemini, xAI, Ollama Cloud, etc. | You paste them in Settings; encrypted at rest (see Security) |
+| **GitHub PAT** (Coding mode) | Token for HTTPS git | You save in Settings; encrypted like API keys |
 | **Image attachments** | Photos you attach for vision models | You choose files; saved under `attachments/` |
-| **Workspace files** (optional) | Files the agent reads or writes when tools are enabled | Created or accessed only if you enable workspace tools |
+| **Workspace / repo files** (optional) | Files the agent reads or writes when tools are enabled | Created or accessed only if you enable workspace or coding tools |
+| **Cache / playground temp** | Tool and playground runtime files | Written under `{data_dir}/cache/` and `{data_dir}/playground/` |
 | **Technical data in logs** | Error text on your machine | May appear in local terminal output; not sent to Persistent Sage |
 
 We **do not** intentionally collect:
 
 - Precise **location** (GPS), contacts, calendar, microphone, or camera data (except images **you** explicitly attach to a message)
-- **Payment** or billing information
+- **Payment** or billing information inside the app (donations use external PayPal/Cash App pages you open voluntarily)
 - **Windows advertising ID** or other advertising identifiers for ad targeting
 - **Analytics or telemetry** sent to a Persistent Sage-operated server (the app does not include third-party analytics SDKs for that purpose)
 
@@ -52,7 +55,7 @@ We use the information above only to **run the app for you**:
 | **Provide the service** | Save chats, memories, and settings so you can continue conversations and use companion personalities |
 | **Connect to AI providers** | Send your messages (and images, when used) to the provider **you** selected so the model can reply |
 | **Optional agent tools** | When enabled, contact websites or search services you allow (for example DuckDuckGo or URLs the model requests) |
-| **Software updates** | Check GitHub Releases for signed update metadata and installer files when you use in-app update checks |
+| **Software updates** | **Microsoft Store:** updates via the Store. **Direct download:** check GitHub Releases for signed update metadata when you use in-app update checks |
 | **Improve reliability** | Keep settings and encrypted keys on disk so the app works after restart |
 
 We **do not** use your data for **advertising**, **profiling for ads**, or **selling personal information** to data brokers.
@@ -68,8 +71,10 @@ Data leaves your device **only** when you configure features that need the netwo
 | **AI providers you choose** (OpenAI, Anthropic, Google Gemini, xAI, Ollama Cloud, or another endpoint) | Chat messages, system context, tool outputs, and image attachments for vision models | When you send a message while that provider is selected |
 | **Local Ollama** | Same content, but to your own machine (`http://127.0.0.1:11434` by default) | When you select local Ollama and your server is local |
 | **Websites and search** (optional tools) | Requests derived from tool use (for example search queries or page fetches) | When agent web or browser tools are enabled |
-| **GitHub Releases** | Standard HTTPS requests for update manifests and installers | When you check for updates |
+| **GitHub Releases** | Standard HTTPS requests for update manifests and installers | When you check for updates (direct-download installs) |
+| **Microsoft Store** | Standard Store update checks | When you check for updates (Store installs) |
 | **GitHub Issues** (browser) | Whatever **you** type in a public issue | Only when you open the feedback link; not automatic |
+| **PayPal / Cash App** (browser) | Whatever **you** submit on those sites | Only when you voluntarily open donation links; not automatic |
 
 **API keys** are decrypted **on your device** only long enough to call **your** configured provider. Persistent Sage does **not** send API keys to a Persistent Sage-operated server.
 
@@ -82,6 +87,7 @@ Data leaves your device **only** when you configure features that need the netwo
 | **AI providers** | Process prompts and return completions | Choose provider in Settings; use local/offline options if you prefer |
 | **Sites contacted by tools** | Respond to fetches or searches initiated by enabled tools | Disable agent tools in Settings |
 | **GitHub** | Hosts open-source releases and optional public issue reports | Do not open feedback links if you do not want public posts |
+| **PayPal / Cash App** | Process voluntary donations you initiate in the browser | Donations are optional; no in-app feature unlock |
 
 We **do not** share your data with third parties for **their independent advertising**.
 
@@ -100,6 +106,7 @@ Because data is stored **locally**, you control it directly:
 | **View or edit chats and memories** | Use the in-app chat and Memory Anchor features |
 | **Change provider or keys** | Settings → Provider |
 | **Turn off network tools** | Settings → Tools |
+| **Clear cache** | Settings → General → Cache |
 | **Delete memories** | Settings → General → **Wipe all memories** |
 | **Delete memories and reset settings** | Settings → General → **Factory reset** |
 | **Remove everything manually** | Quit the app, then delete your data folder (Settings → General → **Reveal data folder**) |
@@ -124,7 +131,7 @@ We take reasonable steps to protect data on your device:
 **Limitations you should know:**
 
 - The chat database (`nova_memory.sqlite`) and attachment files are **not encrypted** by Persistent Sage. Anyone with access to your user account or a copy of the data folder can read them. Use full-disk encryption (for example BitLocker) if you need stronger protection.
-- Persistent Sage is **open beta** software; security features may change. See `SECURITY.md` for how to report vulnerabilities.
+- Security features may evolve between releases. See `SECURITY.md` for how to report vulnerabilities.
 
 ---
 
@@ -172,6 +179,6 @@ If anything in this policy conflicts with how the app actually behaves, the **ap
 
 ---
 
-## Open beta notice
+## Important notice
 
-Persistent Sage is open beta software. Do not store highly sensitive, regulated, or high-risk information unless you accept the current local-storage model and optional cloud-provider risks described above.
+Persistent Sage stores conversation data **locally** on your device. Do not store highly sensitive, regulated, or high-risk information unless you accept the current local-storage model and optional cloud-provider risks described above.

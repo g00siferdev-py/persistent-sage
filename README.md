@@ -15,20 +15,20 @@
 
 ---
 
-## Beta testing
+## Get Persistent Sage
 
-Persistent Sage is in **open beta**. **Windows users** can install from **[GitHub Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** (pre-built installer). Developers and other platforms: build from source below.
+**Version 2.1.0** — Companion + Coding modes, Microsoft Store path, and GitHub direct-download installers.
 
 | Step | Action |
 |------|--------|
-| 1 | **Windows install** — **[Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** → download `Persistent.Sage_*_x64-setup.exe` → run installer. See **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)**. |
+| 1 | **Microsoft Store** — search for Persistent Sage (when listed), or use **[GitHub Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** → `Persistent.Sage_*_x64-setup.exe`. See **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)**. |
 | 2 | **Build from source** — `git clone https://github.com/g00siferdev-py/persistent-sage.git && cd persistent-sage` → **[docs/INSTALL.md](./docs/INSTALL.md)**. |
 | 3 | **Configure** — **Settings → Provider** (API key + model), then start a chat |
-| 4 | **Update** — after installing an updater-enabled build, use **Settings → General → Updates** |
-| 5 | **Report** — use **Settings → General → Open beta feedback** or [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues) with OS, app version, provider, steps to reproduce |
-| 6 | **Contribute** — **[CONTRIBUTING.md](./CONTRIBUTING.md)** |
+| 4 | **Update** — **Store installs:** Microsoft Store → Library → Get updates. **GitHub installs:** **Settings → General → Updates** |
+| 5 | **Report** — **Settings → General → Send feedback** or [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues) with OS, app version, provider, steps to reproduce |
+| 6 | **Support development** — optional donations via **[docs/SUPPORT.md](./docs/SUPPORT.md)**; code contributions via **[CONTRIBUTING.md](./CONTRIBUTING.md)** |
 
-**Maintainers:** how to publish installers → **[docs/PUBLISH.md](./docs/PUBLISH.md)**. CI builds → **[docs/BUILD-CI.md](./docs/BUILD-CI.md)**.
+**Maintainers:** publish installers → **[docs/PUBLISH.md](./docs/PUBLISH.md)**; MSIX → **[docs/MICROSOFT-STORE.md](./docs/MICROSOFT-STORE.md)**; CI → **[docs/BUILD-CI.md](./docs/BUILD-CI.md)**.
 
 ---
 
@@ -38,7 +38,8 @@ Persistent Sage is in **open beta**. **Windows users** can install from **[GitHu
 |-------|-------------|
 | **[docs/INSTALL.md](./docs/INSTALL.md)** | **Fresh install** — prerequisites, clone, build, first-run setup |
 | **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)** | **Windows users** — download from Releases, installer, portable USB |
-| **[docs/PUBLISH.md](./docs/PUBLISH.md)** | **Maintainers** — publish beta builds to GitHub Releases |
+| **[docs/PUBLISH.md](./docs/PUBLISH.md)** | **Maintainers** — publish builds to GitHub Releases |
+| **[docs/MICROSOFT-STORE.md](./docs/MICROSOFT-STORE.md)** | **Maintainers** — MSIX packaging for Microsoft Store |
 | **[docs/BUILD-CI.md](./docs/BUILD-CI.md)** | CI Windows builds (Actions) |
 | **[docs/CODING-MODE.md](./docs/CODING-MODE.md)** | **Coding mode (v2)** — repos, IDE, terminal, agent tools, GitHub PAT |
 | **[docs/USER-GUIDE.md](./docs/USER-GUIDE.md)** | Day-to-day usage — Companion + Coding, memory, settings, Pulse |
@@ -90,8 +91,9 @@ After you build and run Persistent Sage, **nothing is stored on a Persistent Sag
 - **Agent tools** (opt-in) — Web search, URL fetch, headless **`fetch_browser`**, HTTPS `http_request`, sandboxed workspace files, optional database query.
 - **Pulse** — Timer-driven check-ins that run as **normal chat turns** in your selected sidebar thread.
 - **Vision** — Attach images in the composer; multimodal payloads for supported models.
-- **In-app updates** — Tauri updater checks GitHub Releases for signed update packages.
-- **Open beta feedback** — Settings buttons open prefilled GitHub Issues without attaching private chats or logs.
+- **In-app updates** — Store updates via Microsoft Store; GitHub installs use Tauri updater on Releases.
+- **Send feedback** — Settings buttons open prefilled GitHub Issues without attaching private chats or logs.
+- **Optional donations** — PayPal / Cash App links in footer and onboarding (no feature unlock).
 - **Portable layouts** — `PERSISTENT_SAGE_DATA_DIR` and `PERSISTENT_SAGE_PORTABLE` (legacy `NOVA_*` also works) for custom or USB data locations.
 
 
@@ -171,7 +173,7 @@ More: **[docs/INSTALL.md § Troubleshooting](./docs/INSTALL.md#10-troubleshootin
 
 ## Project status
 
-Persistent Sage **2.0** ships Companion mode (artifacts, projects, Pulse, memory anchor, agent web tools) plus **Coding mode** (repo IDE, terminal, git, coding agent). Dual update paths: Microsoft Store + GitHub. See [PERSISTENT-SAGE-STATUS.md](./PERSISTENT-SAGE-STATUS.md) and [CHANGELOG.md](./CHANGELOG.md).
+Persistent Sage **2.1.0** ships Companion mode (memory anchor, Pulse, artifacts, agent tools) plus **Coding mode** (repo IDE, terminal, git, playground, notepad). **2.1** adds UX polish: timestamps, Help menu, token counter, light/dark theme, cache manager, unified context, and more. Dual update paths: Microsoft Store + GitHub. See [PERSISTENT-SAGE-STATUS.md](./PERSISTENT-SAGE-STATUS.md) and [CHANGELOG.md](./CHANGELOG.md).
 
 <img width="261" height="389" alt="IMG_2515" src="https://github.com/user-attachments/assets/7f7731f4-5c19-44b4-b86f-bc7c101df250" />
 
@@ -183,4 +185,3 @@ Persistent Sage **2.0** ships Companion mode (artifacts, projects, Pulse, memory
 ## License
 
 [MIT License](./LICENSE) — Copyright (c) 2026 [g00siferdev-py](https://github.com/g00siferdev-py)
-Updated on 6/13/26 at 9;45pm 

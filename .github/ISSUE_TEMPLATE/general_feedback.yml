@@ -1,17 +1,17 @@
-name: Beta tester report
-description: Share overall beta testing notes
-title: "[Beta feedback] "
-labels: ["beta-feedback"]
+name: General feedback
+description: Share overall product feedback
+title: "[Feedback] "
+labels: ["feedback"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for helping test Persistent Sage. Please keep reports public-safe and avoid private chat content.
+        Thank you for using Persistent Sage. Please keep reports public-safe and avoid private chat content.
   - type: input
     id: version
     attributes:
       label: Persistent Sage version
-      placeholder: "0.2.0-beta.9"
+      placeholder: "2.1.0"
     validations:
       required: true
   - type: input
@@ -26,7 +26,8 @@ body:
     attributes:
       label: Install type
       options:
-        - Windows installer
+        - Microsoft Store
+        - Windows installer (GitHub)
         - Portable zip
         - Built from source
         - Other
@@ -56,11 +57,12 @@ body:
     attributes:
       label: Areas tested
       options:
-        - label: Chat
+        - label: Companion chat
+        - label: Coding mode
         - label: Memory Anchor
         - label: Companion personalities
         - label: Provider setup/API keys
         - label: Image attachments
         - label: Agent tools
         - label: Pulse
-        - label: In-app updater
+        - label: In-app updater / Store updates

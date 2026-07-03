@@ -9,7 +9,7 @@ Use GitHub Actions when a local machine cannot complete a Windows build (low RAM
 3. Select **Read and write permissions** (needed to attach installers to Releases when you push a `v*` tag).
 4. Add updater signing secrets under **Settings → Secrets and variables → Actions**:
    - `TAURI_SIGNING_PRIVATE_KEY`
-   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (blank is okay for the current beta key)
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (blank is okay if the key has no password)
 5. Save.
 
 ## Run a build (no tag)
@@ -34,15 +34,15 @@ The zip contains:
 Create and push a version tag matching `package.json` / `tauri.conf.json`:
 
 ```bash
-git tag v0.2.0-beta.8
-git push origin v0.2.0-beta.8
+git tag v2.1.0
+git push origin v2.1.0
 ```
 
 Use the next current version.
 
 The same workflow runs, uploads artifacts, signs the NSIS installer for Tauri updater verification, generates `latest.json`, and creates a **draft release** on GitHub with the installer, signature, updater manifest, and portable zip attached. Publish the draft from **Releases** when ready.
 
-Updater-enabled beta releases should not be marked as GitHub prereleases. GitHub's `releases/latest` endpoint excludes prereleases, and the app uses that endpoint for `latest.json`.
+Updater-enabled releases should not be marked as GitHub prereleases. GitHub's `releases/latest` endpoint excludes prereleases, and the app uses that endpoint for `latest.json`.
 
 ## Local vs CI
 

@@ -200,7 +200,7 @@ Full reference: [CODING-MODE.md](./CODING-MODE.md).
 | **Pulse** | Enable timer, interval (minutes), instructions; runs in **sidebar-selected** thread |
 | **Updates** | **Store installs:** Microsoft Store (Library → Get updates). **GitHub installs:** Tauri updater checks GitHub Releases |
 | **Cache** | View temp cache size, open folder, clear cached tool/runtime files |
-| **Open beta feedback** | Open prefilled GitHub Issues for bugs, ideas, or general beta notes |
+| **Send feedback** | Open prefilled GitHub Issues for bugs, ideas, or general notes |
 | **Donate** | Footer link on every screen — optional PayPal / Cash App (see [SUPPORT.md](./SUPPORT.md)) |
 | **Data** | Reveal data folder, wipe memories, factory reset |
 | **About** | Backend version |
@@ -282,6 +282,7 @@ The feedback buttons open public GitHub Issues. Persistent Sage pre-fills safe a
 - [x] Coding mode — repos, editor, terminal, coding agent tools, playground, notepad
 - [x] Help menu, token counter, message timestamps, abort turn (2.1+)
 - [x] Cache manager, single-instance guard, ErrorBoundary (2.1+)
+- [x] Optional donations (PayPal / Cash App) — no feature unlock (2.1+)
 
 ---
 

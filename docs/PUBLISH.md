@@ -1,16 +1,17 @@
-# Publishing Persistent Sage for beta testers
+# Publishing Persistent Sage
 
-How to ship a **Windows installer** to users without asking them to compile from source.
+How to ship **Windows installers** and **Microsoft Store MSIX** packages to users without asking them to compile from source.
 
 ## What users can download today
 
 | Channel | Public? | Good for users? |
 |---------|---------|-----------------|
-| **GitHub Releases** (published) | **Yes** — anyone with the link | **Yes** — use this |
+| **Microsoft Store** | Yes (when listed) | **Yes** — recommended for most Windows users |
+| **GitHub Releases** (published) | **Yes** — anyone with the link | **Yes** — direct download + Tauri updater |
 | **Actions → Artifacts** | Public repo: yes, but hidden and **expires in 30 days** | Maintainers / smoke tests only |
 | **Clone + build from source** | Yes (public repo) | Developers only |
 
-**Artifacts from a manual workflow run are not a product download page.** Publish a **Release** when you want testers to install Persistent Sage.
+**Artifacts from a manual workflow run are not a product download page.** Publish a **Release** (or Store submission) when you want users to install Persistent Sage.
 
 ---
 
@@ -18,14 +19,14 @@ How to ship a **Windows installer** to users without asking them to compile from
 
 ### Option A — Tag + CI (automated draft)
 
-1. Confirm version in `package.json` and `src-tauri/tauri.conf.json` (e.g. `0.2.0-beta.8`).
+1. Confirm version in `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Package.appxmanifest` (e.g. `2.1.0` / `2.1.0.0`).
 2. Update **[CHANGELOG.md](../CHANGELOG.md)** for that version.
 3. Commit and push `main`.
 4. Create and push a tag (must start with `v`):
 
    ```bash
-   git tag v0.2.0-beta.8
-   git push origin v0.2.0-beta.8
+   git tag v2.1.0
+   git push origin v2.1.0
    ```
 
 5. Wait for **Actions → Build Windows** to finish (triggered by the tag).
@@ -36,13 +37,13 @@ How to ship a **Windows installer** to users without asking them to compile from
    - `latest.json` (Tauri updater manifest)
 7. Edit the release notes (copy from CHANGELOG), then click **Publish release**.
 
-**Share with testers:**
+**Share with users:**
 
 ```text
 https://github.com/g00siferdev-py/persistent-sage/releases/latest
 ```
 
-The Tauri updater uses GitHub's `releases/latest` endpoint, which excludes GitHub prereleases. Keep beta status in the version name and release notes, but publish updater-enabled beta builds as normal GitHub releases.
+The Tauri updater uses GitHub's `releases/latest` endpoint, which excludes GitHub prereleases. Publish updater-enabled releases as **normal** GitHub releases (not marked prerelease).
 
 **Repo settings (once):** **Settings → Actions → General → Workflow permissions → Read and write permissions** (so the workflow can attach files to the Release).
 
@@ -52,15 +53,24 @@ The Tauri updater uses GitHub's `releases/latest` endpoint, which excludes GitHu
 
 1. Download **Artifacts** from a successful **Build Windows** run.
 2. **Releases → Draft a new release**
-3. **Choose a tag:** create `v0.2.0-beta.8` on `main`.
-4. Title: `Persistent Sage 0.2.0-beta.8`
+3. **Choose a tag:** create `v2.1.0` on `main`.
+4. Title: `Persistent Sage 2.1.0`
 5. Leave **Set as a pre-release** unchecked for updater-enabled releases.
 6. Attach:
    - `Persistent.Sage_*_x64-setup.exe`
    - `Persistent.Sage_*_x64-setup.exe.sig`
-   - `PersistentSagePortable.zip` (optional, for USB testers)
-   - `latest.json` (required for in-app updates)
+   - `PersistentSagePortable.zip` (optional, for USB users)
+   - `latest.json` (required for in-app updates on GitHub installs)
 7. Paste release notes from CHANGELOG → **Publish release**.
+
+---
+
+## Microsoft Store (MSIX)
+
+Store distribution uses a separate CI workflow and config. See **[MICROSOFT-STORE.md](./MICROSOFT-STORE.md)**.
+
+- MSIX builds omit the Tauri updater; Store users update via Partner Center → Store rollout.
+- Submit `PersistentSage_<version>_x64.msix` from **Actions → Build MSIX** artifacts.
 
 ---
 
@@ -68,9 +78,9 @@ The Tauri updater uses GitHub's `releases/latest` endpoint, which excludes GitHu
 
 Send them:
 
-1. **Releases** link (above)
-2. Download **`Persistent.Sage_*_x64-setup.exe`**
-3. Run installer (SmartScreen: **More info → Run anyway** if unsigned)
+1. **Microsoft Store** listing (when available) **or** **Releases** link (above)
+2. Download **`Persistent.Sage_*_x64-setup.exe`** (GitHub path)
+3. Run installer (SmartScreen: **More info → Run anyway** if unsigned direct download)
 4. Open Persistent Sage from Start Menu; complete the **setup wizard**
 5. **[INSTALL-WINDOWS.md](./INSTALL-WINDOWS.md)** for portable USB and troubleshooting
 6. **[USER-GUIDE.md](./USER-GUIDE.md)** for daily use
@@ -78,7 +88,7 @@ Send them:
 
 **USB / portable:** download `PersistentSagePortable.zip`, unzip, run **`Start-Persistent-Sage-Portable.bat`** (not `persistent-sage.exe` alone).
 
-For feedback, ask testers to use **Settings → General → Open beta feedback** or the GitHub Issue templates. Feedback is public, so testers should not include private chats, Memory Anchors, API keys, or sensitive personal information.
+For feedback, ask users to use **Settings → General → Send feedback** or the GitHub Issue templates. Feedback is public, so users should not include private chats, Memory Anchors, API keys, or sensitive personal information.
 
 ---
 
@@ -86,48 +96,28 @@ For feedback, ask testers to use **Settings → General → Open beta feedback**
 
 After publishing:
 
-- [ ] **[README.md](../README.md)** — beta section links to Releases (not only source build)
+- [ ] **[README.md](../README.md)** — install links point to Store and/or Releases
 - [ ] **Release notes** — match CHANGELOG for that version
-- [ ] **Issue templates / beta callout** — ask for OS, Persistent Sage version, provider, and public-safe details
+- [ ] **`docs/releases/vX.Y.Z.md`** — user-facing highlights for major releases
+- [ ] **Issue templates** — ask for OS, Persistent Sage version, provider, install source, and public-safe details
 
 ---
 
 ## Future releases
 
-1. Bump version in `package.json`, `src-tauri/tauri.conf.json`, `Cargo.toml` / lock if needed.
+1. Bump version in `package.json`, `src-tauri/tauri.conf.json`, `Cargo.toml`, `Package.appxmanifest`.
 2. CHANGELOG entry.
-3. Push `main`, then tag `v0.2.0-beta.8` (or next version).
+3. Push `main`, then tag `v2.1.1` (or next version).
 4. Publish the draft Release when CI completes.
-
-To rebuild without a new tag: **Actions → Build Windows → Run workflow**, download artifact, attach to a **new** Release or replace assets on an unpublished draft (avoid replacing files on a release users already downloaded without noting it in release notes).
-
----
-
-## In-app updater
-
-Persistent Sage uses the Tauri updater. This is separate from Windows code signing: update artifacts are verified with a Tauri updater key, while SmartScreen warnings still require a future Windows signing certificate.
-
-One-time maintainer setup:
-
-1. Keep the generated private key file secret: `persistent-sage-updater.key` (ignored by git).
-2. In GitHub repo settings, add these Actions secrets:
-   - `TAURI_SIGNING_PRIVATE_KEY` — contents of `persistent-sage-updater.key`
-   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — blank is okay for the current no-password beta key
-3. Confirm the public key in `src-tauri/tauri.conf.json` matches the key pair.
-
-On every tag build, CI signs the NSIS installer, generates `dist/latest.json`, and attaches both to the GitHub Release. Published non-prerelease releases make this endpoint available to installed apps:
-
-```text
-https://github.com/g00siferdev-py/persistent-sage/releases/latest/download/latest.json
-```
-
-Users can then run **Settings → General → Updates → Check for updates**.
-
-If update checks fail with "Could not fetch a valid release json from the remote", confirm the latest release is published, has `latest.json` attached, and is not marked as a GitHub prerelease.
+5. For Store: upload new MSIX via Partner Center after **Build MSIX** succeeds.
 
 ---
 
-## Not covered yet
+## Signing keys (Tauri updater)
 
-- **macOS / Linux** pre-built installers (no CI workflow yet — source build only)
-- **Code signing** (SmartScreen warnings on Windows until you sign the exe)
+Updater packages are signed with the project's Tauri signing key. GitHub Actions secrets:
+
+- `TAURI_SIGNING_PRIVATE_KEY`
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — blank is okay if the key has no password
+
+See **[SIGNING-AND-UPDATES.md](./SIGNING-AND-UPDATES.md)** for Windows Authenticode status (separate from updater signatures).

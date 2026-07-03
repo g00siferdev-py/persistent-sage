@@ -1,6 +1,6 @@
-# Installing Persistent Sage on Windows (beta)
+# Installing Persistent Sage on Windows
 
-Download the installer from **[GitHub Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** (`Persistent.Sage_*_x64-setup.exe`). No Node or Rust required.
+Download the installer from the **Microsoft Store** (when listed) or **[GitHub Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** (`Persistent.Sage_*_x64-setup.exe`). No Node or Rust required for pre-built installs.
 
 Two supported ways to run Persistent Sage: **desktop install** (recommended) and **portable** (USB / flash drive).
 
@@ -8,12 +8,20 @@ Two supported ways to run Persistent Sage: **desktop install** (recommended) and
 
 ## Option A — Windows installer (recommended)
 
-### Install from Releases
+### Install from Microsoft Store
 
-1. Open **[Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** and pick the latest beta (e.g. `v0.2.0-beta.8`).
+1. Open the Microsoft Store and search for **Persistent Sage**, or use the listing URL from the project README when published.
+2. Click **Get** / **Install**.
+3. Open **Persistent Sage** from the Start Menu and complete the **setup wizard**.
+4. Updates: Store app → **Library** → **Get updates** (or **Settings → General → Updates** in Persistent Sage).
+
+### Install from GitHub Releases
+
+1. Open **[Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** and pick the latest (e.g. `v2.1.0`).
 2. Download **`Persistent.Sage_*_x64-setup.exe`**.
-3. Run the installer. If **SmartScreen** warns (unsigned beta): **More info → Run anyway**.
+3. Run the installer. If **SmartScreen** warns (unsigned direct-download build): **More info → Run anyway**.
 4. Open **Persistent Sage** from the Start Menu and complete the **setup wizard**.
+5. Updates: **Settings → General → Updates → Check for updates** (Tauri updater).
 
 The installer will:
 
@@ -58,9 +66,10 @@ Creates `dist\PersistentSagePortable\` with `persistent-sage.exe`, `Start-Persis
 | `python` / `python3` not found | Use current `main` — `build:windows-installer` no longer needs Python. Run `git pull` then `npm install`. |
 | `npm run tauri build` but no `bundle\` folder | Install **NSIS** and re-run. Check the log for `bundling` / `error`. |
 | App won't start | Install [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) |
-| SmartScreen warning | Unsigned beta build → **More info → Run anyway** |
+| SmartScreen warning (GitHub installer) | Unsigned direct-download build → **More info → Run anyway**. Store MSIX is Microsoft-signed. |
 | Data not on USB | Use **Start Persistent Sage (Portable).bat**, not `persistent-sage.exe` only |
 | Reset setup wizard | Settings → General → **Show setup wizard again** (if enabled) or delete `onboarding_completed` from `settings.json` |
+| Donation links don't open | Update to 2.1.0+ (opens system browser via Tauri shell) |
 
 ---
 

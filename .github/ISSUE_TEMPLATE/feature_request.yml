@@ -1,7 +1,7 @@
 name: Feedback or idea
 description: Suggest an improvement for Persistent Sage
 title: "[Idea] "
-labels: ["enhancement", "beta-feedback"]
+labels: ["enhancement", "feedback"]
 body:
   - type: markdown
     attributes:
@@ -40,7 +40,7 @@ body:
     id: version
     attributes:
       label: Persistent Sage version
-      placeholder: "0.2.0-beta.9"
+      placeholder: "2.1.0"
   - type: textarea
     id: context
     attributes:

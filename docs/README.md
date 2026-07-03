@@ -1,6 +1,6 @@
 # Persistent Sage documentation
 
-Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rust). Everything in this folder is written for beta testers, contributors, and anyone performing a **fresh install** from source.
+Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rust). Everything in this folder is written for users, contributors, and anyone performing a **fresh install** from source.
 
 **Repository:** [g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage) · **Version:** 2.1.0
 
@@ -54,7 +54,7 @@ Planning docs for the **Persistent Sage Android** application. Start at [**mobil
 
 After you build and run Persistent Sage, **all conversation data lives on your machine** under the application data directory. **API keys** are encrypted at rest. The **SQLite database** (`nova_memory.sqlite`) that stores chats, anchors, and metadata is **not encrypted**—see [PRIVACY.md](../PRIVACY.md) and [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md) for details and mitigations.
 
-## Support matrix (open beta)
+## System requirements
 
 | Requirement | Version / notes |
 |-------------|-----------------|
@@ -67,7 +67,7 @@ After you build and run Persistent Sage, **all conversation data lives on your m
 
 ## Feedback
 
-Use **Settings → General → Open beta feedback** in the app, or open [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues). Feedback reports are public, so do not include API keys, private chats, Memory Anchors, or sensitive personal information.
+Use **Settings → General → Send feedback** in the app, or open [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues). Feedback reports are public, so do not include API keys, private chats, Memory Anchors, or sensitive personal information.
 
 ---
 

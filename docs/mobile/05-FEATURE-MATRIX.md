@@ -164,7 +164,7 @@ Feature-by-feature analysis for Persistent Sage Android. Use this matrix when wr
 | Temperature / max tokens | ✅ | ✅ Ship | |
 | Data directory reveal | ✅ | 🔧 Adapt | Show path; no "reveal in Explorer" |
 | Factory reset / wipe | ✅ | ✅ Ship | |
-| Open beta feedback | ✅ | ✅ Ship | Opens browser to GitHub Issues |
+| Send feedback | ✅ | ✅ Ship | Opens browser to GitHub Issues |
 
 ---
 

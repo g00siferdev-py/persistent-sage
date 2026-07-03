@@ -266,14 +266,14 @@ xAI uses an OpenAI-compatible chat API path. If it fails:
 
 ## Windows Installer and Portable Builds
 
-Windows users should download from GitHub Releases.
+Windows users can install from the **Microsoft Store** (when listed) or **GitHub Releases**.
 
-Installer:
+Installer (GitHub):
 
 - `Persistent.Sage_*_x64-setup.exe`
 - Adds Start Menu shortcuts.
 - Stores data in AppData by default.
-- May show SmartScreen because beta builds are unsigned.
+- Direct-download builds may show SmartScreen because NSIS installers are not Authenticode-signed yet. Store MSIX is Microsoft-signed.
 
 Portable:
 
@@ -283,7 +283,7 @@ Portable:
 
 ## GitHub Releases and Updates
 
-Beta builds for **direct download** (NSIS installer, portable zip) are published through GitHub Releases. GitHub Actions builds the Windows NSIS installer and portable zip. Manual workflow artifacts expire and are not the public download page; Releases are the correct distribution channel.
+**Direct-download** builds (NSIS installer, portable zip) are published through GitHub Releases. GitHub Actions builds the Windows NSIS installer and portable zip. Manual workflow artifacts expire and are not the public download page; Releases are the correct distribution channel.
 
 **Microsoft Store installs** do not use GitHub for app updates. Store users should open the Microsoft Store → **Library** → **Get updates**. Settings → General shows Store guidance instead of **Check for updates** when Persistent Sage was installed from the Store.
 
@@ -294,7 +294,7 @@ For maintainers (GitHub channel only):
 3. Push main.
 4. Tag `vX.Y.Z`.
 5. Let GitHub Actions build.
-6. Publish the draft release. For updater-enabled beta builds, do not mark the GitHub release as a prerelease because GitHub excludes prereleases from the `/releases/latest` updater endpoint.
+6. Publish the draft release. For updater-enabled GitHub releases, do not mark the GitHub release as a prerelease because GitHub excludes prereleases from the `/releases/latest` updater endpoint.
 
 Persistent Sage can use the Tauri updater once a release includes `latest.json` and signed updater artifacts. This is separate from Windows Authenticode signing: updater signatures verify the package came from the maintainer, while Windows SmartScreen trust still requires future code signing.
 
@@ -325,7 +325,7 @@ Settings includes memory wipe and factory reset. Warn the user before destructiv
 
 ### "Why does Windows warn me?"
 
-The beta installer is unsigned. SmartScreen may warn. The user can click More info → Run anyway. Code signing may be added later.
+Direct-download NSIS installers may be unsigned. SmartScreen may warn. The user can click More info → Run anyway. Microsoft Store MSIX is signed through Partner Center. Authenticode signing for GitHub installers may be added later.
 
 ### "Why is Sage not remembering?"
 

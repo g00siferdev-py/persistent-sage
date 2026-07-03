@@ -525,7 +525,7 @@ type PendingUpdate = {
   downloadAndInstall: (callback?: (event: unknown) => void) => Promise<void>;
 };
 
-type FeedbackKind = "bug" | "idea" | "beta";
+type FeedbackKind = "bug" | "idea" | "feedback";
 
 function modelForProvider(settings: SettingsView | null): string {
   if (!settings) return "unknown";
@@ -553,9 +553,9 @@ function feedbackIssueUrl(kind: FeedbackKind, settings: SettingsView | null, bac
   const model = modelForProvider(settings);
   const installType = dataPaths?.novaPortableEnv ? "portable" : "desktop/default";
   const titlePrefix =
-    kind === "bug" ? "[Bug]" : kind === "idea" ? "[Idea]" : "[Beta feedback]";
+    kind === "bug" ? "[Bug]" : kind === "idea" ? "[Idea]" : "[Feedback]";
   const labels =
-    kind === "bug" ? "bug,beta-feedback" : kind === "idea" ? "enhancement,beta-feedback" : "beta-feedback";
+    kind === "bug" ? "bug,feedback" : kind === "idea" ? "enhancement,feedback" : "feedback";
   const body = [
     "## Summary",
     "",
@@ -563,7 +563,7 @@ function feedbackIssueUrl(kind: FeedbackKind, settings: SettingsView | null, bac
       ? "What went wrong?"
       : kind === "idea"
         ? "What would make Persistent Sage better?"
-        : "How did the beta feel? What worked well or felt confusing?",
+        : "What worked well? What felt confusing or missing?",
     "",
     "## Environment",
     "",
@@ -2326,7 +2326,7 @@ export function SettingsPanel({
           </SettingsSection>
 
           <SettingsSection
-            title="Open beta feedback"
+            title="Send feedback"
             description="Send public bug reports and ideas to the Persistent Sage GitHub issue tracker."
           >
             <div className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-800/70 bg-slate-50 dark:bg-slate-950/35 p-3">
@@ -2353,11 +2353,11 @@ export function SettingsPanel({
                 </button>
                 <button
                   type="button"
-                  onClick={() => void openFeedback("beta")}
+                  onClick={() => void openFeedback("feedback")}
                   className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-300/70 dark:border-emerald-800/70 bg-emerald-50 dark:bg-emerald-950/25 px-3 py-2 text-xs font-semibold text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-950/40"
                 >
                   <ExternalLink className="size-3.5" aria-hidden />
-                  Beta feedback
+                  General feedback
                 </button>
               </div>
             </div>

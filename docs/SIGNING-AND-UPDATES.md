@@ -2,20 +2,24 @@
 
 Persistent Sage uses two separate trust mechanisms:
 
-- **Tauri updater signatures** verify that an in-app update package was produced by the project maintainer.
-- **Windows code signing** reduces operating-system warnings and identifies the publisher to Windows.
+- **Tauri updater signatures** verify that an in-app update package was produced by the project maintainer (GitHub Releases installs only).
+- **Windows code signing** reduces operating-system warnings and identifies the publisher to Windows (direct-download NSIS installers).
 
-The updater signature is already configured for beta builds. Windows code signing is not yet active.
+The updater signature is configured for GitHub Releases builds. Windows Authenticode signing for NSIS installers is not yet active. **Microsoft Store MSIX** packages are signed through Partner Center certification.
 
-## Current Beta Status
+## Current status
 
-Persistent Sage beta installers may still show Windows SmartScreen or unknown-publisher warnings. This is expected until the project has Windows code signing.
+| Install type | Updates | Signing notes |
+|--------------|---------|---------------|
+| **Microsoft Store** | Store → Library → Get updates | Microsoft handles Store distribution signing |
+| **GitHub NSIS / portable** | Settings → General → Updates (Tauri updater) | May show SmartScreen until Authenticode signing is available |
 
-Only download installers from the official release page:
+Only download installers from official sources:
 
-https://github.com/g00siferdev-py/persistent-sage/releases
+- GitHub Releases: https://github.com/g00siferdev-py/persistent-sage/releases  
+- Microsoft Store listing (when published)
 
-## In-App Updates (direct download only)
+## In-App Updates (GitHub installs only)
 
 The Tauri updater applies to **GitHub Releases installs** (NSIS installer and portable zip). It checks:
 
@@ -25,7 +29,7 @@ https://github.com/g00siferdev-py/persistent-sage/releases/latest/download/lates
 
 **Microsoft Store installs do not use this path.** Store builds omit the Tauri updater plugin and Settings → General → Updates directs users to the Microsoft Store (**Library → Get updates**). Submit new `.msix` packages through Partner Center to ship Store updates.
 
-For GitHub `latest.json` to work, beta releases must be published as normal GitHub releases, not GitHub prereleases. The version number and release notes still identify the build as beta, for example `0.2.0-beta.8`.
+For GitHub `latest.json` to work, releases must be published as **normal** GitHub releases, not GitHub prereleases.
 
 Each updater-enabled release must include:
 
@@ -35,7 +39,7 @@ Each updater-enabled release must include:
 
 ## SignPath Readiness
 
-Persistent Sage is preparing for SignPath Foundation / SignPath.io compatibility. Future official Windows builds may be signed through SignPath Foundation / SignPath.io if the project is accepted.
+Persistent Sage is preparing for SignPath Foundation / SignPath.io compatibility. Future official Windows **direct-download** builds may be signed through SignPath Foundation / SignPath.io if the project is accepted.
 
 Current readiness items:
 
@@ -48,7 +52,3 @@ Current readiness items:
 - Public release notes and installer assets: GitHub Releases
 
 Do not claim a build is SignPath-signed until the release artifact is actually signed and the release notes identify it as such.
-
-## Microsoft Store
-
-Store distribution uses MSIX packages built on `main` (see [MICROSOFT-STORE.md](./MICROSOFT-STORE.md)). Store users update through Partner Center submissions—not the GitHub Tauri updater. GitHub Releases remain the update path for direct-download (NSIS/portable) installs.

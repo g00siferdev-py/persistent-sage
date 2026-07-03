@@ -82,7 +82,7 @@ Upload the generated `.msix` package in Partner Center instead of using the EXE/
 
 Keep the Store listing:
 
-- Free open beta.
+- Free app (optional voluntary donations via third-party links; no digital unlock).
 - Category: Productivity.
 - Secondary category: Utilities & tools.
 - Generative AI declaration: yes.
@@ -114,6 +114,6 @@ MSIX builds use `npm run msix:pack` with `tauri.store.conf.json` and the `store`
 
 ## Notes
 
-- The normal GitHub Releases workflow still builds NSIS installers for non-Store beta users.
+- The GitHub Releases workflow still builds NSIS installers for direct-download users (alongside Store MSIX).
 - Do not submit unsigned EXE/MSI packages to the Store unless code signing is added.
 - If MSIX certification reports `runFullTrust` concerns, explain that Persistent Sage is a Tauri desktop application that runs as a full-trust packaged Win32 app and stores data locally.

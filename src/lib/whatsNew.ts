@@ -14,6 +14,7 @@ const RELEASES: Record<string, WhatsNewContent> = {
       "Coding panels — notepad, code playground, Agent Action Stream, Event Stream Debugger, Settings in coding mode.",
       "Light/dark theme support for artifacts; unified conversation when switching Companion ↔ Coding.",
       "Cache manager in Settings; single-instance guard; ErrorBoundary for recoverable UI errors.",
+      "Optional donations (PayPal / Cash App) in footer and onboarding — voluntary, no feature unlock.",
       "Version badge shows v2.1.0; Windows playground bash uses Git Bash instead of the WSL launcher.",
     ],
   },
