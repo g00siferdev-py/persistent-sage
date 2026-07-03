@@ -22,10 +22,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Version 2.1.0** — `package.json`, `Cargo.toml`, `tauri.conf.json`, MSIX manifest (`2.1.0.0`), header version badge.
 - **Settings cache section** — aligned frontend with backend `cache_info` fields.
 - **Playground bash on Windows** — prefers Git Bash / MSYS over WSL `bash.exe` launcher.
+- **Documentation** — removed open-beta wording; feedback links and issue templates updated for 2.1.0 general availability.
+- **Companion sidebar** — collapsible New chat, Conversations, and Memory Anchor sections with persisted expand/collapse state.
 
 ### Fixed
 
 - **Settings panel crash** — cache `fileCount` field mismatch caused `toLocaleString` on undefined when opening Settings from Companion mode.
+- **Open data folder** — resolves the real user data path on Store installs (LocalCache vs Roaming); strips `\\?\` prefix in Settings; avoids opening Explorer twice.
+- **Memory Anchor panel** — Recent anchors list stays visible; intro text moved into collapsible “About Memory Anchor”.
 
 ---
 
