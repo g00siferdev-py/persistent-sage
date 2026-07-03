@@ -2,8 +2,8 @@
 
 **Purpose:** This document is the canonical knowledge base for external agents that market, promote, and support Persistent Sage. Use it to answer product questions accurately, write marketing copy, troubleshoot user issues, and explain privacy tradeoffs in plain language.
 
-**Product version:** 2.0.0  
-**Last updated:** June 13, 2026  
+**Product version:** 2.1.0  
+**Last updated:** July 3, 2026  
 **Repository:** https://github.com/g00siferdev-py/persistent-sage  
 **Maintainer:** g00siferdev-py / g00sifer Development Lab  
 **License:** MIT  
@@ -647,6 +647,7 @@ Open beta for Windows: github.com/g00siferdev-py/persistent-sage
 
 | Version | Date | Notable changes |
 |---------|------|-----------------|
+| **2.1.0** | 2026-07-03 | UX polish — timestamps, playground, notepad, debug panels, Help, cache, light/dark, unified context |
 | **2.0.0** | 2026-06-13 | Coding mode — repos, IDE, terminal, coding agent tools, GitHub PAT, companion link |
 | **1.0.0** | 2026-06-05 | GA — artifacts, projects, browser fetch, dual update channels |
 | **0.2.0-beta.9** | 2026-05-27 | Pulse improvements, What's new dialog, Ollama Cloud model split, OpenAI key fix |

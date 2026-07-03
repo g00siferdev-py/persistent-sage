@@ -11,7 +11,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
 **Repository:** [github.com/g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage)  
-**Status:** **Persistent Sage 2.0** — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues)
+**Status:** **Persistent Sage 2.1** — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues)
 
 ---
 
@@ -45,6 +45,7 @@ Persistent Sage is in **open beta**. **Windows users** can install from **[GitHu
 | **[docs/PRODUCT-KNOWLEDGE-BASE.md](./docs/PRODUCT-KNOWLEDGE-BASE.md)** | Full product KB for marketing & support agents |
 | **[docs/DATA-AND-PRIVACY.md](./docs/DATA-AND-PRIVACY.md)** | What is stored locally; **API keys encrypted**, **database not encrypted** |
 | **[PRIVACY.md](./PRIVACY.md)** | Public privacy policy |
+| **[docs/SUPPORT.md](./docs/SUPPORT.md)** | **Support development** — optional donations, issues, contributing |
 | **[docs/SIGNING-AND-UPDATES.md](./docs/SIGNING-AND-UPDATES.md)** | Updater behavior and SignPath readiness |
 | **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** | Technical overview for developers |
 | **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)** | Dev workflow and pre-push checklist |
@@ -81,7 +82,8 @@ After you build and run Persistent Sage, **nothing is stored on a Persistent Sag
 
 ## Key features
 
-- **Coding mode (v2)** — Git repos under `workspace/repos/`, file tree, multi-tab editor, integrated terminal, and repo-scoped coding agent (grep, patch, shell, git). Switch with **Companion | Coding** in the header. See **[docs/CODING-MODE.md](./docs/CODING-MODE.md)**.
+- **Coding mode (v2)** — Git repos, editor, terminal, coding agent, **playground**, **notepad**, Agent Action Stream. See **[docs/CODING-MODE.md](./docs/CODING-MODE.md)**.
+- **UX (2.1)** — Message timestamps, Help menu, token counter, light/dark theme, cache manager, abort turn, unified Companion↔Coding context.
 - **Memory Anchor** — SQLite conversations, messages, anchors, projects, and preferences; hybrid FTS recall and startup briefings.
 - **Companion profiles** — Multiple personalities with live system-prompt preview; Persistent Sage JSON and OpenClaw markdown import; optional agent self-edit of `personality.json`.
 - **Providers** — OpenAI, Google Gemini, xAI Grok, Ollama (local), Ollama Cloud, Anthropic, or offline placeholder.

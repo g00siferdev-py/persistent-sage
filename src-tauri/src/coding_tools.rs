@@ -11,6 +11,7 @@ use tokio::process::Command;
 
 use crate::agent_tools::{assert_path_in_workspace, resolve_workspace_subpath, tool_err};
 use crate::coding::CodingTurnContext;
+use crate::playground::{PlaygroundRunRequest, PlaygroundRunResult};
 use crate::provider::{ProviderError, ToolDefinition};
 
 const GREP_MAX_MATCHES: usize = 80;
@@ -755,6 +756,15 @@ pub async fn run_coding_tool(
     let v: Value = serde_json::from_str(arguments_json)
         .map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
 
+    if name == "coding_notes_list" {
+        let list = crate::coding_notes::list_notes(data_directory).map_err(tool_err)?;
+        return Ok(serde_json::to_string_pretty(&list).unwrap_or_else(|_| "[]".into()));
+    }
+    if name == "coding_notes_read" {
+        let note_name = v.get("name").and_then(|x| x.as_str()).map(str::to_string);
+        return crate::coding_notes::read_note(data_directory, note_name).map_err(tool_err);
+    }
+
     if name == "coding_repo_create" {
         let project_name = v["name"].as_str().unwrap_or("").trim();
         if project_name.is_empty() {
@@ -888,8 +898,84 @@ pub async fn run_coding_tool(
             crate::git_auth::save_github_pat(settings, token)?;
             Ok("GitHub PAT saved (encrypted locally).".into())
         }
+        "coding_playground_run" => {
+            let req = PlaygroundRunRequest {
+                language: v["language"].as_str().unwrap_or("").trim().to_string(),
+                code: v["code"].as_str().unwrap_or("").to_string(),
+                args: v["args"]
+                    .as_array()
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                stdin: v["stdin"].as_str().unwrap_or("").to_string(),
+                timeout_secs: v["timeoutSecs"].as_u64().unwrap_or(30),
+                allow_network: v["allowNetwork"].as_bool().unwrap_or(false),
+            };
+            let res: PlaygroundRunResult =
+                crate::playground::run_playground_request(data_directory, req)
+                    .await
+                    .map_err(|e| tool_err(format!("playground run failed: {e}")))?;
+            serde_json::to_string_pretty(&res)
+                .map_err(|e| tool_err(format!("serialize playground result: {e}")))
+        }
         _ => Err(tool_err(format!("unknown coding tool: {name}"))),
     }
+}
+
+pub fn playground_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "coding_playground_run".into(),
+        description: Some(
+            "Run an ad-hoc code snippet in a sandboxed temp directory outside the active repo. \
+             Supports Python, Node.js, TypeScript, Bash, PowerShell, and Rust."
+                .into(),
+        ),
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "language": { "type": "string", "description": "Language: python, javascript, typescript, bash, powershell, rust" },
+                "code": { "type": "string", "description": "Code snippet to execute" },
+                "args": { "type": "array", "items": { "type": "string" }, "description": "Command-line arguments (optional)" },
+                "stdin": { "type": "string", "description": "Text piped to stdin (optional)" },
+                "timeoutSecs": { "type": "integer", "description": "Timeout in seconds (default 30, max 300)" },
+                "allowNetwork": { "type": "boolean", "description": "Allow network access (default false)" }
+            },
+            "required": ["language", "code"]
+        }),
+    }
+}
+
+pub fn coding_notes_tool_definitions() -> Vec<ToolDefinition> {
+    vec![
+        ToolDefinition {
+            name: "coding_notes_list".into(),
+            description: Some(
+                "List scratch note files from the user's coding notepad (local .txt files, default Notes.txt)."
+                    .into(),
+            ),
+            parameters: json!({
+                "type": "object",
+                "properties": {},
+                "required": []
+            }),
+        },
+        ToolDefinition {
+            name: "coding_notes_read".into(),
+            description: Some(
+                "Read a scratch note from the coding notepad. Defaults to Notes.txt when name is omitted.".into(),
+            ),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Note file name, e.g. Notes.txt" }
+                },
+                "required": []
+            }),
+        },
+    ]
 }
 
 pub fn is_coding_tool_name(name: &str) -> bool {
@@ -907,6 +993,9 @@ pub fn is_coding_tool_name(name: &str) -> bool {
             | "coding_git_clone"
             | "coding_github_save_pat"
             | "coding_repo_create"
+            | "coding_playground_run"
+            | "coding_notes_list"
+            | "coding_notes_read"
     )
 }
 

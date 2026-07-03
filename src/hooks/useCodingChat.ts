@@ -3,7 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { ChatMessage, ChatSendResult, StoredMessage } from "@/types/chat";
 import { storedToChatMessage } from "@/types/chat";
-import { memoryGetRecent } from "@/hooks/useNovaMemory";
+import { memoryGetRecent, memorySetConversationCodingMeta } from "@/hooks/useNovaMemory";
+import { getStoredTheme } from "@/lib/theme";
 import {
   applyToolStreamEvent,
   type ChatToolStreamEvent,
@@ -28,16 +29,49 @@ type ActiveRepo = {
   pathRel: string;
 };
 
-export function useCodingChat(activeRepo: ActiveRepo | null) {
-  const [conversationId, setConversationId] = useState<string | null>(null);
+type UseCodingChatOptions = {
+  activeRepo: ActiveRepo | null;
+  externalConversationId?: string | null;
+  onConversationIdChange?: (id: string | null) => void;
+};
+
+export function useCodingChat({
+  activeRepo,
+  externalConversationId,
+  onConversationIdChange,
+}: UseCodingChatOptions) {
+  const [conversationId, setInternalConversationId] = useState<string | null>(
+    externalConversationId ?? null,
+  );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [streamAssistant, setStreamAssistant] = useState<CodingStreamState>(null);
+  const [abortedTurn, setAbortedTurn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const sendingRef = useRef(false);
   const loadSeq = useRef(0);
+
+  useEffect(() => {
+    setInternalConversationId(externalConversationId ?? null);
+  }, [externalConversationId]);
+
+  const setConversationId = useCallback(
+    (id: string | null) => {
+      setInternalConversationId(id);
+      onConversationIdChange?.(id);
+    },
+    [onConversationIdChange],
+  );
+
+  const setConversationIdInternal = useCallback((id: string | null) => {
+    setInternalConversationId(id);
+  }, []);
+
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   const eventConversationMatches = useCallback((id: string) => {
     const active = conversationIdRef.current;
@@ -45,31 +79,30 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
     return id === active;
   }, []);
 
-  useEffect(() => {
-    conversationIdRef.current = conversationId;
-  }, [conversationId]);
-
-  const loadMessages = useCallback(async (convId: string, options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? false;
-    const seq = ++loadSeq.current;
-    if (!silent) setLoading(true);
-    try {
-      const recent = await memoryGetRecent(convId, 200);
-      if (seq !== loadSeq.current) return;
-      setMessages(recent.map(storedToChatMessage));
-      setError(null);
-    } catch (e) {
-      if (seq !== loadSeq.current) return;
-      setError(e instanceof Error ? e.message : String(e));
-      if (!silent) setMessages([]);
-    } finally {
-      if (seq === loadSeq.current && !silent) setLoading(false);
-    }
-  }, []);
+  const loadMessages = useCallback(
+    async (convId: string, options?: { silent?: boolean }) => {
+      const silent = options?.silent ?? false;
+      const seq = ++loadSeq.current;
+      if (!silent) setLoading(true);
+      try {
+        const recent = await memoryGetRecent(convId, 200);
+        if (seq !== loadSeq.current) return;
+        setMessages(recent.map(storedToChatMessage));
+        setError(null);
+      } catch (e) {
+        if (seq !== loadSeq.current) return;
+        setError(e instanceof Error ? e.message : String(e));
+        if (!silent) setMessages([]);
+      } finally {
+        if (seq === loadSeq.current && !silent) setLoading(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!activeRepo) {
-      setConversationId(null);
+      setConversationIdInternal(externalConversationId ?? null);
       setMessages([]);
       setError(null);
       return;
@@ -79,12 +112,33 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
       setLoading(true);
       setError(null);
       try {
-        const convId = await invoke<string>("memory_get_or_create_coding_conversation", {
-          repoId: activeRepo.id,
-          repoName: activeRepo.name,
-        });
+        let convId: string | null = null;
+        let fellBack = false;
+        if (externalConversationId) {
+          try {
+            await memorySetConversationCodingMeta(externalConversationId, activeRepo.id);
+            convId = externalConversationId;
+          } catch (metaErr) {
+            const msg = metaErr instanceof Error ? metaErr.message : String(metaErr);
+            console.warn(
+              "[useCodingChat] stored conversation id is not valid for this coding personality/repo; falling back:",
+              msg,
+            );
+            fellBack = true;
+          }
+        }
+        if (!convId) {
+          convId = await invoke<string>("memory_get_or_create_coding_conversation", {
+            repoId: activeRepo.id,
+            repoName: activeRepo.name,
+          });
+          await memorySetConversationCodingMeta(convId, activeRepo.id);
+        }
         if (cancelled) return;
         setConversationId(convId);
+        if (fellBack) {
+          setConversationId(convId);
+        }
         const recent = await invoke<StoredMessage[]>("memory_get_recent", {
           conversationId: convId,
           limit: 200,
@@ -94,7 +148,7 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
-        setConversationId(null);
+        setConversationIdInternal(null);
         setMessages([]);
       } finally {
         if (!cancelled) setLoading(false);
@@ -103,7 +157,13 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
     return () => {
       cancelled = true;
     };
-  }, [activeRepo?.id, activeRepo?.name]);
+  }, [
+    activeRepo?.id,
+    activeRepo?.name,
+    externalConversationId,
+    setConversationId,
+    setConversationIdInternal,
+  ]);
 
   useEffect(() => {
     let unlistenStart: (() => void) | undefined;
@@ -178,6 +238,15 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
     };
   }, [eventConversationMatches]);
 
+  const abortTurn = useCallback(() => {
+    if (!sendingRef.current) return;
+    setAbortedTurn(true);
+    sendingRef.current = false;
+    setStreamAssistant(null);
+    setSending(false);
+    setError("Turn aborted. The agent may still finish the current tool on the backend.");
+  }, []);
+
   const sendMessage = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
@@ -185,9 +254,15 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
       const repoId = activeRepo?.id;
       if (!trimmed || sending || !convId || !repoId) return;
 
+      setAbortedTurn(false);
       setMessages((prev) => [
         ...prev,
-        { id: `local-${Date.now()}`, role: "user", content: trimmed },
+        {
+          id: `local-${Date.now()}`,
+          role: "user",
+          content: trimmed,
+          createdAt: new Date().toISOString(),
+        },
       ]);
       setSending(true);
       sendingRef.current = true;
@@ -200,18 +275,25 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
       setError(null);
 
       try {
+        await memorySetConversationCodingMeta(convId, repoId);
+
         const result = await invoke<ChatSendResult>("chat_send_message", {
           conversationId: convId,
           message: trimmed,
           appMode: "coding",
           codingRepoId: repoId,
+          uiTheme: getStoredTheme(),
         });
-        setStreamAssistant({
-          thinking: false,
-          text: result.reply,
-          statusDetail: null,
-          toolActivity: null,
-        });
+        if (abortedTurn) {
+          setStreamAssistant(null);
+        } else {
+          setStreamAssistant({
+            thinking: false,
+            text: result.reply,
+            statusDetail: null,
+            toolActivity: null,
+          });
+        }
         await loadMessages(convId, { silent: true });
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -220,9 +302,10 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
         sendingRef.current = false;
         setStreamAssistant(null);
         setSending(false);
+        setAbortedTurn(false);
       }
     },
-    [activeRepo?.id, conversationId, loadMessages, sending],
+    [activeRepo?.id, conversationId, loadMessages, sending, abortedTurn],
   );
 
   return {
@@ -233,5 +316,6 @@ export function useCodingChat(activeRepo: ActiveRepo | null) {
     streamAssistant,
     error,
     sendMessage,
+    abortTurn,
   };
 }

@@ -8,6 +8,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2.1.0] — 2026-07-03
+
+### Added
+
+- **UX port (Snowball-derived, no security audit tools)** — timestamps, unified Companion↔Coding conversation context, `MessageContent`, copy buttons, light/dark artifact styling, ErrorBoundary, abort turn, Help menu, token context counter, cache manager, single-instance guard.
+- **Coding mode panels** — notepad, code playground (Python/Node/TS/Bash/PowerShell/Rust), Agent Action Stream, Event Stream Debugger, Settings in coding layout, resizable right-side panels, Playground view mode.
+- **Artifacts in coding chat** — charts, HTML, tables, and forms render in coding threads.
+- **Onboarding** — optional voluntary donation link to support development (no in-app purchase; opens browser).
+
+### Changed
+
+- **Version 2.1.0** — `package.json`, `Cargo.toml`, `tauri.conf.json`, MSIX manifest (`2.1.0.0`), header version badge.
+- **Settings cache section** — aligned frontend with backend `cache_info` fields.
+- **Playground bash on Windows** — prefers Git Bash / MSYS over WSL `bash.exe` launcher.
+
+### Fixed
+
+- **Settings panel crash** — cache `fileCount` field mismatch caused `toLocaleString` on undefined when opening Settings from Companion mode.
+
+---
+
 ## [2.0.0] — 2026-06-13
 
 ### Added

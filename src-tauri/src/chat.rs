@@ -280,23 +280,58 @@ async fn apply_tool_round_messages(
         if let Some(ts) = tool_stream {
             ts.start(name, &crate::tool_stream::tool_start_detail(name, arguments_json));
         }
-        let body = crate::agent_tools::run_builtin_tool(
-            http,
-            workspace_root,
-            data_directory,
-            database_app_data_enabled,
-            database_allow_write,
-            browser_ignore_robots,
-            personality,
-            memory_tools,
-            coding_ctx,
-            tool_stream,
-            settings,
-            name,
-            arguments_json,
-        )
-        .await
-        .unwrap_or_else(|e| format!("Tool error: {e}"));
+        let maybe_app = tool_stream.map(|ts| ts.app_handle());
+        let label = crate::tool_stream::tool_start_detail(name, arguments_json);
+        let args_parsed: serde_json::Value =
+            serde_json::from_str(arguments_json).unwrap_or(serde_json::Value::Null);
+
+        let body = if let Some(app) = maybe_app {
+            crate::agent_stream::run_result_tool_with_stream(
+                app,
+                "agent",
+                name,
+                &label,
+                Some(args_parsed),
+                || async {
+                    crate::agent_tools::run_builtin_tool(
+                        http,
+                        workspace_root,
+                        data_directory,
+                        database_app_data_enabled,
+                        database_allow_write,
+                        browser_ignore_robots,
+                        personality,
+                        memory_tools,
+                        coding_ctx,
+                        tool_stream,
+                        settings,
+                        name,
+                        arguments_json,
+                    )
+                    .await
+                },
+            )
+            .await
+            .unwrap_or_else(|e| format!("Tool error: {e}"))
+        } else {
+            crate::agent_tools::run_builtin_tool(
+                http,
+                workspace_root,
+                data_directory,
+                database_app_data_enabled,
+                database_allow_write,
+                browser_ignore_robots,
+                personality,
+                memory_tools,
+                coding_ctx,
+                tool_stream,
+                settings,
+                name,
+                arguments_json,
+            )
+            .await
+            .unwrap_or_else(|e| format!("Tool error: {e}"))
+        };
         if let Some(ts) = tool_stream {
             ts.end(name);
         }
@@ -632,6 +667,8 @@ pub struct ChatTurnOptions {
     pub ephemeral_user_note: EphemeralUserNote,
     /// When set, run a coding-mode turn (repo-scoped prompt; no companion persona sync).
     pub coding_context: Option<CodingTurnContext>,
+    /// Frontend UI theme hint for artifact styling (`light` | `dark`).
+    pub ui_theme: Option<String>,
 }
 
 /// Ephemeral user text is sent to the model but not stored in SQLite / chat UI.
@@ -653,6 +690,7 @@ impl ChatTurnOptions {
             assistant_reply_prefix: None,
             ephemeral_user_note: EphemeralUserNote::None,
             coding_context: None,
+            ui_theme: None,
         }
     }
 
@@ -666,6 +704,7 @@ impl ChatTurnOptions {
             assistant_reply_prefix: None,
             ephemeral_user_note: EphemeralUserNote::FormSubmission,
             coding_context: None,
+            ui_theme: None,
         }
     }
 
@@ -679,6 +718,7 @@ impl ChatTurnOptions {
             assistant_reply_prefix: Some(assistant_reply_prefix),
             ephemeral_user_note: EphemeralUserNote::Pulse,
             coding_context: None,
+            ui_theme: None,
         }
     }
 
@@ -691,6 +731,7 @@ impl ChatTurnOptions {
             assistant_reply_prefix: None,
             ephemeral_user_note: EphemeralUserNote::None,
             coding_context: Some(ctx),
+            ui_theme: None,
         }
     }
 }
@@ -755,6 +796,8 @@ async fn run_chat_completion(
         if state.settings.agent_coding_git_remote_enabled() {
             tool_definitions.extend(crate::coding_tools::git_remote_tool_definitions());
         }
+        tool_definitions.extend(crate::coding_tools::coding_notes_tool_definitions());
+        tool_definitions.push(crate::coding_tools::playground_tool_definition());
         let coding_tools_on = state.settings.agent_coding_tools_enabled()
             || state.settings.agent_coding_shell_enabled()
             || state.settings.agent_coding_git_enabled()
@@ -1385,8 +1428,24 @@ pub async fn execute_chat_turn(
         }
     };
     if options.coding_context.is_none() && state.settings.artifacts_enabled() {
-        system_content.push_str(crate::artifacts::ARTIFACT_SYSTEM_APPENDIX);
         system_content.push_str(crate::projects::PROJECT_SYSTEM_APPENDIX);
+    }
+    if state.settings.artifacts_enabled() {
+        let theme = options
+            .ui_theme
+            .as_deref()
+            .unwrap_or("dark");
+        system_content.push_str(crate::artifacts::ARTIFACT_SYSTEM_APPENDIX);
+        system_content.push_str(crate::artifacts::artifact_theme_appendix(theme));
+    }
+    if let Some(ref ctx) = options.coding_context {
+        let notes_dir = crate::coding_notes::notes_dir_for_agent(state.data_directory.as_path());
+        system_content.push_str(&format!(
+            "\n\n## User notepad\n\nThe user keeps scratch notes as `.txt` files in `{}` (default `Notes.txt`). \
+             They may ask you to summarize or reference these notes. Use the `coding_notes_read` tool when available.\n",
+            notes_dir.display()
+        ));
+        let _ = ctx;
     }
 
     let provider_id = engine.provider_id().to_string();
@@ -1494,13 +1553,14 @@ pub async fn chat_send_message(
     silent_user_message: Option<bool>,
     app_mode: Option<String>,
     coding_repo_id: Option<String>,
+    ui_theme: Option<String>,
 ) -> Result<ChatSendResult, String> {
     let is_coding = app_mode
         .as_deref()
         .map(|m| m.trim().eq_ignore_ascii_case(crate::coding::APP_MODE_CODING))
         .unwrap_or(false);
 
-    let turn_options = if is_coding {
+    let mut turn_options = if is_coding {
         let repo_id = coding_repo_id
             .as_deref()
             .map(str::trim)
@@ -1518,6 +1578,12 @@ pub async fn chat_send_message(
     } else {
         ChatTurnOptions::interactive()
     };
+
+    turn_options.ui_theme = ui_theme
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
 
     let pid = if is_coding {
         if state.settings.agent_coding_companion_linked_enabled() {

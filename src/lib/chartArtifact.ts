@@ -24,6 +24,32 @@ const SERIES_COLORS = [
   "#db2777",
 ];
 
+const CHART_STYLES_DARK = `
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 14px;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    color: #e2e8f0;
+    background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  }
+  .card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    padding: 16px 16px 12px;
+  }
+  h1 { font-size: 1.05rem; font-weight: 700; margin: 0 0 2px; color: #f1f5f9; }
+  .subtitle { font-size: 11px; color: #94a3b8; margin: 0 0 12px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 10px; font-size: 11px; color: #cbd5e1; }
+  .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  table.data { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 11px; color: #e2e8f0; }
+  table.data th, table.data td { border: 1px solid #475569; padding: 6px 8px; text-align: left; }
+  table.data th { background: #334155; font-weight: 600; }
+`;
+
 const CHART_STYLES = `
   * { box-sizing: border-box; }
   body {
@@ -456,6 +482,7 @@ function buildSvgLineChart(dataset: ChartDataset, yLabel: string): string {
 export function buildChartHtmlDocument(
   spec: Record<string, unknown>,
   title: string,
+  theme: "light" | "dark" = "dark",
 ): string | null {
   const values = extractVegaLiteValues(spec);
   if (!values?.length) return null;
@@ -481,7 +508,7 @@ export function buildChartHtmlDocument(
 
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<style>${CHART_STYLES}</style></head><body>
+<style>${theme === "light" ? CHART_STYLES : CHART_STYLES_DARK}</style></head><body>
 <div class="card">
   <h1>${escapeHtml(title)}</h1>
   <p class="subtitle">${escapeHtml(yLabel)} by ${escapeHtml(xLabel)}</p>

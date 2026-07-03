@@ -15,6 +15,7 @@ import {
   Moon,
   RefreshCw,
   SlidersHorizontal,
+  Trash2,
   Wrench,
   X,
 } from "lucide-react";
@@ -486,6 +487,24 @@ type AppDataPaths = {
   novaPortableEnv: boolean;
 };
 
+type CacheInfo = {
+  path: string;
+  exists: boolean;
+  itemCount: number;
+  sizeBytes: number;
+};
+
+function normalizeCacheInfo(
+  raw: Partial<CacheInfo> & { directory?: string; fileCount?: number; totalBytes?: number },
+): CacheInfo {
+  return {
+    path: raw.path ?? raw.directory ?? "",
+    exists: raw.exists ?? true,
+    itemCount: raw.itemCount ?? raw.fileCount ?? 0,
+    sizeBytes: raw.sizeBytes ?? raw.totalBytes ?? 0,
+  };
+}
+
 type StoreUpdateCheckResult = {
   upToDate: boolean;
   updateAvailable: boolean;
@@ -621,6 +640,9 @@ export function SettingsPanel({
   const [updateProgress, setUpdateProgress] = useState<string | null>(null);
   const [distributionInfo, setDistributionInfo] = useState<DistributionInfo | null>(null);
   const [storeUpdateAvailable, setStoreUpdateAvailable] = useState(false);
+  const [cacheInfo, setCacheInfo] = useState<CacheInfo | null>(null);
+  const [cacheLoading, setCacheLoading] = useState(false);
+  const [cacheError, setCacheError] = useState<string | null>(null);
 
   const loadVersion = useCallback(async () => {
     try {
@@ -668,13 +690,47 @@ export function SettingsPanel({
     }
   }, []);
 
+  const loadCacheInfo = useCallback(async () => {
+    try {
+      setCacheError(null);
+      const info = normalizeCacheInfo(await invoke<CacheInfo>("cache_info"));
+      setCacheInfo(info);
+    } catch (e) {
+      setCacheInfo(null);
+      setCacheError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
+  const clearCache = useCallback(async () => {
+    try {
+      setCacheLoading(true);
+      setCacheError(null);
+      await invoke("clear_cache");
+      await loadCacheInfo();
+    } catch (e) {
+      setCacheError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCacheLoading(false);
+    }
+  }, [loadCacheInfo]);
+
+  const revealCacheDirectory = useCallback(async () => {
+    try {
+      setCacheError(null);
+      await invoke("reveal_cache_directory");
+    } catch (e) {
+      setCacheError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     void refreshSettings();
     void loadProviders();
     void refreshDataPaths();
     void refreshDistributionInfo();
-  }, [open, refreshSettings, loadProviders, refreshDataPaths, refreshDistributionInfo]);
+    void loadCacheInfo();
+  }, [open, refreshSettings, loadProviders, refreshDataPaths, refreshDistributionInfo, loadCacheInfo]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -2612,6 +2668,67 @@ export function SettingsPanel({
             >
               Factory Reset
             </button>
+          </section>
+
+          <section className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Cache
+            </h3>
+            <p className="text-xs leading-relaxed text-slate-500">
+              Temporary files from tools and runtime features are stored in the app data directory,
+              not in the git repo. Clear this folder anytime to reclaim disk space.
+            </p>
+            {cacheInfo ? (
+              <ul className="space-y-1.5 font-mono text-[10px] leading-relaxed text-slate-600 dark:text-slate-400 break-all">
+                <li>
+                  <span className="text-slate-600">Directory · </span>
+                  {cacheInfo.path}
+                </li>
+                <li>
+                  <span className="text-slate-600">Files · </span>
+                  {cacheInfo.itemCount.toLocaleString()}
+                </li>
+                <li>
+                  <span className="text-slate-600">Size · </span>
+                  {cacheInfo.sizeBytes > 1024 * 1024
+                    ? `${(cacheInfo.sizeBytes / (1024 * 1024)).toFixed(2)} MB`
+                    : `${(cacheInfo.sizeBytes / 1024).toFixed(2)} KB`}
+                </li>
+              </ul>
+            ) : (
+              <p className="text-[11px] text-slate-600">Loading cache info…</p>
+            )}
+            {cacheError ? (
+              <p className="text-[11px] text-amber-200/90">{cacheError}</p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={!cacheInfo || cacheLoading}
+                onClick={() => void revealCacheDirectory()}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700/90 bg-slate-100 dark:bg-slate-900/70 px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 transition hover:border-slate-300 dark:border-slate-600 hover:bg-slate-200 dark:bg-slate-800/80 disabled:pointer-events-none disabled:opacity-40"
+              >
+                <FolderOpen className="size-3.5 text-slate-600 dark:text-slate-400" aria-hidden />
+                Open cache folder
+              </button>
+              <button
+                type="button"
+                disabled={!cacheInfo || cacheLoading || cacheInfo.itemCount === 0}
+                onClick={() => {
+                  if (window.confirm(`Clear ${cacheInfo?.itemCount ?? 0} cached file(s)? This cannot be undone.`)) {
+                    void clearCache();
+                  }
+                }}
+                className="inline-flex items-center gap-2 rounded-lg border border-red-700/50 bg-red-900/40 px-3 py-2 text-xs font-medium text-red-100 transition hover:bg-red-900/60 disabled:pointer-events-none disabled:opacity-40"
+              >
+                {cacheLoading ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <Trash2 className="size-3.5" aria-hidden />
+                )}
+                Clear cache
+              </button>
+            </div>
           </section>
 
           <section className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">

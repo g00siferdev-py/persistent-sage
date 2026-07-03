@@ -5,6 +5,9 @@ import { ChatMain } from "@/components/chat/ChatMain";
 import { ConversationSidebar } from "@/components/sidebar/ConversationSidebar";
 import { SettingsPanel } from "@/components/settings/SettingsPanel";
 import { AppModeSwitcher } from "@/components/layout/AppModeSwitcher";
+import { AppHelpButton } from "@/components/help/AppHelpButton";
+import { DonateFooter } from "@/components/support/DonateFooter";
+import { TokenContextCounter } from "@/components/TokenContextCounter";
 import {
   cycleSettingsLayoutMode,
   loadSettingsLayoutMode,
@@ -29,6 +32,9 @@ type SettingsForHint = {
 };
 
 type Props = {
+  activeConversationId: string | null;
+  onActiveConversationIdChange: (id: string | null) => void;
+  onActiveRepoIdChange: (id: string | null) => void;
   onModeChange: (mode: AppMode) => void;
 };
 
@@ -39,7 +45,12 @@ function truncate(s: string, max: number): string {
 }
 
 /** Companion mode shell — chat, memory, personality, and collaborative projects. */
-export function CompanionLayout({ onModeChange }: Props) {
+export function CompanionLayout({
+  activeConversationId,
+  onActiveConversationIdChange,
+  onActiveRepoIdChange,
+  onModeChange,
+}: Props) {
   const [settingsLayoutMode, setSettingsLayoutMode] = useState<SettingsLayoutMode>(() =>
     loadSettingsLayoutMode(),
   );
@@ -166,7 +177,6 @@ export function CompanionLayout({ onModeChange }: Props) {
     threadListHiddenFromSidebar,
     clearConversationSidebarView,
     restoreConversationSidebarView,
-    activeConversationId,
     messages,
     briefing,
     anchors,
@@ -195,7 +205,25 @@ export function CompanionLayout({ onModeChange }: Props) {
     activePersonalityId,
     activeCompanionLabel,
     companionOptions,
-  } = useChat();
+    abortTurn,
+  } = useChat({
+    externalActiveConversationId: activeConversationId,
+    onActiveConversationIdChange,
+  });
+
+  const handleModeChange = useCallback(
+    (mode: AppMode) => {
+      if (mode === "coding") {
+        // If the active conversation is bound to a repo, carry that repo over.
+        const conv = conversations.find((c) => c.id === activeConversationId);
+        if (conv?.codingRepoId) {
+          onActiveRepoIdChange(conv.codingRepoId);
+        }
+      }
+      onModeChange(mode);
+    },
+    [activeConversationId, conversations, onActiveRepoIdChange, onModeChange],
+  );
 
   useEffect(() => {
     if (prevSettingsLayoutMode.current !== "hidden" && settingsLayoutMode === "hidden") {
@@ -245,7 +273,11 @@ export function CompanionLayout({ onModeChange }: Props) {
         />
       ) : null}
       <div className="flex shrink-0 items-center border-b border-slate-800/80 bg-slate-900/50 px-3 py-1.5">
-        <AppModeSwitcher mode="companion" onModeChange={onModeChange} />
+        <AppModeSwitcher mode="companion" onModeChange={handleModeChange} />
+        <div className="ml-auto flex items-center gap-2">
+          <AppHelpButton />
+          <TokenContextCounter conversationId={activeConversationId} />
+        </div>
       </div>
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <ConversationSidebar
@@ -255,7 +287,18 @@ export function CompanionLayout({ onModeChange }: Props) {
           onClearThreadListFromView={clearConversationSidebarView}
           onRestoreThreadListFromView={() => void restoreConversationSidebarView()}
           activeId={activeConversationId}
-          onSelect={selectConversation}
+          onSelect={(id) => {
+            const conv = conversations.find((c) => c.id === id);
+            if (conv?.codingRepoId) {
+              onActiveRepoIdChange(conv.codingRepoId);
+            }
+            selectConversation(id);
+          }}
+          onSelectCoding={(id, repoId) => {
+            onActiveRepoIdChange(repoId);
+            onActiveConversationIdChange(id);
+            onModeChange("coding");
+          }}
           onNewChat={() => void startNewConversation()}
           onRename={(id, title) => void renameConversation(id, title)}
           onDelete={(id) => void deleteConversation(id)}
@@ -301,6 +344,7 @@ export function CompanionLayout({ onModeChange }: Props) {
                 ? { base64: image.base64, mime: image.mime, previewUrl: image.previewUrl }
                 : null)
             }
+            onAbortTurn={abortTurn}
             visionSupported={visionSupported}
             activeCompanionProfileId={activePersonalityId}
             activeCompanionLabel={activeCompanionLabel}
@@ -322,9 +366,10 @@ export function CompanionLayout({ onModeChange }: Props) {
           onRequestOnboarding={() => setShowOnboarding(true)}
         />
       </div>
+      <DonateFooter />
     </div>
   );
 }
 
-/** @deprecated Use `CompanionLayout` — kept for transitional imports. */
+/** @deprecated Use `CompanionLayout` ? kept for transitional imports. */
 export const ChatLayout = CompanionLayout;

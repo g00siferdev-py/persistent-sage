@@ -26,6 +26,29 @@ export type PreparedAssistantMessage = {
   artifactJson?: string;
 };
 
+export type MarkdownBlock =
+  | { type: "paragraph"; text: string }
+  | { type: "code"; language?: string; code: string };
+
+/** Split text into paragraphs and fenced code blocks for chat rendering. */
+export function renderMarkdownBlocks(text: string): MarkdownBlock[] {
+  const blocks: MarkdownBlock[] = [];
+  const regex = /```([a-zA-Z0-9#.+_-]*)\s*\n?([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) != null) {
+    const before = text.slice(lastIndex, match.index).trim();
+    if (before) blocks.push({ type: "paragraph", text: before });
+    const language = match[1] || undefined;
+    const code = match[2].trim();
+    if (code) blocks.push({ type: "code", language, code });
+    lastIndex = regex.lastIndex;
+  }
+  const tail = text.slice(lastIndex).trim();
+  if (tail) blocks.push({ type: "paragraph", text: tail });
+  return blocks;
+}
+
 export function parseArtifactJson(json: string | undefined | null): ChatArtifact | null {
   if (!json?.trim()) return null;
   try {
@@ -63,11 +86,12 @@ function toNumber(value: unknown): number | null {
 export function buildChartHtmlFromArtifactBody(
   body: unknown,
   title: string,
+  theme: "light" | "dark" = "dark",
 ): string | null {
   const spec = coerceVegaLiteBody(body);
   if (!spec) return null;
   const prepared = prepareVegaLiteForEmbed(spec, title);
-  return buildChartHtmlDocument(prepared, title) ?? buildChartHtmlDocument(spec, title);
+  return buildChartHtmlDocument(prepared, title, theme) ?? buildChartHtmlDocument(spec, title, theme);
 }
 
 /** Vega `body` may arrive as object, JSON string, raw rows array, or nested spec. */

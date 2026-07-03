@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ChevronLeft, ChevronRight, FolderOpen, HardDrive, Usb } from "lucide-react";
+import { ChevronLeft, ChevronRight, FolderOpen, HardDrive, Heart, Usb } from "lucide-react";
+import { DonateOptions } from "@/components/support/DonateOptions";
 
 type ProviderDescriptor = {
   id: string;
@@ -407,6 +408,21 @@ export function OnboardingWizard({ onComplete }: Props) {
                 <FolderOpen className="size-3.5" aria-hidden />
                 Reveal data folder
               </button>
+              <div className="mt-5 rounded-lg border border-slate-300/80 bg-slate-50 px-3 py-3 dark:border-slate-700/80 dark:bg-slate-950/40">
+                <div className="flex items-start gap-2.5">
+                  <Heart className="mt-0.5 size-4 shrink-0 text-rose-400" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-900 dark:text-white">
+                      Support development (optional)
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                      Persistent Sage is free and open source. If it helps you, Daniel Greene accepts
+                      voluntary tips via PayPal or Cash App. Donations do not unlock features.
+                    </p>
+                    <DonateOptions showQr className="mt-3" />
+                  </div>
+                </div>
+              </div>
             </>
           ) : null}
 

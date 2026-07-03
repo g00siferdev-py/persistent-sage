@@ -123,6 +123,10 @@ pub struct StoredConversation {
     pub title: String,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coding_repo_id: Option<String>,
 }
 
 /// A durable memory anchor for recall and briefings.
@@ -240,6 +244,13 @@ pub trait ConversationMemory: Send + Sync {
         repo_id: &str,
         repo_name: &str,
     ) -> Result<String, MemoryError>;
+
+    /// Attach or detach a coding repo to any existing conversation.
+    fn set_conversation_coding_meta(
+        &self,
+        conversation_id: &str,
+        repo_id: Option<&str>,
+    ) -> Result<(), MemoryError>;
 
     fn rename_conversation(&self, conversation_id: &str, title: &str) -> Result<(), MemoryError>;
 
@@ -934,6 +945,8 @@ impl MemoryAnchor {
             title: row.get(1)?,
             created_at: row.get(2)?,
             updated_at: row.get(3)?,
+            app_mode: row.get(4).ok(),
+            coding_repo_id: row.get(5).ok(),
         })
     }
 
@@ -1992,9 +2005,10 @@ impl ConversationMemory for MemoryAnchor {
         self.assert_conversation_exists(conversation_id)?;
         let pid = self.active_personality()?;
         let conn = self.conn()?;
+        let created_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         conn.execute(
-            "INSERT INTO messages (conversation_id, role, content, personality_id, image_attachment, image_mime, artifact_json)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO messages (conversation_id, role, content, personality_id, image_attachment, image_mime, artifact_json, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 conversation_id,
                 role.as_db_str(),
@@ -2002,7 +2016,8 @@ impl ConversationMemory for MemoryAnchor {
                 pid,
                 image_attachment,
                 image_mime,
-                artifact_json
+                artifact_json,
+                created_at
             ],
         )?;
         conn.execute(
@@ -2069,9 +2084,8 @@ impl ConversationMemory for MemoryAnchor {
         let pid = self.active_personality()?;
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, title, created_at, updated_at FROM conversations
+            "SELECT id, title, created_at, updated_at, app_mode, coding_repo_id FROM conversations
              WHERE personality_id = ?1
-               AND (app_mode IS NULL OR app_mode = 'companion')
              ORDER BY datetime(updated_at) DESC, id DESC",
         )?;
         let rows = stmt.query_map([pid], MemoryAnchor::row_to_conversation)?;
@@ -2083,7 +2097,7 @@ impl ConversationMemory for MemoryAnchor {
         let pid = self.active_personality()?;
         let conn = self.conn()?;
         let row = conn.query_row(
-            "SELECT id, title, created_at, updated_at FROM conversations WHERE id = ?1 AND personality_id = ?2",
+            "SELECT id, title, created_at, updated_at, app_mode, coding_repo_id FROM conversations WHERE id = ?1 AND personality_id = ?2",
             params![conversation_id, pid],
             MemoryAnchor::row_to_conversation,
         );
@@ -2118,7 +2132,7 @@ impl ConversationMemory for MemoryAnchor {
         let pid = self.active_personality()?;
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, title, created_at, updated_at FROM conversations
+            "SELECT id, title, created_at, updated_at, app_mode, coding_repo_id FROM conversations
              WHERE personality_id = ?1 AND app_mode = 'coding' AND coding_repo_id = ?2
              ORDER BY datetime(updated_at) DESC, id DESC",
         )?;
@@ -2163,6 +2177,30 @@ impl ConversationMemory for MemoryAnchor {
         }
         let title = format!("{} — coding", repo_name.trim());
         self.create_coding_conversation(repo_id, &title)
+    }
+
+    fn set_conversation_coding_meta(
+        &self,
+        conversation_id: &str,
+        repo_id: Option<&str>,
+    ) -> Result<(), MemoryError> {
+        self.assert_conversation_exists(conversation_id)?;
+        let pid = self.active_personality()?;
+        let conn = self.conn()?;
+        if let Some(rid) = repo_id.filter(|s| !s.is_empty()) {
+            conn.execute(
+                "UPDATE conversations SET app_mode = 'coding', coding_repo_id = ?2, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?1 AND personality_id = ?3",
+                params![conversation_id, rid, pid],
+            )?;
+        } else {
+            conn.execute(
+                "UPDATE conversations SET app_mode = 'companion', coding_repo_id = NULL, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?1 AND personality_id = ?2",
+                params![conversation_id, pid],
+            )?;
+        }
+        Ok(())
     }
 
     fn rename_conversation(&self, conversation_id: &str, title: &str) -> Result<(), MemoryError> {

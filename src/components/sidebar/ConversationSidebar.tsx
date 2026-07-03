@@ -25,6 +25,8 @@ type Props = {
   onRestoreThreadListFromView: () => void;
   activeId: string | null;
   onSelect: (id: string) => void;
+  /** Called when a conversation bound to coding mode is selected from a companion-mode list. */
+  onSelectCoding?: (conversationId: string, repoId: string) => void;
   onNewChat: () => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
@@ -55,6 +57,7 @@ export function ConversationSidebar({
   onRestoreThreadListFromView,
   activeId,
   onSelect,
+  onSelectCoding,
   onNewChat,
   onRename,
   onDelete,
@@ -238,9 +241,21 @@ export function ConversationSidebar({
                     <>
                       <button
                         type="button"
-                        onClick={() => onSelect(c.id)}
+                        onClick={() => {
+                          // Unified context: open the shared thread in the current mode.
+                          if (c.appMode === "coding" && c.codingRepoId && onSelectCoding) {
+                            onSelectCoding(c.id, c.codingRepoId);
+                          } else {
+                            onSelect(c.id);
+                          }
+                        }}
                         className="min-w-0 flex-1 text-left"
                       >
+                        {c.appMode === "coding" && c.codingRepoId ? (
+                          <span className="mb-0.5 inline-flex items-center rounded bg-emerald-900/50 px-1 py-0.5 text-[9px] font-medium text-emerald-200">
+                            Coding
+                          </span>
+                        ) : null}
                         <span className="block truncate text-sm font-medium text-slate-900 dark:text-white">
                           {c.title}
                         </span>

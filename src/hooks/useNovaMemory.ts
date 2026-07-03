@@ -148,3 +148,32 @@ export async function memoryListAnchors(
 export async function memoryListProjects(limit: number): Promise<StoredProject[]> {
   return invoke<StoredProject[]>("memory_list_projects", { limit });
 }
+
+/** Attach (or detach) a repo to any conversation so it can be used in coding mode. */
+export async function memorySetConversationCodingMeta(
+  conversationId: string,
+  repoId: string | null,
+): Promise<void> {
+  return invoke("memory_set_conversation_coding_meta", {
+    conversationId,
+    repoId,
+  });
+}
+
+export async function memoryGetOrCreateCodingConversation(
+  repoId: string,
+  repoName: string,
+): Promise<string> {
+  return invoke<string>("memory_get_or_create_coding_conversation", {
+    repoId,
+    repoName,
+  });
+}
+
+export async function memoryListCodingConversations(
+  repoId: string,
+): Promise<StoredConversation[]> {
+  return invoke<StoredConversation[]>("memory_list_coding_conversations", {
+    repoId,
+  });
+}

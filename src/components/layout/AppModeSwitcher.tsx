@@ -1,6 +1,9 @@
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Code2, MessageCircle } from "lucide-react";
 import { appModeLabel, type AppMode } from "@/lib/appMode";
+import packageJson from "../../../package.json";
 
 type Props = {
   mode: AppMode;
@@ -8,6 +11,22 @@ type Props = {
 };
 
 export function AppModeSwitcher({ mode, onModeChange }: Props) {
+  const [versionLabel, setVersionLabel] = useState(`v${packageJson.version}`);
+
+  useEffect(() => {
+    let cancelled = false;
+    invoke<string>("app_version")
+      .then((raw) => {
+        const ver = raw.trim().split(/\s+/).pop();
+        if (!cancelled && ver) setVersionLabel(`v${ver}`);
+      })
+      .catch(() => {
+        /* browser preview — keep package.json version */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   return (
     <div
       className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-700/80 bg-slate-900/60 p-0.5"
@@ -27,7 +46,7 @@ export function AppModeSwitcher({ mode, onModeChange }: Props) {
         onClick={() => onModeChange("coding")}
       />
       <span className="ml-1 hidden rounded bg-violet-900/70 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-violet-200/90 sm:inline">
-        v2 preview
+        {versionLabel}
       </span>
     </div>
   );

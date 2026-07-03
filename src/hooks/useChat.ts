@@ -7,6 +7,7 @@ import type {
   StoredAnchor,
   StoredConversation,
 } from "@/types/chat";
+import { getStoredTheme } from "@/lib/theme";
 import { storedToChatMessage } from "@/types/chat";
 import {
   memoryCreateConversation,
@@ -39,15 +40,16 @@ function companionDisplayName(file: PersonalityFile | null, profileId: string): 
 type ChatStreamStart = { conversationId: string };
 type ChatStreamEvent = { conversationId: string; delta: string; done: boolean };
 
-export type StreamAssistantState = {
-  thinking: boolean;
-  text: string;
-} | null;
+export function useChat(options?: {
+  externalActiveConversationId?: string | null;
+  onActiveConversationIdChange?: (id: string | null) => void;
+}) {
+  const externalId = options?.externalActiveConversationId ?? null;
+  const onExternalChange = options?.onActiveConversationIdChange;
 
-export function useChat() {
   const [conversations, setConversations] = useState<StoredConversation[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(
-    null,
+  const [activeConversationId, setInternalActiveConversationId] = useState<string | null>(
+    externalId,
   );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [briefing, setBriefing] = useState<string>("");
@@ -57,6 +59,7 @@ export function useChat() {
   const [extractingAnchors, setExtractingAnchors] = useState(false);
   const [sending, setSending] = useState(false);
   const [streamAssistant, setStreamAssistant] = useState<StreamAssistantState>(null);
+  const [abortedTurn, setAbortedTurn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** Companion profile id — MemoryAnchor is scoped to this for chats, recall, and threads. */
   const [activePersonalityId, setActivePersonalityId] = useState("default");
@@ -77,6 +80,22 @@ export function useChat() {
   const activeConversationIdRef = useRef<string | null>(null);
   /** Mirrors `activePersonalityId` for invoke payloads (always read right before IPC). */
   const activePersonalityIdRef = useRef(activePersonalityId);
+
+  // Keep internal state in sync with the external (lifted) state when it changes.
+  useEffect(() => {
+    setInternalActiveConversationId(externalId);
+  }, [externalId]);
+
+  const setActiveConversationId = useCallback(
+    (
+      next: string | null | ((prev: string | null) => string | null),
+    ) => {
+      const resolved = typeof next === "function" ? next(activeConversationIdRef.current) : next;
+      setInternalActiveConversationId(resolved);
+      onExternalChange?.(resolved);
+    },
+    [onExternalChange],
+  );
 
   useEffect(() => {
     activeConversationIdRef.current = activeConversationId;
@@ -311,7 +330,7 @@ export function useChat() {
       });
       return list;
     },
-    [refreshConversations, refreshPersonalityFile],
+    [refreshConversations, refreshPersonalityFile, setActiveConversationId],
   );
 
   useEffect(() => {
@@ -340,12 +359,10 @@ export function useChat() {
         await refreshProjectList();
         if (cancelled) return;
         setListLoading(false);
-        if (list.length === 0) {
-          setActiveConversationId(null);
-          return;
-        }
+        // If an external active conversation id was provided, keep it if it still exists.
         setActiveConversationId((prev) => {
-          if (prev && list.some((c) => c.id === prev)) return prev;
+          const target = prev ?? externalId;
+          if (target && list.some((c) => c.id === target)) return target;
           return list[0]?.id ?? null;
         });
       } catch (e) {
@@ -361,7 +378,14 @@ export function useChat() {
     return () => {
       cancelled = true;
     };
-  }, [refreshConversations, refreshVisionSupported, refreshRecipes, refreshProjectList]);
+  }, [
+    refreshConversations,
+    refreshVisionSupported,
+    refreshRecipes,
+    refreshProjectList,
+    setActiveConversationId,
+    externalId,
+  ]);
 
   useEffect(() => {
     if (!activeConversationId) {
@@ -378,10 +402,13 @@ export function useChat() {
     void loadActiveThread(activeConversationId);
   }, [activeConversationId, loadActiveThread]);
 
-  const selectConversation = useCallback((id: string) => {
-    setThreadListHiddenFromSidebar(false);
-    setActiveConversationId(id);
-  }, []);
+  const selectConversation = useCallback(
+    (id: string) => {
+      setThreadListHiddenFromSidebar(false);
+      setActiveConversationId(id);
+    },
+    [setActiveConversationId],
+  );
 
   /** Hides the conversation list and active thread in the UI only; does not call delete or touch the DB. */
   const clearConversationSidebarView = useCallback(() => {
@@ -392,7 +419,7 @@ export function useChat() {
     setAnchors([]);
     setMessages([]);
     setError(null);
-  }, []);
+  }, [setActiveConversationId]);
 
   /** Reload threads from the database and show the list again. */
   const restoreConversationSidebarView = useCallback(async () => {
@@ -407,7 +434,7 @@ export function useChat() {
       if (prev && list.some((c) => c.id === prev)) return prev;
       return list[0]?.id ?? null;
     });
-  }, [refreshConversations]);
+  }, [refreshConversations, setActiveConversationId]);
 
   const startNewConversation = useCallback(async () => {
     setError(null);
@@ -431,7 +458,7 @@ export function useChat() {
         e instanceof Error ? e.message : "Could not create conversation (run in Tauri?)";
       setError(msg);
     }
-  }, [activePersonalityId, personalityFile, refreshConversations]);
+  }, [activePersonalityId, personalityFile, refreshConversations, setActiveConversationId]);
 
   const companionOptions = useMemo(() => {
     const base =
@@ -508,7 +535,7 @@ export function useChat() {
         await refreshConversations();
       }
     },
-    [refreshConversations],
+    [refreshConversations, setActiveConversationId],
   );
 
   const extractAnchorsFromChat = useCallback(async () => {
@@ -532,6 +559,14 @@ export function useChat() {
     loadActiveThread,
     refreshConversations,
   ]);
+
+  const abortTurn = useCallback(() => {
+    if (!sending) return;
+    setAbortedTurn(true);
+    setStreamAssistant(null);
+    setSending(false);
+    setError("Turn aborted. The agent may still finish the current operation on the backend.");
+  }, [sending]);
 
   const sendMessage = useCallback(
     async (
@@ -558,11 +593,13 @@ export function useChat() {
             id: tempUserId,
             role: "user",
             content: trimmed || "(photo)",
+            createdAt: new Date().toISOString(),
             imageDisplayPath: image?.previewUrl,
             imageMime: image?.mime,
           },
         ]);
       }
+      setAbortedTurn(false);
       setSending(true);
       setStreamAssistant({ thinking: true, text: "" });
       setError(null);
@@ -587,11 +624,14 @@ export function useChat() {
           imageBase64: image?.base64 ?? null,
           imageMime: image?.mime ?? null,
           silentUserMessage: silent,
+          uiTheme: getStoredTheme(),
         });
 
         // Reload from SQLite so artifacts (artifactJson) render consistently.
         // This also avoids showing raw ```artifact blocks in the optimistic message.
-        await loadActiveThread(convId);
+        if (!abortedTurn) {
+          await loadActiveThread(convId);
+        }
         void refreshSidebarContext(convId);
         await refreshConversations();
         await refreshVisionSupported();
@@ -607,6 +647,7 @@ export function useChat() {
       } finally {
         setStreamAssistant(null);
         setSending(false);
+        setAbortedTurn(false);
       }
     },
     [
@@ -722,5 +763,11 @@ export function useChat() {
     refreshProjectList,
     refreshConversations,
     applyActivePersonality,
+    abortTurn,
   };
 }
+
+export type StreamAssistantState = {
+  thinking: boolean;
+  text: string;
+} | null;

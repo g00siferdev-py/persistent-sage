@@ -11,3 +11,4 @@ Also see:
 - [docs/DATA-AND-PRIVACY.md](./docs/DATA-AND-PRIVACY.md) — Local storage and encryption (database is **not** encrypted)
 - [docs/SIGNING-AND-UPDATES.md](./docs/SIGNING-AND-UPDATES.md) — Updater and signing status
 - [docs/README.md](./docs/README.md) — Documentation index
+- [docs/SUPPORT.md](./docs/SUPPORT.md) — Optional donations and support

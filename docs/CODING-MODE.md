@@ -1,8 +1,8 @@
-# Coding mode (Persistent Sage v2)
+# Coding mode (Persistent Sage v2 / 2.1)
 
-**Coding mode** is a repo-scoped development workspace inside Persistent Sage. You manage git repositories under `workspace/repos/`, browse files, edit in a built-in editor, run allowlisted shell commands in an integrated terminal, and chat with an AI coding agent that can search, patch, commit, and (when enabled) push or pull via HTTPS.
+**Coding mode** is a repo-scoped development workspace inside Persistent Sage. You manage git repositories under `workspace/repos/`, browse files, edit in a built-in editor, run allowlisted shell commands in an integrated terminal, chat with an AI coding agent, and use **playground**, **notepad**, and **debug panels** introduced in **2.1**.
 
-Switch modes with **Companion | Coding** in the app header. Your last mode is remembered in browser local storage.
+Switch modes with **Companion | Coding** in the app header. Your last mode and active conversation are remembered.
 
 ---
 
@@ -11,16 +11,18 @@ Switch modes with **Companion | Coding** in the app header. Your last mode is re
 | Region | Purpose |
 |--------|---------|
 | **Left** | Repository list, **New project**, **Clone repository** |
-| **Center** | View toolbar (Split / Editor / Chat), file editor with tabs, coding chat, integrated terminal |
+| **Center** | View toolbar (Split / Editor / Chat / **Playground**), file editor with tabs, coding chat, integrated terminal, **notepad** |
 | **Right** | File tree (click a file to open; **Collapse all** / **Expand all**) |
+| **Far right** (collapsible) | **Agent Action Stream**, **Event Stream Debugger** |
 
-The center column supports three view modes:
+The center column supports four view modes:
 
 | Mode | Shows |
 |------|--------|
 | **Split** | Editor above, chat below (default) |
 | **Editor** | Editor only (more space for files) |
 | **Chat** | Agent chat only |
+| **Playground** | Ad-hoc code runner (Python, Node, TS, Bash, PowerShell, Rust) outside the repo |
 
 The terminal can be collapsed, cleared, and resized by dragging the handle above it. Terminal height is persisted locally.
 
@@ -116,6 +118,44 @@ When **Link coding mode to active companion** is enabled (**Settings → Tools �
 When link is **off**, coding uses the fixed `__coding__` personality scope.
 
 Legacy threads created under `__coding__` are migrated to the active companion when you return to that repo.
+
+---
+
+## Coding notepad (2.1+)
+
+Per-repo scratch notes stored under the app data directory (not in the git repo). Open from the coding layout; the agent can read/write via `coding_notepad_*` tools when enabled.
+
+Use it for task lists, API notes, or session context without committing to the repository.
+
+---
+
+## Code playground (2.1+)
+
+The **Playground** view runs short snippets in a temp sandbox under `{data_dir}/playground/`:
+
+| Language | Runtime |
+|----------|---------|
+| Python | `python` / `python3` |
+| JavaScript / TypeScript | `node` (TS uses native strip-types when supported) |
+| Bash / shell | Git Bash on Windows; POSIX `bash` elsewhere |
+| PowerShell | `powershell` / `pwsh` |
+| Rust | `rustc` then run binary |
+
+Optional **Allow network** toggle (off by default applies proxy sandbox — not a full container). Output, exit code, and elapsed time appear in the panel.
+
+---
+
+## Agent Action Stream & Event Stream Debugger (2.1+)
+
+Collapsible panels on the right show live **tool calls** and raw **IPC/event payloads** during coding agent turns. Useful for debugging provider tool loops without reading terminal logs.
+
+Panel open state and width persist in local storage.
+
+---
+
+## Settings in coding mode (2.1+)
+
+Open **Settings** from the coding header (same four-tab panel as Companion). Provider, tools, and cache changes apply immediately to coding sessions.
 
 ---
 

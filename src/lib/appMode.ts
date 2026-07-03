@@ -1,12 +1,14 @@
 /** Top-level product mode: companion chat vs coding workspace (Persistent Sage v2). */
 export type AppMode = "companion" | "coding";
 
-const STORAGE_KEY = "persistent-sage.appMode";
+const MODE_KEY = "persistent-sage.appMode";
+const CONV_KEY = "persistent-sage.activeConversationId";
+const REPO_KEY = "persistent-sage.activeRepoId";
 
 export function loadAppMode(): AppMode {
   try {
-    const v = localStorage.getItem(STORAGE_KEY);
-    if (v === "companion" || v === "coding") return v;
+    const raw = localStorage.getItem(MODE_KEY);
+    if (raw === "coding") return "coding";
   } catch {
     /* private mode */
   }
@@ -15,7 +17,43 @@ export function loadAppMode(): AppMode {
 
 export function saveAppMode(mode: AppMode): void {
   try {
-    localStorage.setItem(STORAGE_KEY, mode);
+    localStorage.setItem(MODE_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadActiveConversationId(): string | null {
+  try {
+    const raw = localStorage.getItem(CONV_KEY);
+    return raw?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveActiveConversationId(id: string | null): void {
+  try {
+    if (id?.trim()) localStorage.setItem(CONV_KEY, id.trim());
+    else localStorage.removeItem(CONV_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadActiveRepoId(): string | null {
+  try {
+    const raw = localStorage.getItem(REPO_KEY);
+    return raw?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveActiveRepoId(id: string | null): void {
+  try {
+    if (id?.trim()) localStorage.setItem(REPO_KEY, id.trim());
+    else localStorage.removeItem(REPO_KEY);
   } catch {
     /* ignore */
   }

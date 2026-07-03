@@ -13,6 +13,7 @@
     "core:resources:default",
     "core:image:default",
     "core:event:allow-listen",
-    "core:event:allow-unlisten"
+    "core:event:allow-unlisten",
+    "core:event:allow-emit"
   ]
 }

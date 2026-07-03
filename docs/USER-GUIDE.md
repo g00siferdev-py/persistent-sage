@@ -1,6 +1,6 @@
 # Persistent Sage user guide
 
-Complete guide to the Persistent Sage desktop application as shipped in **version 2.0.0**.
+Complete guide to the Persistent Sage desktop application as shipped in **version 2.1.0**.
 
 **Runtime requirement:** `npm run tauri dev` or an installed release build. Browser-only Vite preview cannot access chat, memory, or settings backends.
 
@@ -16,7 +16,9 @@ Persistent Sage is a **local-first AI companion**:
 - **Optional agent tools** — web search, URL fetch, HTTPS requests, workspace files, database query
 - **Pulse** — scheduled check-ins in your **currently selected** conversation
 - **Image attachments** — send photos to vision-capable models from the composer
-- **Coding mode (v2)** — repo-scoped IDE, terminal, and coding agent (see [§ 12 Coding mode](#12-coding-mode-v2))
+- **Coding mode (v2)** — repo-scoped IDE, terminal, coding agent, playground, notepad (see [§ 12 Coding mode](#12-coding-mode-v2))
+- **Help menu** — header **?** button opens in-app guide and doc links
+- **Light/dark theme** — Settings → General → Appearance
 
 Your data stays on your machine. See [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md): the **database is not encrypted**, but it is **local** after install.
 
@@ -31,7 +33,7 @@ Persistent Sage has two top-level modes, switched from the header: **Companion**
 | Region | Component | Purpose |
 |--------|-----------|---------|
 | **Left** | Conversation sidebar | Thread list, Memory Anchor panel |
-| **Center** | Chat | Messages, composer, companion picker, Settings toggle |
+| **Center** | Chat | Messages, composer, companion picker, Settings toggle, **Help**, **token counter** |
 | **Right** | Settings panel | Companion · Provider · Tools · General |
 
 Settings slides in from the right; toggle **Settings** / **Hide** in the chat header.
@@ -43,6 +45,9 @@ Settings slides in from the right; toggle **Settings** / **Hide** in the chat he
 | **Left** | Repositories | Repo list, new project, clone |
 | **Center** | IDE + chat + terminal | Editor tabs, coding agent chat, shell |
 | **Right** | Files | Repo file tree |
+| **Far right** (optional) | Agent Action Stream, Event Stream Debugger | Live tool events during coding turns |
+
+Coding mode also includes **Settings** (same panel as Companion), **Notepad**, and **Playground** views from the center toolbar.
 
 See **[CODING-MODE.md](./CODING-MODE.md)** for full coding documentation.
 
@@ -75,6 +80,11 @@ Choose which **companion profile** receives new chats and memory scoping. Switch
 ### Streaming
 
 Persistent Sage emits `chat:stream-start`, token deltas on `chat:stream`, and `done`. A “Thinking…” state shows before the first token.
+
+### Timestamps and abort
+
+- Each message shows a **timestamp** (local time) when expanded or on hover depending on layout.
+- While the assistant is replying, **Stop** / abort ends the turn and clears the streaming state.
 
 ### Errors
 
@@ -189,7 +199,9 @@ Full reference: [CODING-MODE.md](./CODING-MODE.md).
 | **Memory** | LLM extraction, semantic recall, optional embedding model override, re-index embeddings |
 | **Pulse** | Enable timer, interval (minutes), instructions; runs in **sidebar-selected** thread |
 | **Updates** | **Store installs:** Microsoft Store (Library → Get updates). **GitHub installs:** Tauri updater checks GitHub Releases |
+| **Cache** | View temp cache size, open folder, clear cached tool/runtime files |
 | **Open beta feedback** | Open prefilled GitHub Issues for bugs, ideas, or general beta notes |
+| **Donate** | Footer link on every screen — optional PayPal / Cash App (see [SUPPORT.md](./SUPPORT.md)) |
 | **Data** | Reveal data folder, wipe memories, factory reset |
 | **About** | Backend version |
 
@@ -245,7 +257,7 @@ The feedback buttons open public GitHub Issues. Persistent Sage pre-fills safe a
 | Topic | Status |
 |-------|--------|
 | Database encryption | Not implemented |
-| Light theme | Settings → General → Appearance → Dark mode (off = light) |
+| Light theme | Settings → General → Appearance → Dark mode (off = light) — **2.1+** |
 | Browser-only `npm run dev` | No backend |
 | Semantic vector search | Optional in Settings → Memory; hybrid with FTS + keyword |
 | Windows code signing | Not active yet; see [SIGNING-AND-UPDATES.md](./SIGNING-AND-UPDATES.md) |
@@ -267,7 +279,9 @@ The feedback buttons open public GitHub Issues. Persistent Sage pre-fills safe a
 - [x] OpenClaw / Persistent Sage JSON personality import
 - [x] In-app updater support for updater-enabled releases
 - [x] Portable / custom data directory
-- [x] Coding mode — repos, editor, terminal, coding agent tools
+- [x] Coding mode — repos, editor, terminal, coding agent tools, playground, notepad
+- [x] Help menu, token counter, message timestamps, abort turn (2.1+)
+- [x] Cache manager, single-instance guard, ErrorBoundary (2.1+)
 
 ---
 

@@ -6,6 +6,17 @@ export type WhatsNewContent = {
 
 /** Release notes shown once after the app version changes (e.g. in-app updater restart). */
 const RELEASES: Record<string, WhatsNewContent> = {
+  "2.1.0": {
+    version: "2.1.0",
+    title: "Persistent Sage 2.1.0 — UX polish",
+    highlights: [
+      "Companion UX — message timestamps, improved markdown, copy buttons, Help menu, token counter, abort turn.",
+      "Coding panels — notepad, code playground, Agent Action Stream, Event Stream Debugger, Settings in coding mode.",
+      "Light/dark theme support for artifacts; unified conversation when switching Companion ↔ Coding.",
+      "Cache manager in Settings; single-instance guard; ErrorBoundary for recoverable UI errors.",
+      "Version badge shows v2.1.0; Windows playground bash uses Git Bash instead of the WSL launcher.",
+    ],
+  },
   "2.0.0": {
     version: "2.0.0",
     title: "Persistent Sage 2.0 — Coding mode",

@@ -1,7 +1,7 @@
 # Persistent Sage Mobile — Production Documentation
 
 **Audience:** Production team building the **Persistent Sage Android application**  
-**Baseline:** Desktop **v2.0.0** (`main` @ tag `v2.0.0`)  
+**Baseline:** Desktop **v2.1.0** (`main` @ tag `v2.1.0` when released)  
 **Status:** Planning phase — no Android build exists yet  
 **Repository:** [g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage)
 
@@ -9,7 +9,7 @@
 
 ## Purpose
 
-This documentation set explains **Persistent Sage from top to bottom** so your production team can plan and build the Android mobile application. It is derived from the shipping **2.0.0** desktop codebase (Tauri 2 + React 19 + Rust). Desktop **2.0** adds **Coding mode** (repos, IDE, terminal); mobile planning docs treat that as **desktop-only** unless explicitly scoped for Android.
+This documentation set explains **Persistent Sage from top to bottom** so your production team can plan and build the Android mobile application. It is derived from the shipping **2.1.0** desktop codebase (Tauri 2 + React 19 + Rust). Desktop **2.0+** adds **Coding mode** (repos, IDE, terminal); **2.1** adds playground, notepad, and debug panels — all **desktop-only** unless explicitly scoped for Android.
 
 After your team agrees on scope and approach, you will produce a **project summary** to share before development begins. Use the documents below as the technical foundation for that summary.
 
@@ -57,7 +57,7 @@ These existing docs describe the **shipping desktop product**. Mobile work shoul
 | **Not yet present** | No `tauri android init`, no `gen/android/`, no mobile CI, no Play Store docs |
 | **Shared backend** | Entire Rust library (`nova_lib`) is intended to be the mobile backend via Tauri IPC |
 | **Shared frontend** | React 19 + TypeScript UI — needs responsive/mobile navigation redesign |
-| **App version** | `2.0.0` across `package.json`, `Cargo.toml`, `tauri.conf.json` |
+| **App version** | `2.1.0` across `package.json`, `Cargo.toml`, `tauri.conf.json` |
 
 ---
 
@@ -75,4 +75,4 @@ These existing docs describe the **shipping desktop product**. Mobile work shoul
 
 ---
 
-*Documentation generated from Persistent Sage v2.0.0 codebase. Update when mobile development begins or desktop APIs change.*
+*Documentation generated from Persistent Sage v2.1.0 codebase. Update when mobile development begins or desktop APIs change.*

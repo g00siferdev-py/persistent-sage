@@ -111,6 +111,35 @@ The chat UI **only** renders tables, HTML pages, and charts from fenced **artifa
 - Use a normal markdown **code block** (e.g. ```python) **only** when the user explicitly asks for **programming source code** to copy. That is not an artifact.
 "#;
 
+const ARTIFACT_THEME_DARK: &str = r#"
+
+### UI theme: dark mode (active)
+The user is viewing the app in **dark mode**. HTML artifacts render inside a dark-themed shell.
+- Set `body { background: #0f172a; color: #e2e8f0; }` (or similar slate/dark palette).
+- Never use black text on a transparent or dark background.
+- Prefer light text (#e2e8f0–#f8fafc), muted secondary text (#94a3b8), borders rgba(148,163,184,0.35).
+- Tables: dark cell backgrounds (#1e293b), light header text.
+"#;
+
+const ARTIFACT_THEME_LIGHT: &str = r#"
+
+### UI theme: light mode (active)
+The user is viewing the app in **light mode**. HTML artifacts render inside a light-themed shell.
+- Set `body { background: #f8fafc; color: #0f172a; }` (or similar light palette).
+- Never use white or very light text on a light background.
+- Prefer dark text (#0f172a–#334155), subtle borders (#cbd5e1), card backgrounds #ffffff.
+- Ensure sufficient contrast for tables, charts, and labels.
+"#;
+
+/// Theme-specific styling hints appended to the artifact system prompt.
+pub fn artifact_theme_appendix(theme: &str) -> &'static str {
+    if theme.eq_ignore_ascii_case("light") {
+        ARTIFACT_THEME_LIGHT
+    } else {
+        ARTIFACT_THEME_DARK
+    }
+}
+
 /// True when the user message implies HTML/table/chart output (not programming homework).
 #[must_use]
 pub fn user_requests_visual_deliverable(message: &str) -> bool {

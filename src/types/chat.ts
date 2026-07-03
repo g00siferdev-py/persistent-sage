@@ -6,6 +6,10 @@ export interface StoredConversation {
   title: string;
   createdAt: string;
   updatedAt: string;
+  /** When the conversation is being used in coding mode, the repo id it is bound to. */
+  codingRepoId?: string | null;
+  /** 'companion' | 'coding' | null. */
+  appMode?: string | null;
 }
 
 /** Long-term Memory Anchor (raw or curated layer). */
@@ -54,6 +58,8 @@ export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** ISO-8601 timestamp the message was created. */
+  createdAt: string;
   /** Local file URL from `convertFileSrc` when the message has an image attachment. */
   imageDisplayPath?: string;
   imageMime?: string;
@@ -81,6 +87,7 @@ export function storedToChatMessage(m: StoredMessage): ChatMessage {
       id: String(m.id),
       role: m.role,
       content: prepared.content,
+      createdAt: m.createdAt,
       imageDisplayPath: m.imageDisplayPath,
       imageMime: m.imageMime,
       artifactJson: prepared.artifactJson,
@@ -90,6 +97,7 @@ export function storedToChatMessage(m: StoredMessage): ChatMessage {
     id: String(m.id),
     role: m.role,
     content: m.content,
+    createdAt: m.createdAt,
     imageDisplayPath: m.imageDisplayPath,
     imageMime: m.imageMime,
     artifactJson: m.artifactJson,

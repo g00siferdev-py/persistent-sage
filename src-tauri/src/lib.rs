@@ -8,14 +8,18 @@
 //! Application entry for mobile builds is [`run`]. Desktop [`main`] in
 //! `main.rs` delegates here so the same setup runs everywhere.
 
+mod agent_stream;
 mod agent_tools;
+mod app_instance;
 mod artifacts;
 mod attachments;
 mod browser_fetch;
+mod cache;
 mod chat;
 mod git_auth;
 mod coding;
 mod coding_ide;
+mod coding_notes;
 mod coding_tools;
 mod database_query;
 mod distribution;
@@ -25,6 +29,7 @@ mod memory_extract;
 mod memory_tools;
 mod personality;
 mod personality_tools;
+mod playground;
 mod projects;
 mod repos;
 mod provider;
@@ -32,6 +37,7 @@ mod pulse;
 mod recipes;
 mod settings;
 mod store_updates;
+mod token_counter;
 mod tool_stream;
 
 use std::path::PathBuf;
@@ -50,6 +56,7 @@ use provider::{
 };
 use serde::Serialize;
 use settings::{SettingsManager, SettingsUpdatePayload, SettingsView};
+use token_counter::TokenContextInfo;
 use std::time::Duration;
 use tauri::{Manager, State};
 
@@ -379,6 +386,29 @@ fn open_feedback_issue(issue_url: String) -> Result<(), String> {
     opener::open(issue_url).map_err(|e| format!("open feedback form: {e}"))
 }
 
+fn external_url_host_allowed(host: &str) -> bool {
+    host == "github.com"
+        || host.ends_with(".github.com")
+        || host == "paypal.com"
+        || host.ends_with(".paypal.com")
+        || host == "cash.app"
+        || host.ends_with(".cash.app")
+}
+
+/// Open an https URL in the system default browser (donation links, docs, etc.).
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    let parsed = url::Url::parse(url.trim()).map_err(|e| format!("invalid URL: {e}"))?;
+    if parsed.scheme() != "https" {
+        return Err("only https URLs can be opened externally".into());
+    }
+    let host = parsed.host_str().ok_or_else(|| "URL has no host".to_string())?;
+    if !external_url_host_allowed(host) {
+        return Err(format!("external URL host not allowed: {host}"));
+    }
+    opener::open(parsed.as_str()).map_err(|e| format!("open URL: {e}"))
+}
+
 #[tauri::command]
 async fn provider_info(state: State<'_, NovaState>) -> Result<String, String> {
     let engine = state.llm.read().await.clone();
@@ -650,6 +680,19 @@ fn memory_get_or_create_coding_conversation(
 }
 
 #[tauri::command]
+fn memory_set_conversation_coding_meta(
+    conversation_id: String,
+    repo_id: Option<String>,
+    state: State<NovaState>,
+) -> Result<(), String> {
+    let rid = repo_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    state
+        .memory
+        .set_conversation_coding_meta(conversation_id.trim(), rid)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn memory_get_conversation(
     state: State<NovaState>,
     conversation_id: String,
@@ -707,6 +750,40 @@ fn memory_get_recent(
         artifacts::repair_assistant_messages(&mut recent);
     }
     Ok(recent)
+}
+
+#[tauri::command]
+fn memory_get_token_context(
+    state: State<NovaState>,
+    conversation_id: String,
+) -> Result<TokenContextInfo, String> {
+    let messages = state
+        .memory
+        .get_recent(&conversation_id, 10_000)
+        .map_err(|e| e.to_string())?;
+
+    let settings = state.settings.view().map_err(|e| e.to_string())?;
+    let provider = settings.selected_provider.as_str();
+    let model = match provider {
+        "openai" => &settings.openai_model,
+        "anthropic" => &settings.anthropic_model,
+        "ollama" => &settings.ollama_model,
+        "ollama_cloud" => &settings.ollama_cloud_model,
+        "gemini" => &settings.gemini_model,
+        "xai" => &settings.xai_model,
+        _ => "gpt-4o",
+    };
+
+    let message_pairs: Vec<(String, String)> = messages
+        .iter()
+        .map(|m| ("".to_string(), m.content.clone()))
+        .collect();
+
+    Ok(TokenContextInfo::from_messages(
+        &message_pairs,
+        provider,
+        model,
+    ))
 }
 
 /// Rich briefing: transcript + Memory Anchors + projects + preferences.
@@ -931,6 +1008,11 @@ pub fn run() {
         distribution.channel, distribution.updates_via_microsoft_store
     );
 
+    if let Err(e) = app_instance::acquire_data_dir_lock(&data_directory) {
+        eprintln!("persistent-sage: {e}");
+        std::process::exit(1);
+    }
+
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
@@ -970,6 +1052,7 @@ pub fn run() {
             app_data_paths,
             reveal_data_directory,
             open_feedback_issue,
+            open_external_url,
             provider_info,
             provider_list_available,
             ollama_cloud_list_models,
@@ -996,6 +1079,7 @@ pub fn run() {
             delete_conversation,
             memory_store_message,
             memory_get_recent,
+            memory_get_token_context,
             memory_startup_briefing,
             memory_update_startup_briefing,
             memory_create_anchor,
@@ -1020,9 +1104,22 @@ pub fn run() {
             coding_read_file,
             coding_write_file,
             coding_run_shell,
+            coding_notes::coding_notes_list,
+            coding_notes::coding_notes_read,
+            coding_notes::coding_notes_write,
+            coding_notes::coding_notes_create,
+            coding_notes::coding_notes_delete,
+            playground::coding_playground_run,
             memory_list_coding_conversations,
             memory_create_coding_conversation,
             memory_get_or_create_coding_conversation,
+            memory_set_conversation_coding_meta,
+            cache::cache_info,
+            cache::clear_cache,
+            cache::reveal_cache_directory,
+            agent_stream::agent_stream_replay_recent,
+            agent_stream::agent_stream_emit_synthetic,
+            agent_stream::agent_stream_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Persistent Sage (Tauri application)");

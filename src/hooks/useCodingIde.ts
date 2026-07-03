@@ -28,7 +28,7 @@ type CodingShellResult = {
   elapsedSecs: number;
 };
 
-export type CodingViewMode = "split" | "editor" | "chat";
+export type CodingViewMode = "split" | "editor" | "chat" | "playground";
 
 const VIEW_MODE_KEY = "ps-coding-view-mode";
 const TERMINAL_HEIGHT_KEY = "ps-coding-terminal-height";
@@ -36,7 +36,7 @@ const TERMINAL_HEIGHT_KEY = "ps-coding-terminal-height";
 function loadViewMode(): CodingViewMode {
   try {
     const v = localStorage.getItem(VIEW_MODE_KEY);
-    if (v === "editor" || v === "chat" || v === "split") return v;
+    if (v === "editor" || v === "chat" || v === "split" || v === "playground") return v;
   } catch {
     /* ignore */
   }

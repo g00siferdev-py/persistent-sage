@@ -71,6 +71,10 @@ impl ToolStreamEmitter {
         self.emit(tool_name, "end", "", "");
     }
 
+    pub fn app_handle(&self) -> &AppHandle {
+        &self.app
+    }
+
     fn emit(&self, tool_name: &str, phase: &str, detail: &str, delta: &str) {
         emit_to_main_webview(
             &self.app,
