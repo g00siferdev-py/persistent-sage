@@ -30,7 +30,8 @@ When `PERSISTENT_SAGE_DATA_DIR`/`PERSISTENT_SAGE_PORTABLE` (or legacy `NOVA_*`) 
 |----|----------------|
 | Linux | `~/.local/share/persistent-sage/data/` |
 | macOS | `~/Library/Application Support/Persistent Sage/` |
-| Windows | `%APPDATA%\Persistent Sage\` |
+| Windows (GitHub installer) | `%LOCALAPPDATA%\Persistent Sage\Persistent Sage\` |
+| Windows (Microsoft Store) | `%LOCALAPPDATA%\Packages\…PersistentSage…\LocalCache\Local\Persistent Sage\Persistent Sage\` (virtualized; use **Open data folder** in Settings) |
 
 ### Files in the data directory
 

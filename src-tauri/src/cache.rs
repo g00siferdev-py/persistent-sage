@@ -4,8 +4,11 @@
 //! directory so audit scripts, HTML dumps, cookies, JSON output, and other
 //! runtime artifacts never clutter the repository root.
 
+use crate::NovaState;
+use crate::paths;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+use tauri::State;
 
 const CACHE_DIR_NAME: &str = "cache";
 
@@ -19,21 +22,15 @@ pub struct CacheInfo {
     pub size_bytes: u64,
 }
 
-/// Returns the canonical cache directory under the Persistent Sage data dir.
-///
-/// Respects the same env overrides as the rest of the app:
-/// `PERSISTENT_SAGE_DATA_DIR` / `NOVA_DATA_DIR`, or `PERSISTENT_SAGE_PORTABLE`
-/// / `NOVA_PORTABLE`.
-pub fn cache_dir() -> Result<PathBuf, String> {
-    let data_dir = crate::memory::default_data_dir().map_err(|e| e.to_string())?;
-    let cache = data_dir.join(CACHE_DIR_NAME);
+fn cache_dir_for(data_directory: &Path) -> Result<PathBuf, String> {
+    let cache = data_directory.join(CACHE_DIR_NAME);
     std::fs::create_dir_all(&cache).map_err(|e| format!("create cache dir: {e}"))?;
     Ok(cache)
 }
 
 /// Build a path inside a cache sub-directory, creating the sub-directory if needed.
-pub fn cache_path(subdir: &str, filename: &str) -> Result<PathBuf, String> {
-    let base = cache_dir()?;
+pub fn cache_path(data_directory: &Path, subdir: &str, filename: &str) -> Result<PathBuf, String> {
+    let base = cache_dir_for(data_directory)?;
     let dir = base.join(subdir);
     std::fs::create_dir_all(&dir).map_err(|e| format!("create cache subdir: {e}"))?;
     Ok(dir.join(filename))
@@ -64,8 +61,8 @@ fn dir_stats(dir: &Path) -> Result<(usize, u64), String> {
 
 /// Get current cache directory info for display in the UI.
 #[tauri::command]
-pub fn cache_info() -> Result<CacheInfo, String> {
-    let path = cache_dir()?;
+pub fn cache_info(state: State<NovaState>) -> Result<CacheInfo, String> {
+    let path = cache_dir_for(state.data_directory.as_path())?;
     let exists = path.exists();
     let (item_count, size_bytes) = if exists {
         dir_stats(&path).unwrap_or((0, 0))
@@ -73,7 +70,7 @@ pub fn cache_info() -> Result<CacheInfo, String> {
         (0, 0)
     };
     Ok(CacheInfo {
-        path: path.to_string_lossy().into_owned(),
+        path: paths::display_path(&path),
         exists,
         item_count,
         size_bytes,
@@ -82,8 +79,8 @@ pub fn cache_info() -> Result<CacheInfo, String> {
 
 /// Clear the entire application cache directory.
 #[tauri::command]
-pub fn clear_cache() -> Result<CacheInfo, String> {
-    let path = cache_dir()?;
+pub fn clear_cache(state: State<NovaState>) -> Result<CacheInfo, String> {
+    let path = cache_dir_for(state.data_directory.as_path())?;
     if path.exists() {
         for entry in std::fs::read_dir(&path)
             .map_err(|e| format!("read cache dir: {e}"))?
@@ -97,12 +94,12 @@ pub fn clear_cache() -> Result<CacheInfo, String> {
             }
         }
     }
-    cache_info()
+    cache_info(state)
 }
 
 /// Reveal the cache directory in the system file manager.
 #[tauri::command]
-pub fn reveal_cache_directory() -> Result<(), String> {
-    let dir = cache_dir()?;
-    opener::open(&dir).map_err(|e| format!("open cache folder: {e}"))
+pub fn reveal_cache_directory(state: State<NovaState>) -> Result<(), String> {
+    let dir = cache_dir_for(state.data_directory.as_path())?;
+    paths::reveal_in_file_manager(&dir)
 }

@@ -23,6 +23,7 @@ mod coding_notes;
 mod coding_tools;
 mod database_query;
 mod distribution;
+mod paths;
 mod embedding;
 mod memory;
 mod memory_extract;
@@ -178,9 +179,9 @@ fn ensure_workspace_guide(workspace_root: &std::path::Path) {
 }
 
 #[tauri::command]
-fn app_data_paths() -> Result<AppDataPaths, String> {
-    let database_file = memory::default_db_path().map_err(|e| e.to_string())?;
-    let data_directory = memory::default_data_dir().map_err(|e| e.to_string())?;
+fn app_data_paths(state: State<NovaState>) -> Result<AppDataPaths, String> {
+    let data_directory = state.data_directory.clone();
+    let database_file = data_directory.join("nova_memory.sqlite");
     let sqlite_profile = match memory::sqlite_profile_from_env() {
         SqliteProfile::Desktop => "desktop",
         SqliteProfile::Portable => "portable",
@@ -193,11 +194,11 @@ fn app_data_paths() -> Result<AppDataPaths, String> {
         .or_else(|_| std::env::var("NOVA_PORTABLE"))
         .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
-    let workspace_directory = data_directory.join("workspace");
+    let workspace_directory = state.workspace_root.clone();
     Ok(AppDataPaths {
-        data_directory: data_directory.to_string_lossy().into_owned(),
-        database_file: database_file.to_string_lossy().into_owned(),
-        workspace_directory: workspace_directory.to_string_lossy().into_owned(),
+        data_directory: paths::display_path(&data_directory),
+        database_file: paths::display_path(&database_file),
+        workspace_directory: paths::display_path(&workspace_directory),
         sqlite_profile: sqlite_profile.into(),
         nova_data_dir_env,
         nova_portable_env,
@@ -206,9 +207,8 @@ fn app_data_paths() -> Result<AppDataPaths, String> {
 
 /// Opens the resolved data directory in the system file manager (Finder, Explorer, Nautilus, …).
 #[tauri::command]
-fn reveal_data_directory() -> Result<(), String> {
-    let dir = memory::default_data_dir().map_err(|e| e.to_string())?;
-    opener::open(&dir).map_err(|e| format!("open data folder: {e}"))
+fn reveal_data_directory(state: State<NovaState>) -> Result<(), String> {
+    paths::reveal_in_file_manager(state.data_directory.as_path())
 }
 
 /// Open a workspace-relative or absolute file path in the system default app.
@@ -968,17 +968,14 @@ pub fn run() {
     );
 
     let data_dir =
-        memory::default_data_dir().expect("failed to resolve Persistent Sage data directory");
+        paths::resolve_data_directory().expect("failed to resolve Persistent Sage data directory");
     let settings = Arc::new(
         SettingsManager::load(data_dir.clone(), memory.clone()).expect("failed to load settings"),
     );
     let personality =
         Arc::new(PersonalityManager::load(&data_dir).expect("failed to load personality store"));
 
-    let mut data_directory = data_dir.clone();
-    if let Ok(c) = std::fs::canonicalize(&data_directory) {
-        data_directory = c;
-    }
+    let data_directory = data_dir;
     eprintln!(
         "persistent-sage: resolved data directory {}",
         data_directory.display()
@@ -986,14 +983,14 @@ pub fn run() {
 
     browser_fetch::ensure_browser_directories(&data_directory);
 
-    let mut workspace_root = data_dir.join("workspace");
+    let mut workspace_root = data_directory.join("workspace");
     if let Err(e) = std::fs::create_dir_all(&workspace_root) {
         eprintln!(
             "persistent-sage: warning: could not create agent workspace directory {}: {e}",
             workspace_root.display()
         );
     }
-    workspace_root = std::fs::canonicalize(&workspace_root).unwrap_or(workspace_root);
+    workspace_root = paths::user_facing_path(std::fs::canonicalize(&workspace_root).unwrap_or(workspace_root));
     ensure_workspace_guide(&workspace_root);
     projects::ensure_projects_tree(&workspace_root);
     repos::ensure_repos_tree(&workspace_root);

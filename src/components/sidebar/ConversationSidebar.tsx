@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Anchor,
   Brain,
+  ChevronDown,
   ListRestart,
   ListX,
   Loader2,
@@ -49,6 +50,85 @@ function formatUpdated(iso: string): string {
   }).format(new Date(d));
 }
 
+const SIDEBAR_COLLAPSE_PREFIX = "persistent-sage:companion-sidebar:";
+
+function readSidebarCollapse(key: string, defaultOpen: boolean): boolean {
+  if (typeof window === "undefined") return defaultOpen;
+  try {
+    const stored = window.localStorage.getItem(`${SIDEBAR_COLLAPSE_PREFIX}${key}`);
+    if (stored === "true") return true;
+    if (stored === "false") return false;
+  } catch {
+    /* ignore */
+  }
+  return defaultOpen;
+}
+
+function writeSidebarCollapse(key: string, open: boolean) {
+  try {
+    window.localStorage.setItem(`${SIDEBAR_COLLAPSE_PREFIX}${key}`, String(open));
+  } catch {
+    /* ignore */
+  }
+}
+
+type SidebarSectionProps = {
+  title: string;
+  icon: ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+  /** Shown on the header row when expanded (e.g. Clear view). Clicks do not collapse. */
+  headerActions?: ReactNode;
+  /** Always visible on the header row (e.g. quick action when collapsed). */
+  trailingAction?: ReactNode;
+  className?: string;
+  bodyClassName?: string;
+};
+
+function SidebarSection({
+  title,
+  icon,
+  open,
+  onToggle,
+  children,
+  headerActions,
+  trailingAction,
+  className = "",
+  bodyClassName = "",
+}: SidebarSectionProps) {
+  return (
+    <section className={`flex min-h-0 flex-col ${className}`}>
+      <div className="flex shrink-0 items-center gap-1 px-1 pb-1 pt-2">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 transition hover:bg-slate-200/80 dark:hover:bg-slate-800/50 hover:text-slate-700 dark:hover:text-slate-300"
+        >
+          <ChevronDown
+            className={`size-3.5 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`}
+            aria-hidden
+          />
+          <span className="flex shrink-0 items-center">{icon}</span>
+          <span className="truncate">{title}</span>
+        </button>
+        {open && headerActions ? (
+          <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+            {headerActions}
+          </div>
+        ) : null}
+        {trailingAction ? (
+          <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+            {trailingAction}
+          </div>
+        ) : null}
+      </div>
+      {open ? <div className={`min-h-0 ${bodyClassName}`}>{children}</div> : null}
+    </section>
+  );
+}
+
 export function ConversationSidebar({
   conversations,
   hasThreadsInDatabase,
@@ -77,6 +157,24 @@ export function ConversationSidebar({
   const [recallBusy, setRecallBusy] = useState(false);
   const [recallBundle, setRecallBundle] = useState<MemoryRecallBundle | null>(null);
   const [recallError, setRecallError] = useState<string | null>(null);
+
+  const [newChatOpen, setNewChatOpen] = useState(() => readSidebarCollapse("new-chat", true));
+  const [conversationsOpen, setConversationsOpen] = useState(() =>
+    readSidebarCollapse("conversations", true),
+  );
+  const [memoryOpen, setMemoryOpen] = useState(() => readSidebarCollapse("memory-anchor", false));
+
+  useEffect(() => {
+    writeSidebarCollapse("new-chat", newChatOpen);
+  }, [newChatOpen]);
+
+  useEffect(() => {
+    writeSidebarCollapse("conversations", conversationsOpen);
+  }, [conversationsOpen]);
+
+  useEffect(() => {
+    writeSidebarCollapse("memory-anchor", memoryOpen);
+  }, [memoryOpen]);
 
   const recentAnchorsByDate = [...anchors].sort(
     (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
@@ -151,37 +249,60 @@ export function ConversationSidebar({
         </div>
       </div>
 
-      <div className="shrink-0 p-3">
-        <button
-          type="button"
-          onClick={() => onNewChat()}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-slate-900 dark:text-white shadow-sm shadow-indigo-500/20 transition hover:bg-indigo-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
+      <div className="flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto overscroll-contain px-2 pb-2">
+        <SidebarSection
+          title="New chat"
+          icon={<Plus className="size-3.5" aria-hidden />}
+          open={newChatOpen}
+          onToggle={() => setNewChatOpen((v) => !v)}
+          className="shrink-0"
+          bodyClassName="px-1 pb-2"
+          trailingAction={
+            !newChatOpen ? (
+              <button
+                type="button"
+                onClick={() => onNewChat()}
+                aria-label="New chat"
+                title="New chat"
+                className="rounded-md border border-indigo-400/50 bg-indigo-500/90 p-1 text-white shadow-sm transition hover:bg-indigo-400"
+              >
+                <Plus className="size-3.5" aria-hidden />
+              </button>
+            ) : null
+          }
         >
-          <Plus className="size-4" aria-hidden />
-          New chat
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => onNewChat()}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-slate-900 dark:text-white shadow-sm shadow-indigo-500/20 transition hover:bg-indigo-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
+          >
+            <Plus className="size-4" aria-hidden />
+            New chat
+          </button>
+        </SidebarSection>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden px-2 pb-2">
-        <div className="flex max-h-[40%] min-h-0 shrink-0 flex-col">
-        <div className="flex items-center justify-between gap-2 px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-          <span className="flex items-center gap-2">
-            <MessageSquare className="size-3.5" aria-hidden />
-            Conversations
-          </span>
-          {!threadListHiddenFromSidebar && hasThreadsInDatabase ? (
-            <button
-              type="button"
-              title="Hide thread list from this sidebar only — does not delete SQLite data"
-              onClick={() => onClearThreadListFromView()}
-              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-300 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-900/60 px-2 py-1 text-[10px] font-medium normal-case tracking-normal text-slate-600 dark:text-slate-400 transition hover:border-slate-300 dark:border-slate-600 hover:bg-slate-200 dark:bg-slate-800/80 hover:text-slate-800 dark:text-slate-200"
-            >
-              <ListX className="size-3.5" aria-hidden />
-              Clear view
-            </button>
-          ) : null}
-        </div>
-        <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain pr-1">
+        <SidebarSection
+          title="Conversations"
+          icon={<MessageSquare className="size-3.5" aria-hidden />}
+          open={conversationsOpen}
+          onToggle={() => setConversationsOpen((v) => !v)}
+          className="shrink-0"
+          bodyClassName=""
+          headerActions={
+            !threadListHiddenFromSidebar && hasThreadsInDatabase ? (
+              <button
+                type="button"
+                title="Hide thread list from this sidebar only — does not delete SQLite data"
+                onClick={() => onClearThreadListFromView()}
+                className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-300 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-900/60 px-2 py-1 text-[10px] font-medium normal-case tracking-normal text-slate-600 dark:text-slate-400 transition hover:border-slate-300 dark:border-slate-600 hover:bg-slate-200 dark:bg-slate-800/80 hover:text-slate-800 dark:text-slate-200"
+              >
+                <ListX className="size-3.5" aria-hidden />
+                Clear view
+              </button>
+            ) : null
+          }
+        >
+        <nav className="max-h-[min(40vh,260px)] space-y-0.5 overflow-y-auto overscroll-contain pr-1">
           {listLoading ? (
             <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
               <Loader2 className="size-4 animate-spin text-indigo-400" aria-hidden />
@@ -302,15 +423,17 @@ export function ConversationSidebar({
             })
           )}
         </nav>
-        </div>
+        </SidebarSection>
 
-        <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-slate-200 dark:border-slate-800/80 pt-3">
-          <div className="flex shrink-0 items-center gap-2 px-2 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-            <Brain className="size-3.5" aria-hidden />
-            Memory Anchor
-          </div>
-
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-1 pb-1">
+        <SidebarSection
+          title="Memory Anchor"
+          icon={<Brain className="size-3.5" aria-hidden />}
+          open={memoryOpen}
+          onToggle={() => setMemoryOpen((v) => !v)}
+          className="shrink-0 border-t border-slate-200 dark:border-slate-800/80 pt-1"
+          bodyClassName=""
+        >
+          <div className="max-h-[min(40vh,280px)] space-y-2 overflow-y-auto overscroll-contain px-1 pb-1">
             <div className="space-y-1 px-0.5 text-[10px] leading-snug text-slate-500">
               <p className="flex items-center gap-1.5">
                 <Sparkles className="size-3 shrink-0 text-indigo-400" aria-hidden />
@@ -449,7 +572,7 @@ export function ConversationSidebar({
               ) : null}
             </div>
           </div>
-        </div>
+        </SidebarSection>
       </div>
     </aside>
   );
