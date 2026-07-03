@@ -433,22 +433,25 @@ export function ConversationSidebar({
           className="shrink-0 border-t border-slate-200 dark:border-slate-800/80 pt-1"
           bodyClassName=""
         >
-          <div className="max-h-[min(40vh,280px)] space-y-2 overflow-y-auto overscroll-contain px-1 pb-1">
-            <div className="space-y-1 px-0.5 text-[10px] leading-snug text-slate-500">
-              <p className="flex items-center gap-1.5">
+          <div className="flex max-h-[min(55vh,460px)] flex-col gap-2 overflow-hidden px-1 pb-1">
+            <details className="shrink-0 rounded-md border border-slate-200/80 dark:border-slate-800/60 bg-slate-50/80 dark:bg-slate-950/30 px-2 py-1 text-[10px] leading-snug text-slate-500">
+              <summary className="cursor-pointer select-none font-medium text-slate-600 dark:text-slate-400">
+                About Memory Anchor
+              </summary>
+              <p className="mt-1.5 flex items-center gap-1.5">
                 <Sparkles className="size-3 shrink-0 text-indigo-400" aria-hidden />
                 <span>Raw + curated layers · local only</span>
               </p>
-              <p>
+              <p className="mt-1">
                 Chat messages live in the main transcript (SQLite). <strong className="text-slate-600 dark:text-slate-400">Recent anchors</strong>{" "}
                 lists extracted snippets only — use <strong className="text-slate-600 dark:text-slate-400">Extract raw anchors</strong> or recall
                 search below; they are not auto-filled from every reply.
               </p>
-            </div>
+            </details>
 
-            <div className="max-h-32 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 px-2.5 py-2">
+            <div className="max-h-24 shrink-0 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 px-2.5 py-2">
               {briefingLoading ? (
-                <div className="flex items-center gap-2 py-4 text-xs text-slate-500">
+                <div className="flex items-center gap-2 py-2 text-xs text-slate-500">
                   <Loader2 className="size-4 animate-spin text-indigo-400" aria-hidden />
                   Loading briefing…
                 </div>
@@ -459,29 +462,15 @@ export function ConversationSidebar({
               )}
             </div>
 
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={!activeId || briefingLoading || extractingAnchors}
-                onClick={() => onExtractAnchors()}
-                className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-800/50 px-2 py-1.5 text-[11px] font-medium text-slate-800 dark:text-slate-200 transition hover:bg-slate-200 dark:bg-slate-800 disabled:opacity-40"
-              >
-                {extractingAnchors ? (
-                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                ) : (
-                  <Anchor className="size-3.5" aria-hidden />
-                )}
-                {extractingAnchors ? "Extracting…" : "Extract raw anchors"}
-              </button>
-            </div>
-
-            <div>
-              <p className="mb-1 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+            <div className="flex min-h-[120px] min-w-0 flex-1 flex-col overflow-hidden">
+              <p className="mb-1 shrink-0 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                 Recent anchors
               </p>
-              <ul className="space-y-1">
+              <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-0.5">
                 {anchors.length === 0 ? (
-                  <li className="px-1 text-[11px] text-slate-600">No anchors for this thread.</li>
+                  <li className="px-1 text-[11px] text-slate-600 dark:text-slate-400">
+                    No anchors for this thread.
+                  </li>
                 ) : (
                   recentAnchorsByDate.slice(0, 10).map((a) => (
                     <li
@@ -504,7 +493,23 @@ export function ConversationSidebar({
               </ul>
             </div>
 
-            <div>
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button"
+                disabled={!activeId || briefingLoading || extractingAnchors}
+                onClick={() => onExtractAnchors()}
+                className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-800/50 px-2 py-1.5 text-[11px] font-medium text-slate-800 dark:text-slate-200 transition hover:bg-slate-200 dark:bg-slate-800 disabled:opacity-40"
+              >
+                {extractingAnchors ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <Anchor className="size-3.5" aria-hidden />
+                )}
+                {extractingAnchors ? "Extracting…" : "Extract raw anchors"}
+              </button>
+            </div>
+
+            <div className="shrink-0">
               <p className="mb-1 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
                 Hybrid recall (FTS + keywords)
               </p>
