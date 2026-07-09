@@ -138,7 +138,8 @@ const CODING_TOOLS_INFO = (
 const CODING_SHELL_INFO = (
   <>
     Coding mode: allowlisted shell commands via {toolDisplayName("coding_run_command")} (npm, cargo, git, python,
-    etc.) in the active repo directory. Off by default.
+    etc.) in the active repo directory, plus agent-launched snippets via {toolDisplayName("coding_playground_run")}.
+    Off by default.
   </>
 );
 
@@ -2070,7 +2071,7 @@ export function SettingsPanel({
             />
             <SettingsToggleCard
               id="agent-coding-shell"
-              title={`Allow ${toolDisplayName("coding_run_command")}`}
+              title={`Allow ${toolDisplayName("coding_run_command")} & ${toolDisplayName("coding_playground_run")}`}
               compact
               info={CODING_SHELL_INFO}
               nestDepth={1}
