@@ -262,7 +262,7 @@ pub fn chat_turn_from_stored(
     chat_turn_from_stored_with_image_policy(provider_id, data_dir, m, true)
 }
 
-/// History rows: only attach image bytes when `include_image` is true (latest user image turn).
+/// History rows: only attach image bytes when `include_image` is true (current user image turn).
 pub fn chat_turn_from_stored_with_image_policy(
     provider_id: &str,
     data_dir: &Path,

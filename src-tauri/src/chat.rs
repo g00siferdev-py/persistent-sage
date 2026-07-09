@@ -628,8 +628,8 @@ async fn try_complete_after_embedded_tool_xml(
     Ok(Some(text))
 }
 
-fn user_facing_tool_markup_message(provider_id: &str, has_images: bool) -> String {
-    if has_images && matches!(provider_id, "ollama" | "ollama_cloud") {
+fn user_facing_tool_markup_message(provider_id: &str, current_turn_has_image: bool) -> String {
+    if current_turn_has_image && matches!(provider_id, "ollama" | "ollama_cloud") {
         return "I tried to call a built-in tool, but tools are disabled for this message because an \
                 image is attached with local Ollama. Send the request without an image, or switch provider."
             .into();
@@ -745,6 +745,7 @@ async fn run_chat_completion(
     mut messages: Vec<ChatTurn>,
     options: ChatTurnOptions,
     tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
+    current_turn_has_image: bool,
 ) -> Result<String, String> {
     let configured = state.settings.max_tokens();
     let max_tokens = match configured {
@@ -839,11 +840,13 @@ async fn run_chat_completion(
     let personality_for_tools = personality_edit_enabled.then(|| state.personality.as_ref());
 
     let has_images = attachments::messages_include_images(&messages);
-    // Ollama often ignores `images` when `tools` are present — prefer vision over tools for that turn.
+    // Ollama often ignores `images` when `tools` are present — prefer vision over tools for that turn only.
     let agent_tool_backend = (!tool_definitions.is_empty())
         .then(|| web_tool_backend_for_provider(provider_id))
         .flatten()
-        .filter(|_| !(has_images && matches!(provider_id, "ollama" | "ollama_cloud")));
+        .filter(|_| {
+            !(current_turn_has_image && matches!(provider_id, "ollama" | "ollama_cloud"))
+        });
 
     if !tool_definitions.is_empty() {
         let names: Vec<&str> = tool_definitions.iter().map(|t| t.name.as_str()).collect();
@@ -877,7 +880,7 @@ async fn run_chat_completion(
     if !tool_definitions.is_empty() && agent_tool_backend.is_none() {
         eprintln!(
             "persistent-sage: warning: tools are enabled in settings but inactive this turn \
-             (provider={provider_id}, has_images={has_images}). Enable web tools for your provider \
+             (provider={provider_id}, current_turn_has_image={current_turn_has_image}). Enable web tools for your provider \
              in Settings, or use a tool-capable model without an image attachment."
         );
     }
@@ -1049,11 +1052,11 @@ async fn run_chat_completion(
                         }
                     }
                     Ok(None) | Err(_) => {
-                        full = user_facing_tool_markup_message(provider_id, has_images);
+                        full = user_facing_tool_markup_message(provider_id, current_turn_has_image);
                     }
                 }
             } else {
-                full = user_facing_tool_markup_message(provider_id, has_images);
+                full = user_facing_tool_markup_message(provider_id, current_turn_has_image);
             }
         }
     }
@@ -1063,7 +1066,7 @@ async fn run_chat_completion(
         reply = "(no text in model response)".into();
     }
     if crate::agent_tools::content_has_embedded_tool_calls(&reply) {
-        reply = user_facing_tool_markup_message(provider_id, has_images);
+        reply = user_facing_tool_markup_message(provider_id, current_turn_has_image);
     }
 
     if options.persist_assistant_message {
@@ -1451,11 +1454,15 @@ pub async fn execute_chat_turn(
     let provider_id = engine.provider_id().to_string();
     let data_dir = state.data_directory.as_path();
 
-    let image_turn_id = recent
-        .iter()
-        .filter(|m| m.role == MessageRole::User && m.image_attachment.is_some())
-        .max_by_key(|m| m.id)
-        .map(|m| m.id);
+    let image_turn_id = if pending_image.is_some() {
+        recent
+            .iter()
+            .filter(|m| m.role == MessageRole::User && m.image_attachment.is_some())
+            .max_by_key(|m| m.id)
+            .map(|m| m.id)
+    } else {
+        None
+    };
 
     let mut messages: Vec<ChatTurn> = Vec::with_capacity(recent.len() + 1);
     messages.push(ChatTurn::text("system", system_content));
@@ -1537,6 +1544,7 @@ pub async fn execute_chat_turn(
         messages,
         options,
         tool_stream.as_ref(),
+        pending_image.is_some(),
     )
     .await
 }
