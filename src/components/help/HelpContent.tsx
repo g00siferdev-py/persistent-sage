@@ -94,7 +94,7 @@ export function HelpContent() {
           <li>Clone or create repos in the left panel; open files in the editor and chat with the coding agent.</li>
           <li>Enable coding tools in Settings → Tools → Coding mode (v2).</li>
           <li>
-            Terminal and Playground run allowlisted commands in the active repo (
+            Terminal and Playground require Run Command because they execute local code (
             {platform === "windows" ? "cmd.exe" : "sh"} on this system).
           </li>
           <li>

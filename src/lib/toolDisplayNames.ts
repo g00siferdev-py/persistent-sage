@@ -24,6 +24,7 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   coding_git_clone: "Git Clone",
   coding_repo_create: "Create Repo",
   coding_github_save_pat: "Save GitHub PAT",
+  coding_playground_run: "Playground Run",
 };
 
 /** Friendly title for settings UI and docs; falls back to a spaced version of the id. */

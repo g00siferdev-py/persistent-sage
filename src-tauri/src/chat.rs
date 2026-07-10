@@ -267,10 +267,7 @@ async fn apply_tool_round_messages(
         database_allow_write: bool,
         browser_ignore_robots: bool,
         personality: Option<&crate::personality::PersonalityManager>,
-        memory_tools: Option<(
-            &crate::settings::SettingsManager,
-            &dyn ConversationMemory,
-        )>,
+        memory_tools: Option<(&crate::settings::SettingsManager, &dyn ConversationMemory)>,
         coding_ctx: Option<&crate::coding::CodingTurnContext>,
         tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
         settings: Option<&crate::settings::SettingsManager>,
@@ -278,7 +275,10 @@ async fn apply_tool_round_messages(
         arguments_json: &str,
     ) -> String {
         if let Some(ts) = tool_stream {
-            ts.start(name, &crate::tool_stream::tool_start_detail(name, arguments_json));
+            ts.start(
+                name,
+                &crate::tool_stream::tool_start_detail(name, arguments_json),
+            );
         }
         let maybe_app = tool_stream.map(|ts| ts.app_handle());
         let label = crate::tool_stream::tool_start_detail(name, arguments_json);
@@ -543,9 +543,9 @@ async fn agent_complete_with_tools(
         )
         .await?;
     }
-    Err(ProviderError::Api(
-        format!("Agent stopped after maximum tool rounds ({max_tool_rounds}) — try a narrower question."),
-    ))
+    Err(ProviderError::Api(format!(
+        "Agent stopped after maximum tool rounds ({max_tool_rounds}) — try a narrower question."
+    )))
 }
 
 /// If the model printed tool XML on a non-tool code path, run tools and ask the model again.
@@ -784,21 +784,12 @@ async fn run_chat_completion(
         tool_definitions.extend(crate::personality_tools::tool_definitions());
     }
     if options.enable_tools && is_coding_turn {
-        tool_definitions.push(crate::coding_tools::repo_create_tool_definition());
-        if state.settings.agent_coding_tools_enabled() {
-            tool_definitions.extend(crate::coding_tools::search_and_patch_tool_definitions());
-        }
-        if state.settings.agent_coding_shell_enabled() {
-            tool_definitions.push(crate::coding_tools::run_command_tool_definition());
-        }
-        if state.settings.agent_coding_git_enabled() {
-            tool_definitions.extend(crate::coding_tools::git_tool_definitions());
-        }
-        if state.settings.agent_coding_git_remote_enabled() {
-            tool_definitions.extend(crate::coding_tools::git_remote_tool_definitions());
-        }
-        tool_definitions.extend(crate::coding_tools::coding_notes_tool_definitions());
-        tool_definitions.push(crate::coding_tools::playground_tool_definition());
+        tool_definitions.extend(crate::coding_tools::coding_mode_tool_definitions(
+            state.settings.agent_coding_tools_enabled(),
+            state.settings.agent_coding_shell_enabled(),
+            state.settings.agent_coding_git_enabled(),
+            state.settings.agent_coding_git_remote_enabled(),
+        ));
         let coding_tools_on = state.settings.agent_coding_tools_enabled()
             || state.settings.agent_coding_shell_enabled()
             || state.settings.agent_coding_git_enabled()
@@ -844,9 +835,7 @@ async fn run_chat_completion(
     let agent_tool_backend = (!tool_definitions.is_empty())
         .then(|| web_tool_backend_for_provider(provider_id))
         .flatten()
-        .filter(|_| {
-            !(current_turn_has_image && matches!(provider_id, "ollama" | "ollama_cloud"))
-        });
+        .filter(|_| !(current_turn_has_image && matches!(provider_id, "ollama" | "ollama_cloud")));
 
     if !tool_definitions.is_empty() {
         let names: Vec<&str> = tool_definitions.iter().map(|t| t.name.as_str()).collect();
@@ -1205,8 +1194,8 @@ pub async fn execute_chat_turn(
     } else {
         pid
     };
-    let companion_linked = options.coding_context.is_some()
-        && state.settings.agent_coding_companion_linked_enabled();
+    let companion_linked =
+        options.coding_context.is_some() && state.settings.agent_coding_companion_linked_enabled();
 
     if options.emit_stream {
         crate::tool_stream::emit_chat_event(
@@ -1434,10 +1423,7 @@ pub async fn execute_chat_turn(
         system_content.push_str(crate::projects::PROJECT_SYSTEM_APPENDIX);
     }
     if state.settings.artifacts_enabled() {
-        let theme = options
-            .ui_theme
-            .as_deref()
-            .unwrap_or("dark");
+        let theme = options.ui_theme.as_deref().unwrap_or("dark");
         system_content.push_str(crate::artifacts::ARTIFACT_SYSTEM_APPENDIX);
         system_content.push_str(crate::artifacts::artifact_theme_appendix(theme));
     }
@@ -1565,7 +1551,10 @@ pub async fn chat_send_message(
 ) -> Result<ChatSendResult, String> {
     let is_coding = app_mode
         .as_deref()
-        .map(|m| m.trim().eq_ignore_ascii_case(crate::coding::APP_MODE_CODING))
+        .map(|m| {
+            m.trim()
+                .eq_ignore_ascii_case(crate::coding::APP_MODE_CODING)
+        })
         .unwrap_or(false);
 
     let mut turn_options = if is_coding {

@@ -59,10 +59,29 @@ pub struct PlaygroundTelemetryRecord {
     pub error: Option<String>,
 }
 
+pub const PLAYGROUND_RUN_COMMAND_DISABLED_MESSAGE: &str =
+    "Playground execution is disabled. Enable Run Command in Settings -> Tools -> Coding mode (v2) to run code snippets.";
+
+pub fn ensure_playground_run_allowed(
+    settings: &crate::settings::SettingsManager,
+) -> Result<(), String> {
+    if settings.agent_coding_shell_enabled() {
+        Ok(())
+    } else {
+        Err(PLAYGROUND_RUN_COMMAND_DISABLED_MESSAGE.into())
+    }
+}
+
 fn sanitize_filename(input: &str) -> String {
     input
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .take(32)
         .collect::<String>()
 }
@@ -144,7 +163,8 @@ fn apply_network_sandbox(cmd: &mut Command, allow_network: bool) -> bool {
 }
 
 fn telemetry_dir(base_dir: &Path) -> PathBuf {
-    base_dir.parent()
+    base_dir
+        .parent()
         .map(|p| p.join("lab").join("telemetry"))
         .unwrap_or_else(|| base_dir.join("lab").join("telemetry"))
 }
@@ -167,8 +187,7 @@ fn write_telemetry_record(
         .open(&path)
         .map_err(|e| format!("could not open telemetry log: {e}"))?;
     use std::io::Write;
-    writeln!(file, "{line}")
-        .map_err(|e| format!("could not write telemetry record: {e}"))?;
+    writeln!(file, "{line}").map_err(|e| format!("could not write telemetry record: {e}"))?;
     Ok(path)
 }
 
@@ -280,6 +299,7 @@ pub async fn coding_playground_run(
     state: tauri::State<'_, crate::NovaState>,
     request: PlaygroundRunRequest,
 ) -> Result<PlaygroundRunResult, String> {
+    ensure_playground_run_allowed(&state.settings)?;
     run_playground_request(&state.data_directory, request).await
 }
 
@@ -302,7 +322,12 @@ pub async fn run_playground_request(
     }
 
     let slug = sanitize_filename(&language);
-    let file_name = format!("{}_{}.{}", slug, uuid::Uuid::new_v4(), extension_for_language(&language));
+    let file_name = format!(
+        "{}_{}.{}",
+        slug,
+        uuid::Uuid::new_v4(),
+        extension_for_language(&language)
+    );
     let file_path = base_dir.join(&file_name);
 
     if let Err(e) = tokio::fs::write(&file_path, request.code.as_bytes()).await {
@@ -421,7 +446,7 @@ pub async fn run_playground_request(
             network_allowed: request.allow_network,
             sandbox_applied,
             telemetry_log_path: None,
-        }
+        },
     };
 
     // Rust is a two-stage run: compile, then execute the binary.
@@ -432,7 +457,8 @@ pub async fn run_playground_request(
         if let Some(bin) = binary_path_for_rust(&file_path) {
             let run_start = std::time::Instant::now();
             let mut run_cmd = Command::new(&bin);
-            run_cmd.current_dir(&base_dir)
+            run_cmd
+                .current_dir(&base_dir)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -443,7 +469,9 @@ pub async fn run_playground_request(
             let mut run_child = match run_cmd.spawn() {
                 Ok(c) => c,
                 Err(e) => {
-                    result.error = Some(format!("compiled successfully but failed to run binary: {e}"));
+                    result.error = Some(format!(
+                        "compiled successfully but failed to run binary: {e}"
+                    ));
                     result.elapsed_secs = run_start.elapsed().as_secs_f64();
                     return Ok(result);
                 }
@@ -454,7 +482,8 @@ pub async fn run_playground_request(
                 let _ = stdin.shutdown().await;
             }
 
-            let run_timeout = tokio::time::Duration::from_secs(request.timeout_secs.max(1).min(300));
+            let run_timeout =
+                tokio::time::Duration::from_secs(request.timeout_secs.max(1).min(300));
             let run_output = tokio::time::timeout(run_timeout, run_child.wait_with_output()).await;
             let run_elapsed = run_start.elapsed().as_secs_f64();
 
@@ -487,7 +516,10 @@ pub async fn run_playground_request(
                     exit_code: None,
                     elapsed_secs: run_elapsed,
                     temp_file_path: Some(file_path.to_string_lossy().into_owned()),
-                    error: Some(format!("binary killed after {}s timeout", request.timeout_secs)),
+                    error: Some(format!(
+                        "binary killed after {}s timeout",
+                        request.timeout_secs
+                    )),
                     network_allowed: request.allow_network,
                     sandbox_applied,
                     telemetry_log_path: None,

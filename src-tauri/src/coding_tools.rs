@@ -36,10 +36,48 @@ const SKIP_DIR_NAMES: &[&str] = &[
 ];
 
 const ALLOWED_COMMAND_BASES: &[&str] = &[
-    "git", "npm", "npx", "node", "cargo", "rustc", "python", "py", "pytest", "pip", "tsc",
-    "eslint", "prettier", "make", "dotnet", "go", "javac", "java", "mvn", "gradle", "cmake",
-    "vite", "vitest", "jest", "pnpm", "yarn", "bun", "deno", "rg", "grep", "find", "type",
-    "cat", "dir", "echo", "where", "which", "cmd", "powershell", "pwsh", "ping", "timeout",
+    "git",
+    "npm",
+    "npx",
+    "node",
+    "cargo",
+    "rustc",
+    "python",
+    "py",
+    "pytest",
+    "pip",
+    "tsc",
+    "eslint",
+    "prettier",
+    "make",
+    "dotnet",
+    "go",
+    "javac",
+    "java",
+    "mvn",
+    "gradle",
+    "cmake",
+    "vite",
+    "vitest",
+    "jest",
+    "pnpm",
+    "yarn",
+    "bun",
+    "deno",
+    "rg",
+    "grep",
+    "find",
+    "type",
+    "cat",
+    "dir",
+    "echo",
+    "where",
+    "which",
+    "cmd",
+    "powershell",
+    "pwsh",
+    "ping",
+    "timeout",
     "for",
 ];
 
@@ -119,6 +157,32 @@ pub fn run_command_tool_definition() -> ToolDefinition {
             "required": ["command"]
         }),
     }
+}
+
+pub fn coding_mode_tool_definitions(
+    enable_code_tools: bool,
+    enable_shell: bool,
+    enable_git: bool,
+    enable_git_remote: bool,
+) -> Vec<ToolDefinition> {
+    let mut definitions = vec![repo_create_tool_definition()];
+    if enable_code_tools {
+        definitions.extend(search_and_patch_tool_definitions());
+    }
+    if enable_shell {
+        definitions.push(run_command_tool_definition());
+    }
+    if enable_git {
+        definitions.extend(git_tool_definitions());
+    }
+    if enable_git_remote {
+        definitions.extend(git_remote_tool_definitions());
+    }
+    definitions.extend(coding_notes_tool_definitions());
+    if enable_shell {
+        definitions.push(playground_tool_definition());
+    }
+    definitions
 }
 
 pub fn git_tool_definitions() -> Vec<ToolDefinition> {
@@ -346,7 +410,12 @@ fn command_base_token(command: &str) -> Option<String> {
         .and_then(|s| s.to_str())
         .unwrap_or(first);
     let lower = name.to_ascii_lowercase();
-    Some(lower.trim_end_matches(".exe").trim_end_matches(".cmd").to_string())
+    Some(
+        lower
+            .trim_end_matches(".exe")
+            .trim_end_matches(".cmd")
+            .to_string(),
+    )
 }
 
 fn normalize_shell_command(command: &str) -> String {
@@ -365,11 +434,12 @@ fn validate_command(command: &str) -> Result<(), ProviderError> {
     let cmd_lower = normalized.to_ascii_lowercase();
     for pat in BLOCKED_COMMAND_PATTERNS {
         if cmd_lower.contains(pat) {
-            return Err(tool_err(format!("command blocked by safety policy: contains `{pat}`")));
+            return Err(tool_err(format!(
+                "command blocked by safety policy: contains `{pat}`"
+            )));
         }
     }
-    let base = command_base_token(&normalized)
-        .ok_or_else(|| tool_err("command is empty"))?;
+    let base = command_base_token(&normalized).ok_or_else(|| tool_err("command is empty"))?;
     if !ALLOWED_COMMAND_BASES.iter().any(|a| *a == base.as_str()) {
         return Err(tool_err(format!(
             "command not allowlisted (first token `{base}`). Allowed: {}",
@@ -391,7 +461,10 @@ async fn run_git_with_auth(
 ) -> Result<String, ProviderError> {
     validate_command(&format!("git {}", args.first().copied().unwrap_or("")))?;
     if !repo_dir.is_dir() {
-        return Err(tool_err(format!("repo directory not found: {}", repo_dir.display())));
+        return Err(tool_err(format!(
+            "repo directory not found: {}",
+            repo_dir.display()
+        )));
     }
     let mut cmd = Command::new("git");
     cmd.args(args)
@@ -402,13 +475,10 @@ async fn run_git_with_auth(
     if let (Some(dir), Some(token)) = (data_dir, pat) {
         crate::git_auth::apply_git_auth_tokio(&mut cmd, dir, token)?;
     }
-    let out = tokio::time::timeout(
-        Duration::from_secs(COMMAND_TIMEOUT_SECS),
-        cmd.output(),
-    )
-    .await
-    .map_err(|_| tool_err(format!("git timed out after {COMMAND_TIMEOUT_SECS}s")))?
-    .map_err(|e| tool_err(format!("git failed: {e}")))?;
+    let out = tokio::time::timeout(Duration::from_secs(COMMAND_TIMEOUT_SECS), cmd.output())
+        .await
+        .map_err(|_| tool_err(format!("git timed out after {COMMAND_TIMEOUT_SECS}s")))?
+        .map_err(|e| tool_err(format!("git failed: {e}")))?;
     format_command_output(&out)
 }
 
@@ -425,7 +495,11 @@ fn format_command_output(out: &std::process::Output) -> Result<String, ProviderE
     }
     let code = out.status.code().unwrap_or(-1);
     if text.chars().count() > COMMAND_MAX_OUTPUT_CHARS {
-        text = text.chars().take(COMMAND_MAX_OUTPUT_CHARS).collect::<String>() + "\n… [truncated]";
+        text = text
+            .chars()
+            .take(COMMAND_MAX_OUTPUT_CHARS)
+            .collect::<String>()
+            + "\n… [truncated]";
     }
     Ok(format!("exit_code: {code}\n{text}"))
 }
@@ -457,7 +531,8 @@ fn resolve_command_timeout(command: &str, requested: Option<u64>) -> u64 {
         (COMMAND_TIMEOUT_SECS, COMMAND_TIMEOUT_MAX_SECS)
     };
     // Models often pass 300 because that was the old hard cap — treat as "use build default".
-    let effective = requested.filter(|&r| !is_slow_build_command(command) || r > COMMAND_TIMEOUT_MAX_SECS);
+    let effective =
+        requested.filter(|&r| !is_slow_build_command(command) || r > COMMAND_TIMEOUT_MAX_SECS);
     effective.unwrap_or(default).clamp(5, max)
 }
 
@@ -491,7 +566,10 @@ async fn run_shell_in_repo(
 ) -> Result<String, ProviderError> {
     validate_command(command)?;
     if !repo_dir.is_dir() {
-        return Err(tool_err(format!("repo directory not found: {}", repo_dir.display())));
+        return Err(tool_err(format!(
+            "repo directory not found: {}",
+            repo_dir.display()
+        )));
     }
 
     let shell_command = normalize_shell_command(command);
@@ -530,17 +608,14 @@ async fn run_shell_in_repo(
     let stream_out = stream_ctx.clone();
     let stream_err = stream_ctx;
 
-    let io_result = tokio::time::timeout(
-        Duration::from_secs(timeout_secs),
-        async {
-            let (stdout_text, stderr_text) = tokio::try_join!(
-                read_stream_to_string(stdout, false, stream_out),
-                read_stream_to_string(stderr, true, stream_err),
-            )?;
-            let status = child.wait().await?;
-            Ok::<_, std::io::Error>((stdout_text, stderr_text, status))
-        },
-    )
+    let io_result = tokio::time::timeout(Duration::from_secs(timeout_secs), async {
+        let (stdout_text, stderr_text) = tokio::try_join!(
+            read_stream_to_string(stdout, false, stream_out),
+            read_stream_to_string(stderr, true, stream_err),
+        )?;
+        let status = child.wait().await?;
+        Ok::<_, std::io::Error>((stdout_text, stderr_text, status))
+    })
     .await;
 
     match io_result {
@@ -557,18 +632,21 @@ async fn run_shell_in_repo(
                 text.push_str(&stderr_text);
             }
             if text.chars().count() > COMMAND_MAX_OUTPUT_CHARS {
-                text = text.chars().take(COMMAND_MAX_OUTPUT_CHARS).collect::<String>()
+                text = text
+                    .chars()
+                    .take(COMMAND_MAX_OUTPUT_CHARS)
+                    .collect::<String>()
                     + "\n… [output truncated]";
             }
             let elapsed = started.elapsed().as_secs_f64();
-            Ok(format!("exit_code: {code}\nelapsed_secs: {elapsed:.2}\n{text}"))
+            Ok(format!(
+                "exit_code: {code}\nelapsed_secs: {elapsed:.2}\n{text}"
+            ))
         }
         Ok(Err(e)) => Err(tool_err(format!("command failed: {e}"))),
         Err(_) => {
             let _ = child.kill().await;
-            Err(tool_err(format!(
-                "command timed out after {timeout_secs}s"
-            )))
+            Err(tool_err(format!("command timed out after {timeout_secs}s")))
         }
     }
 }
@@ -599,11 +677,7 @@ fn coding_grep(
         .build()
         .map_err(|e| tool_err(format!("invalid regex: {e}")))?;
 
-    let start = workspace_path_for_repo_file(
-        workspace_root,
-        ctx,
-        subpath.unwrap_or(""),
-    )?;
+    let start = workspace_path_for_repo_file(workspace_root, ctx, subpath.unwrap_or(""))?;
     if !start.is_dir() {
         return Err(tool_err("grep path must be a directory"));
     }
@@ -647,21 +721,33 @@ fn grep_walk(
         if should_skip_tree_entry(&name) {
             continue;
         }
-        let ft = entry.file_type().map_err(|e| tool_err(format!("file_type: {e}")))?;
+        let ft = entry
+            .file_type()
+            .map_err(|e| tool_err(format!("file_type: {e}")))?;
         let child_rel = if rel_prefix.is_empty() {
             name.clone()
         } else {
             format!("{rel_prefix}/{name}")
         };
         if ft.is_dir() {
-            grep_walk(workspace_root, ctx, &entry.path(), &child_rel, glob, re, out)?;
+            grep_walk(
+                workspace_root,
+                ctx,
+                &entry.path(),
+                &child_rel,
+                glob,
+                re,
+                out,
+            )?;
         } else if ft.is_file() {
             if let Some(g) = glob {
                 if !glob_match(&name, g) {
                     continue;
                 }
             }
-            let meta = entry.metadata().map_err(|e| tool_err(format!("metadata: {e}")))?;
+            let meta = entry
+                .metadata()
+                .map_err(|e| tool_err(format!("metadata: {e}")))?;
             if meta.len() > GREP_MAX_FILE_BYTES {
                 continue;
             }
@@ -770,7 +856,10 @@ pub async fn run_coding_tool(
         if project_name.is_empty() {
             return Err(tool_err("name is required"));
         }
-        let template = v["template"].as_str().map(str::trim).filter(|s| !s.is_empty());
+        let template = v["template"]
+            .as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
         let meta = crate::repos::create_repository(workspace_root, project_name, template)
             .map_err(tool_err)?;
         let template_label = template.unwrap_or("empty");
@@ -778,6 +867,33 @@ pub async fn run_coding_tool(
             "Created repo `{project_name}` with template `{template_label}` at `{}` (id: {}). It is now the active repo.",
             meta.path_rel, meta.id
         ));
+    }
+
+    if name == "coding_playground_run" {
+        let settings = settings
+            .ok_or_else(|| tool_err(crate::playground::PLAYGROUND_RUN_COMMAND_DISABLED_MESSAGE))?;
+        crate::playground::ensure_playground_run_allowed(settings).map_err(tool_err)?;
+        let req = PlaygroundRunRequest {
+            language: v["language"].as_str().unwrap_or("").trim().to_string(),
+            code: v["code"].as_str().unwrap_or("").to_string(),
+            args: v["args"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            stdin: v["stdin"].as_str().unwrap_or("").to_string(),
+            timeout_secs: v["timeoutSecs"].as_u64().unwrap_or(30),
+            allow_network: v["allowNetwork"].as_bool().unwrap_or(false),
+        };
+        let res: PlaygroundRunResult =
+            crate::playground::run_playground_request(data_directory, req)
+                .await
+                .map_err(|e| tool_err(format!("playground run failed: {e}")))?;
+        return serde_json::to_string_pretty(&res)
+            .map_err(|e| tool_err(format!("serialize playground result: {e}")));
     }
 
     let repo_dir = workspace_path_for_repo_file(workspace_root, ctx, "")?;
@@ -840,7 +956,10 @@ pub async fn run_coding_tool(
             let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
             let pat = crate::git_auth::require_github_pat(settings)?;
             let remote = v["remote"].as_str().unwrap_or("origin").trim();
-            let branch = v["branch"].as_str().map(str::trim).filter(|s| !s.is_empty());
+            let branch = v["branch"]
+                .as_str()
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
             let mut args = vec!["push", remote];
             if let Some(b) = branch {
                 args.push(b);
@@ -852,7 +971,10 @@ pub async fn run_coding_tool(
             let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
             let pat = crate::git_auth::require_github_pat(settings)?;
             let remote = v["remote"].as_str().unwrap_or("origin").trim();
-            let branch = v["branch"].as_str().map(str::trim).filter(|s| !s.is_empty());
+            let branch = v["branch"]
+                .as_str()
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
             let mut args = vec!["pull", remote];
             if let Some(b) = branch {
                 args.push(b);
@@ -875,15 +997,10 @@ pub async fn run_coding_tool(
             let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
             let url = v["url"].as_str().unwrap_or("").trim();
             let name = v["name"].as_str().map(str::trim).filter(|s| !s.is_empty());
-            let meta = crate::repos::clone_repository(
-                workspace_root,
-                data_directory,
-                settings,
-                url,
-                name,
-            )
-            .await
-            .map_err(tool_err)?;
+            let meta =
+                crate::repos::clone_repository(workspace_root, data_directory, settings, url, name)
+                    .await
+                    .map_err(tool_err)?;
             Ok(format!(
                 "Cloned `{}` into `{}` (id: {}).",
                 url, meta.path_rel, meta.id
@@ -897,29 +1014,6 @@ pub async fn run_coding_tool(
             }
             crate::git_auth::save_github_pat(settings, token)?;
             Ok("GitHub PAT saved (encrypted locally).".into())
-        }
-        "coding_playground_run" => {
-            let req = PlaygroundRunRequest {
-                language: v["language"].as_str().unwrap_or("").trim().to_string(),
-                code: v["code"].as_str().unwrap_or("").to_string(),
-                args: v["args"]
-                    .as_array()
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|x| x.as_str().map(|s| s.to_string()))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                stdin: v["stdin"].as_str().unwrap_or("").to_string(),
-                timeout_secs: v["timeoutSecs"].as_u64().unwrap_or(30),
-                allow_network: v["allowNetwork"].as_bool().unwrap_or(false),
-            };
-            let res: PlaygroundRunResult =
-                crate::playground::run_playground_request(data_directory, req)
-                    .await
-                    .map_err(|e| tool_err(format!("playground run failed: {e}")))?;
-            serde_json::to_string_pretty(&res)
-                .map_err(|e| tool_err(format!("serialize playground result: {e}")))
         }
         _ => Err(tool_err(format!("unknown coding tool: {name}"))),
     }
@@ -1003,6 +1097,10 @@ pub fn is_coding_tool_name(name: &str) -> bool {
 mod tests {
     use super::*;
 
+    fn definition_names(definitions: &[ToolDefinition]) -> Vec<&str> {
+        definitions.iter().map(|d| d.name.as_str()).collect()
+    }
+
     #[test]
     fn validate_blocks_rm_rf() {
         assert!(validate_command("rm -rf /").is_err());
@@ -1011,5 +1109,49 @@ mod tests {
     #[test]
     fn validate_allows_cargo() {
         assert!(validate_command("cargo test").is_ok());
+    }
+
+    #[test]
+    fn coding_tool_definitions_omit_playground_without_shell() {
+        let definitions = coding_mode_tool_definitions(true, false, true, true);
+        let names = definition_names(&definitions);
+
+        assert!(!names.contains(&"coding_run_command"));
+        assert!(!names.contains(&"coding_playground_run"));
+        assert!(names.contains(&"coding_grep"));
+        assert!(names.contains(&"coding_git_status"));
+    }
+
+    #[test]
+    fn coding_tool_definitions_include_playground_with_shell() {
+        let definitions = coding_mode_tool_definitions(false, true, false, false);
+        let names = definition_names(&definitions);
+
+        assert!(names.contains(&"coding_run_command"));
+        assert!(names.contains(&"coding_playground_run"));
+        assert!(!names.contains(&"coding_grep"));
+    }
+
+    #[tokio::test]
+    async fn playground_tool_call_requires_settings_gate() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let ctx = CodingTurnContext {
+            repo_id: "test".into(),
+            repo_name: "test".into(),
+            path_rel: ".".into(),
+        };
+        let err = run_coding_tool(
+            workspace_root,
+            &ctx,
+            "coding_playground_run",
+            r#"{"language":"python","code":"print('should not run')"}"#,
+            None,
+            None,
+            workspace_root,
+        )
+        .await
+        .expect_err("playground should require settings permission gate");
+
+        assert!(err.to_string().contains("Run Command"));
     }
 }

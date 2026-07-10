@@ -57,6 +57,7 @@ fn tool_user_facing_label(name: &str) -> String {
         "coding_git_status" => "Git Status".into(),
         "coding_git_diff" => "Git Diff".into(),
         "coding_git_commit" => "Git Commit".into(),
+        "coding_playground_run" => "Playground Run".into(),
         other => other.to_string(),
     }
 }
@@ -1317,7 +1318,8 @@ pub async fn run_builtin_tool(
             let p = v["path"].as_str().unwrap_or("").trim();
             workspace_list_directory(root, p)
         }
-        "project_list" | "project_create" | "project_read" | "project_write" | "project_set_active" => {
+        "project_list" | "project_create" | "project_read" | "project_write"
+        | "project_set_active" => {
             let root = workspace_root.ok_or_else(|| tool_err("project tools are not available"))?;
             crate::projects::run_project_tool(root, n, arguments_json, memory_tools, None).await
         }
