@@ -755,6 +755,8 @@ pub async fn run_coding_tool(
 ) -> Result<String, ProviderError> {
     let v: Value = serde_json::from_str(arguments_json)
         .map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
+    let permissions = CodingToolPermissions::from_settings(settings);
+    ensure_coding_tool_enabled(name, &permissions)?;
 
     if name == "coding_notes_list" {
         let list = crate::coding_notes::list_notes(data_directory).map_err(tool_err)?;
@@ -925,6 +927,58 @@ pub async fn run_coding_tool(
     }
 }
 
+#[derive(Default)]
+struct CodingToolPermissions {
+    search_and_patch: bool,
+    shell: bool,
+    git: bool,
+    git_remote: bool,
+}
+
+impl CodingToolPermissions {
+    fn from_settings(settings: Option<&crate::settings::SettingsManager>) -> Self {
+        let Some(settings) = settings else {
+            return Self::default();
+        };
+        Self {
+            search_and_patch: settings.agent_coding_tools_enabled(),
+            shell: settings.agent_coding_shell_enabled(),
+            git: settings.agent_coding_git_enabled(),
+            git_remote: settings.agent_coding_git_remote_enabled(),
+        }
+    }
+}
+
+fn ensure_coding_tool_enabled(
+    name: &str,
+    permissions: &CodingToolPermissions,
+) -> Result<(), ProviderError> {
+    let enabled = match name {
+        "coding_grep" | "coding_apply_patch" => permissions.search_and_patch,
+        "coding_run_command" | "coding_playground_run" => permissions.shell,
+        "coding_git_status" | "coding_git_diff" | "coding_git_commit" => permissions.git,
+        "coding_git_push" | "coding_git_pull" | "coding_git_fetch" | "coding_git_clone"
+        | "coding_github_save_pat" => permissions.git_remote,
+        "coding_repo_create" | "coding_notes_list" | "coding_notes_read" => true,
+        _ => true,
+    };
+    if enabled {
+        return Ok(());
+    }
+
+    let setting = match name {
+        "coding_grep" | "coding_apply_patch" => "Code Search / Apply Patch",
+        "coding_run_command" | "coding_playground_run" => "Run Command",
+        "coding_git_status" | "coding_git_diff" | "coding_git_commit" => "Git Status / Diff / Commit",
+        "coding_git_push" | "coding_git_pull" | "coding_git_fetch" | "coding_git_clone"
+        | "coding_github_save_pat" => "Git Remote",
+        _ => "this coding tool",
+    };
+    Err(tool_err(format!(
+        "{name} is disabled. Enable {setting} in Settings -> Tools -> Coding mode (v2)."
+    )))
+}
+
 pub fn playground_tool_definition() -> ToolDefinition {
     ToolDefinition {
         name: "coding_playground_run".into(),
@@ -1011,5 +1065,33 @@ mod tests {
     #[test]
     fn validate_allows_cargo() {
         assert!(validate_command("cargo test").is_ok());
+    }
+
+    #[test]
+    fn playground_requires_shell_permission() {
+        let permissions = CodingToolPermissions {
+            search_and_patch: true,
+            shell: false,
+            git: false,
+            git_remote: false,
+        };
+
+        assert!(ensure_coding_tool_enabled("coding_playground_run", &permissions).is_err());
+        assert!(ensure_coding_tool_enabled("coding_run_command", &permissions).is_err());
+        assert!(ensure_coding_tool_enabled("coding_grep", &permissions).is_ok());
+    }
+
+    #[test]
+    fn git_remote_tools_require_remote_permission() {
+        let permissions = CodingToolPermissions {
+            search_and_patch: false,
+            shell: false,
+            git: true,
+            git_remote: false,
+        };
+
+        assert!(ensure_coding_tool_enabled("coding_git_status", &permissions).is_ok());
+        assert!(ensure_coding_tool_enabled("coding_git_push", &permissions).is_err());
+        assert!(ensure_coding_tool_enabled("coding_github_save_pat", &permissions).is_err());
     }
 }

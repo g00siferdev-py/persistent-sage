@@ -790,6 +790,7 @@ async fn run_chat_completion(
         }
         if state.settings.agent_coding_shell_enabled() {
             tool_definitions.push(crate::coding_tools::run_command_tool_definition());
+            tool_definitions.push(crate::coding_tools::playground_tool_definition());
         }
         if state.settings.agent_coding_git_enabled() {
             tool_definitions.extend(crate::coding_tools::git_tool_definitions());
@@ -798,7 +799,6 @@ async fn run_chat_completion(
             tool_definitions.extend(crate::coding_tools::git_remote_tool_definitions());
         }
         tool_definitions.extend(crate::coding_tools::coding_notes_tool_definitions());
-        tool_definitions.push(crate::coding_tools::playground_tool_definition());
         let coding_tools_on = state.settings.agent_coding_tools_enabled()
             || state.settings.agent_coding_shell_enabled()
             || state.settings.agent_coding_git_enabled()
