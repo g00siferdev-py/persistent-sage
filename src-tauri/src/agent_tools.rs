@@ -57,6 +57,7 @@ fn tool_user_facing_label(name: &str) -> String {
         "coding_git_status" => "Git Status".into(),
         "coding_git_diff" => "Git Diff".into(),
         "coding_git_commit" => "Git Commit".into(),
+        "coding_playground_run" => "Playground Run".into(),
         other => other.to_string(),
     }
 }
