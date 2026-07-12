@@ -653,6 +653,7 @@ mod tests {
         assert_eq!(text, "hello\n... [output truncated]");
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn wsl_bash_shim_detected_on_windows() {
         assert!(is_wsl_bash_shim(Path::new(r"C:\Windows\System32\bash.exe")));
