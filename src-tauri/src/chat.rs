@@ -1184,6 +1184,14 @@ async fn execute_direct_coding_command(
 const CHAT_CONTEXT_RECENT: usize = 32;
 const CHAT_PREP_TIMEOUT: Duration = Duration::from_secs(12);
 
+fn latest_user_image_turn_id(recent: &[StoredMessage]) -> Option<i64> {
+    recent
+        .iter()
+        .filter(|m| m.role == MessageRole::User && m.image_attachment.is_some())
+        .max_by_key(|m| m.id)
+        .map(|m| m.id)
+}
+
 /// One user turn on an existing conversation — manual chat or background Pulse.
 pub async fn execute_chat_turn(
     app: &AppHandle,
@@ -1454,15 +1462,7 @@ pub async fn execute_chat_turn(
     let provider_id = engine.provider_id().to_string();
     let data_dir = state.data_directory.as_path();
 
-    let image_turn_id = if pending_image.is_some() {
-        recent
-            .iter()
-            .filter(|m| m.role == MessageRole::User && m.image_attachment.is_some())
-            .max_by_key(|m| m.id)
-            .map(|m| m.id)
-    } else {
-        None
-    };
+    let image_turn_id = latest_user_image_turn_id(&recent);
 
     let mut messages: Vec<ChatTurn> = Vec::with_capacity(recent.len() + 1);
     messages.push(ChatTurn::text("system", system_content));
@@ -1660,4 +1660,38 @@ pub async fn chat_vision_supported(state: State<'_, NovaState>) -> Result<bool, 
     let engine = state.llm.read().await.clone();
     let info = engine.model_info();
     Ok(model_supports_vision(&info.provider_id, &info.model_id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stored_message(id: i64, role: MessageRole, image_attachment: Option<&str>) -> StoredMessage {
+        StoredMessage {
+            id,
+            role,
+            content: String::new(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            image_attachment: image_attachment.map(str::to_string),
+            image_mime: image_attachment.map(|_| "image/png".to_string()),
+            image_display_path: None,
+            artifact_json: None,
+            conversation_id: None,
+            conversation_title: None,
+        }
+    }
+
+    #[test]
+    fn latest_user_image_turn_stays_available_for_text_followups() {
+        let recent = vec![
+            stored_message(1, MessageRole::User, Some("attachments/c/old.png")),
+            stored_message(2, MessageRole::Assistant, None),
+            stored_message(3, MessageRole::User, None),
+            stored_message(4, MessageRole::Assistant, Some("attachments/c/ignored.png")),
+            stored_message(5, MessageRole::User, Some("attachments/c/latest.png")),
+            stored_message(6, MessageRole::Assistant, None),
+        ];
+
+        assert_eq!(latest_user_image_turn_id(&recent), Some(5));
+    }
 }
