@@ -548,6 +548,7 @@ mod tests {
         assert!(apply_network_sandbox(&mut cmd, false));
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn wsl_bash_shim_detected_on_windows() {
         assert!(is_wsl_bash_shim(Path::new(r"C:\Windows\System32\bash.exe")));
