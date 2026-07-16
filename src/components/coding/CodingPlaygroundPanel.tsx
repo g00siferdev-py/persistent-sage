@@ -1,6 +1,18 @@
 import { useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Play, RotateCcw, Terminal, AlertTriangle, CheckCircle2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Braces,
+  CheckCircle2,
+  FileText,
+  Play,
+  RotateCcw,
+  SquareTerminal,
+  Terminal,
+} from "lucide-react";
+import { CodeEditor } from "@/components/ui/CodeEditor";
+import { JsonPlaygroundPanel } from "@/components/coding/JsonPlaygroundPanel";
+import { MarkdownPlaygroundPanel } from "@/components/coding/MarkdownPlaygroundPanel";
 
 type PlaygroundLanguage =
   | "python"
@@ -61,7 +73,16 @@ type RunResult = {
   telemetryLogPath?: string | null;
 };
 
+type PlaygroundTool = "code" | "markdown" | "json";
+
+const TOOLS: { id: PlaygroundTool; label: string; icon: typeof SquareTerminal }[] = [
+  { id: "code", label: "Run Code", icon: SquareTerminal },
+  { id: "markdown", label: "Markdown", icon: FileText },
+  { id: "json", label: "JSON", icon: Braces },
+];
+
 export function CodingPlaygroundPanel() {
+  const [tool, setTool] = useState<PlaygroundTool>("code");
   const [language, setLanguage] = useState<PlaygroundLanguage>("python");
   const [code, setCode] = useState(LANGUAGES[0].defaultCode);
   const [args, setArgs] = useState("");
@@ -121,11 +142,32 @@ export function CodingPlaygroundPanel() {
     setCode(currentLang.defaultCode);
   }, [currentLang]);
 
-  const lineCount = Math.max(1, code.split("\n").length);
-  const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
-
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-950/40">
+      {/* Tool tabs: run code / markdown editor / json validator */}
+      <div className="flex shrink-0 items-center gap-1 border-b border-slate-800 bg-slate-900/90 px-3 py-1.5">
+        {TOOLS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTool(id)}
+            className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium ${
+              tool === id
+                ? "bg-violet-700 text-white"
+                : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5" aria-hidden />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tool === "markdown" ? <MarkdownPlaygroundPanel /> : null}
+      {tool === "json" ? <JsonPlaygroundPanel /> : null}
+
+      {tool === "code" ? (
+        <>
       {/* Toolbar */}
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-800 bg-slate-900/80 px-3 py-1.5">
         <div className="flex items-center gap-2">
@@ -225,24 +267,13 @@ export function CodingPlaygroundPanel() {
         </div>
       )}
 
-      {/* Editor */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div
-          className="shrink-0 select-none overflow-hidden border-r border-slate-800 bg-slate-900/50 py-2 pr-2 text-right font-mono text-[11px] leading-[1.45rem] text-slate-600"
-          aria-hidden
-        >
-          {lineNumbers.map((n) => (
-            <div key={n}>{n}</div>
-          ))}
-        </div>
-        <textarea
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          spellCheck={false}
-          placeholder={`Write ${currentLang.label} code here…`}
-          className="min-h-0 w-full flex-1 resize-none bg-transparent py-2 pl-2 font-mono text-[12px] leading-[1.45rem] text-slate-100 outline-none"
-        />
-      </div>
+      {/* Editor (syntax highlighted) */}
+      <CodeEditor
+        value={code}
+        onChange={setCode}
+        language={language}
+        placeholder={`Write ${currentLang.label} code here…`}
+      />
 
       {/* Output */}
       <div className="flex min-h-[8rem] shrink-0 flex-col border-t border-slate-800 bg-slate-950/60">
@@ -293,6 +324,8 @@ export function CodingPlaygroundPanel() {
           )}
         </div>
       </div>
+        </>
+      ) : null}
     </div>
   );
 }

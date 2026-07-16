@@ -237,8 +237,16 @@ type SettingsView = {
   hasGeminiApiKey: boolean;
   hasXaiApiKey: boolean;
   hasGithubPat: boolean;
+  hasMoltbookApiKey: boolean;
   onboardingCompleted: boolean;
   artifactsEnabled: boolean;
+  moltbookEnabled: boolean;
+  moltbookBaseUrl: string;
+  moltbookDefaultSubmolt: string;
+  moltbookAgentToolsEnabled: boolean;
+  moltbookSchedulerEnabled: boolean;
+  moltbookInteractIntervalMinutes: number;
+  moltbookPostIntervalMinutes: number;
 };
 
 type SettingsPatch = {
@@ -277,6 +285,13 @@ type SettingsPatch = {
   embeddingModel?: string;
   onboardingCompleted?: boolean;
   artifactsEnabled?: boolean;
+  moltbookEnabled?: boolean;
+  moltbookBaseUrl?: string;
+  moltbookDefaultSubmolt?: string;
+  moltbookAgentToolsEnabled?: boolean;
+  moltbookSchedulerEnabled?: boolean;
+  moltbookInteractIntervalMinutes?: number;
+  moltbookPostIntervalMinutes?: number;
 };
 
 const MEMORY_LLM_INFO = (
@@ -611,6 +626,12 @@ export function SettingsPanel({
   const [geminiKeyInput, setGeminiKeyInput] = useState("");
   const [xaiKeyInput, setXaiKeyInput] = useState("");
   const [githubPatInput, setGithubPatInput] = useState("");
+  const [moltbookKeyInput, setMoltbookKeyInput] = useState("");
+  const [moltbookAgentName, setMoltbookAgentName] = useState("");
+  const [moltbookBusy, setMoltbookBusy] = useState(false);
+  const [moltbookStatusMsg, setMoltbookStatusMsg] = useState<string | null>(null);
+  const [moltbookSchedBusy, setMoltbookSchedBusy] = useState(false);
+  const [moltbookSchedMsg, setMoltbookSchedMsg] = useState<string | null>(null);
   const [cloudModelTags, setCloudModelTags] = useState<string[] | null>(null);
   const [cloudTagsLoading, setCloudTagsLoading] = useState(false);
   const [openaiFetchedModels, setOpenaiFetchedModels] = useState<string[] | null>(null);
@@ -905,6 +926,98 @@ export function SettingsPanel({
       await refreshSettings();
     } catch (e) {
       setError(String(e));
+    }
+  };
+
+  const saveMoltbookKey = async () => {
+    try {
+      setError(null);
+      setMoltbookStatusMsg(null);
+      await invoke("settings_save_api_key", { provider: "moltbook", apiKey: moltbookKeyInput });
+      setMoltbookKeyInput("");
+      await refreshSettings();
+      setMoltbookStatusMsg("Moltbook API key saved (encrypted).");
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const registerMoltbookAgent = async () => {
+    try {
+      setMoltbookBusy(true);
+      setError(null);
+      setMoltbookStatusMsg(null);
+      const registered = await invoke<Record<string, unknown>>("moltbook_register_agent", {
+        name: moltbookAgentName,
+        description: "Persistent Sage companion agent",
+      });
+      setMoltbookAgentName("");
+      await refreshSettings();
+      const agent =
+        registered.agent && typeof registered.agent === "object"
+          ? (registered.agent as Record<string, unknown>)
+          : registered;
+      const claimUrl =
+        (typeof agent.claim_url === "string" && agent.claim_url) ||
+        (typeof registered.claim_url === "string" && registered.claim_url) ||
+        null;
+      const code =
+        (typeof agent.verification_code === "string" && agent.verification_code) ||
+        (typeof registered.verification_code === "string" && registered.verification_code) ||
+        null;
+      setMoltbookStatusMsg(
+        claimUrl
+          ? `Agent registered and API key saved. Claim it here to finish setup: ${claimUrl}${
+              code ? ` (code: ${code})` : ""
+            }`
+          : "Agent registered on Moltbook — the API key was saved to encrypted settings automatically.",
+      );
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setMoltbookBusy(false);
+    }
+  };
+
+  const testMoltbookConnection = async () => {
+    try {
+      setMoltbookBusy(true);
+      setError(null);
+      setMoltbookStatusMsg(null);
+      const me = await invoke<Record<string, unknown>>("moltbook_me");
+      const agent =
+        me.agent && typeof me.agent === "object"
+          ? (me.agent as Record<string, unknown>)
+          : me;
+      const name = typeof agent.name === "string" ? agent.name : "your agent";
+      const karma = typeof agent.karma === "number" ? ` · ${agent.karma} karma` : "";
+      setMoltbookStatusMsg(`Connected as ${name}${karma}.`);
+    } catch (e) {
+      setMoltbookStatusMsg(null);
+      setError(String(e));
+    } finally {
+      setMoltbookBusy(false);
+    }
+  };
+
+  const runMoltbookScheduler = async (
+    command: "moltbook_scheduler_run_interact" | "moltbook_scheduler_run_post",
+  ) => {
+    try {
+      setMoltbookSchedBusy(true);
+      setError(null);
+      setMoltbookSchedMsg(null);
+      await invoke(command);
+      setMoltbookSchedMsg(
+        command === "moltbook_scheduler_run_post"
+          ? "Asked the agent to post now — check the Moltbook thread in your chat list."
+          : "Asked the agent to engage now — check the Moltbook thread in your chat list.",
+      );
+    } catch (e) {
+      setMoltbookSchedMsg(null);
+      setError(String(e));
+    } finally {
+      setMoltbookSchedBusy(false);
     }
   };
 
@@ -2240,6 +2353,250 @@ export function SettingsPanel({
               }}
             />
             </div>
+          </SettingsSection>
+
+          <SettingsSection
+            title="Moltbook"
+            description="Moltbook is the social network for AI agents (moltbook.com). Register your companion, browse the feed, share responses as posts, and optionally let the agent read and post on its own."
+          >
+            <SettingsToggleCard
+              id="moltbook-enabled"
+              title="Enable Moltbook integration"
+              compact
+              description="Shows the Moltbook button in chat and unlocks Share to Moltbook on every message."
+              checked={settings?.moltbookEnabled ?? false}
+              onChange={(moltbookEnabled) => {
+                setSettings((s) => (s ? { ...s, moltbookEnabled } : s));
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await invoke<SettingsView>("settings_update", {
+                      patch: { moltbookEnabled },
+                    });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+            />
+            {settings?.moltbookEnabled ? (
+              <>
+                <div className="ml-3 space-y-2 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-3 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    Agent identity
+                  </p>
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <KeyRound className="size-3.5 shrink-0" aria-hidden />
+                    <span>
+                      Moltbook API key:{" "}
+                      {settings?.hasMoltbookApiKey ? (
+                        <span className="text-emerald-400/90">saved (encrypted)</span>
+                      ) : (
+                        <span className="text-amber-400/90">not set</span>
+                      )}
+                    </span>
+                  </div>
+                  {!settings?.hasMoltbookApiKey ? (
+                    <div className="space-y-2">
+                      <p className="text-[11px] leading-relaxed text-slate-500">
+                        New to Moltbook? Register your companion as an agent — the API key is
+                        stored encrypted automatically.
+                      </p>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={moltbookAgentName}
+                          onChange={(e) => setMoltbookAgentName(e.target.value)}
+                          placeholder="Agent name (e.g. SageBot)"
+                          className="min-w-0 flex-1 rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+                        />
+                        <button
+                          type="button"
+                          disabled={moltbookBusy || !moltbookAgentName.trim()}
+                          onClick={() => void registerMoltbookAgent()}
+                          className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white hover:bg-indigo-500 disabled:opacity-50"
+                        >
+                          {moltbookBusy ? "Registering…" : "Register agent"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  <p className="text-[11px] leading-relaxed text-slate-500">
+                    Already have a key (moltbook_sk_…)? Paste it here.
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      placeholder="moltbook_sk_…"
+                      value={moltbookKeyInput}
+                      onChange={(e) => setMoltbookKeyInput(e.target.value)}
+                      className="min-w-0 flex-1 rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void saveMoltbookKey()}
+                      className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white hover:bg-indigo-500"
+                    >
+                      Save key
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={moltbookBusy || !settings?.hasMoltbookApiKey}
+                    onClick={() => void testMoltbookConnection()}
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {moltbookBusy ? "Checking…" : "Test connection"}
+                  </button>
+                  {moltbookStatusMsg ? (
+                    <p className="text-[11px] leading-relaxed text-emerald-500 dark:text-emerald-400">
+                      {moltbookStatusMsg}
+                    </p>
+                  ) : null}
+                </div>
+                <SettingsToggleCard
+                  id="moltbook-agent-tools"
+                  title="Let the agent use Moltbook tools"
+                  compact
+                  nestDepth={1}
+                  description="Adds moltbook_feed, moltbook_search, moltbook_create_post, and moltbook_comment as agent tools so your companion can browse and post on its own. The agent picks which submolt (community) to post in. Rate limits: 1 post / 30 min, 50 comments / hour."
+                  footnote={providerToolsFootnote(settings)}
+                  checked={settings?.moltbookAgentToolsEnabled ?? false}
+                  disabled={!providerSupportsTools(settings)}
+                  onChange={(moltbookAgentToolsEnabled) => {
+                    setSettings((s) => (s ? { ...s, moltbookAgentToolsEnabled } : s));
+                    flushDebounce();
+                    void (async () => {
+                      try {
+                        setError(null);
+                        const next = await invoke<SettingsView>("settings_update", {
+                          patch: { moltbookAgentToolsEnabled },
+                        });
+                        setSettings(next);
+                      } catch (err) {
+                        setError(String(err));
+                        await refreshSettings();
+                      }
+                    })();
+                  }}
+                />
+                <SettingsToggleCard
+                  id="moltbook-scheduler"
+                  title="Autonomous scheduler"
+                  compact
+                  nestDepth={1}
+                  description="The agent (never you) browses and posts to Moltbook on its own timers. Requires the Moltbook tools above. Activity is logged to a 'Moltbook' thread in your chat list."
+                  footnote={providerToolsFootnote(settings)}
+                  checked={settings?.moltbookSchedulerEnabled ?? false}
+                  disabled={
+                    !providerSupportsTools(settings) ||
+                    !(settings?.moltbookAgentToolsEnabled ?? false)
+                  }
+                  onChange={(moltbookSchedulerEnabled) => {
+                    setSettings((s) => (s ? { ...s, moltbookSchedulerEnabled } : s));
+                    flushDebounce();
+                    void (async () => {
+                      try {
+                        setError(null);
+                        const next = await invoke<SettingsView>("settings_update", {
+                          patch: { moltbookSchedulerEnabled },
+                        });
+                        setSettings(next);
+                      } catch (err) {
+                        setError(String(err));
+                        await refreshSettings();
+                      }
+                    })();
+                  }}
+                />
+                {settings?.moltbookSchedulerEnabled ? (
+                  <div className="ml-3 space-y-3 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-3 py-3">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                        Engage every (minutes)
+                      </span>
+                      <input
+                        type="number"
+                        min={5}
+                        max={10080}
+                        value={settings?.moltbookInteractIntervalMinutes ?? 120}
+                        onChange={(e) => {
+                          const moltbookInteractIntervalMinutes = Math.max(
+                            5,
+                            Math.min(10080, Number(e.target.value) || 0),
+                          );
+                          setSettings((s) =>
+                            s ? { ...s, moltbookInteractIntervalMinutes } : s,
+                          );
+                          schedulePatch({ moltbookInteractIntervalMinutes });
+                        }}
+                        className="w-32 rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+                      />
+                      <span className="text-[11px] leading-relaxed text-slate-500">
+                        How often the agent reads the feed, votes, and comments (default 120).
+                      </span>
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                        Post every (minutes)
+                      </span>
+                      <input
+                        type="number"
+                        min={30}
+                        max={10080}
+                        value={settings?.moltbookPostIntervalMinutes ?? 720}
+                        onChange={(e) => {
+                          const moltbookPostIntervalMinutes = Math.max(
+                            30,
+                            Math.min(10080, Number(e.target.value) || 0),
+                          );
+                          setSettings((s) =>
+                            s ? { ...s, moltbookPostIntervalMinutes } : s,
+                          );
+                          schedulePatch({ moltbookPostIntervalMinutes });
+                        }}
+                        className="w-32 rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+                      />
+                      <span className="text-[11px] leading-relaxed text-slate-500">
+                        How often the agent publishes an original post. Moltbook caps posting at
+                        1 per 30 min (default 720 = every 12 hours).
+                      </span>
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={moltbookSchedBusy}
+                        onClick={() =>
+                          void runMoltbookScheduler("moltbook_scheduler_run_interact")
+                        }
+                        className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        {moltbookSchedBusy ? "Working…" : "Engage now"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={moltbookSchedBusy}
+                        onClick={() =>
+                          void runMoltbookScheduler("moltbook_scheduler_run_post")
+                        }
+                        className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        {moltbookSchedBusy ? "Working…" : "Post now"}
+                      </button>
+                    </div>
+                    {moltbookSchedMsg ? (
+                      <p className="text-[11px] leading-relaxed text-emerald-500 dark:text-emerald-400">
+                        {moltbookSchedMsg}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            ) : null}
           </SettingsSection>
             </>
           ) : null}

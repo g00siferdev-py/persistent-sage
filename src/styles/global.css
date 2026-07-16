@@ -26,3 +26,184 @@
     @apply min-h-0;
   }
 }
+
+/* --- Syntax highlighting (highlight.js token colors, light + dark) ----------- */
+
+@layer components {
+  .hljs {
+    color: #1f2937;
+  }
+  .hljs-comment,
+  .hljs-quote {
+    color: #6b7280;
+    font-style: italic;
+  }
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-doctag,
+  .hljs-meta .hljs-keyword {
+    color: #7c3aed;
+  }
+  .hljs-string,
+  .hljs-regexp,
+  .hljs-addition {
+    color: #15803d;
+  }
+  .hljs-number,
+  .hljs-literal,
+  .hljs-symbol,
+  .hljs-bullet {
+    color: #b45309;
+  }
+  .hljs-title,
+  .hljs-title.function_,
+  .hljs-section {
+    color: #1d4ed8;
+  }
+  .hljs-title.class_,
+  .hljs-type,
+  .hljs-built_in {
+    color: #0e7490;
+  }
+  .hljs-attr,
+  .hljs-attribute,
+  .hljs-variable,
+  .hljs-template-variable,
+  .hljs-property {
+    color: #9d174d;
+  }
+  .hljs-name,
+  .hljs-selector-id,
+  .hljs-selector-class,
+  .hljs-tag {
+    color: #b91c1c;
+  }
+  .hljs-meta,
+  .hljs-link {
+    color: #0369a1;
+  }
+  .hljs-deletion {
+    color: #b91c1c;
+    background: rgba(185, 28, 28, 0.08);
+  }
+  .hljs-emphasis {
+    font-style: italic;
+  }
+  .hljs-strong {
+    font-weight: 700;
+  }
+
+  .dark .hljs {
+    color: #e2e8f0;
+  }
+  .dark .hljs-comment,
+  .dark .hljs-quote {
+    color: #94a3b8;
+  }
+  .dark .hljs-keyword,
+  .dark .hljs-selector-tag,
+  .dark .hljs-doctag,
+  .dark .hljs-meta .hljs-keyword {
+    color: #c4b5fd;
+  }
+  .dark .hljs-string,
+  .dark .hljs-regexp,
+  .dark .hljs-addition {
+    color: #86efac;
+  }
+  .dark .hljs-number,
+  .dark .hljs-literal,
+  .dark .hljs-symbol,
+  .dark .hljs-bullet {
+    color: #fcd34d;
+  }
+  .dark .hljs-title,
+  .dark .hljs-title.function_,
+  .dark .hljs-section {
+    color: #93c5fd;
+  }
+  .dark .hljs-title.class_,
+  .dark .hljs-type,
+  .dark .hljs-built_in {
+    color: #67e8f9;
+  }
+  .dark .hljs-attr,
+  .dark .hljs-attribute,
+  .dark .hljs-variable,
+  .dark .hljs-template-variable,
+  .dark .hljs-property {
+    color: #f9a8d4;
+  }
+  .dark .hljs-name,
+  .dark .hljs-selector-id,
+  .dark .hljs-selector-class,
+  .dark .hljs-tag {
+    color: #fca5a5;
+  }
+  .dark .hljs-meta,
+  .dark .hljs-link {
+    color: #7dd3fc;
+  }
+  .dark .hljs-deletion {
+    color: #fca5a5;
+    background: rgba(252, 165, 165, 0.1);
+  }
+
+  /* Rendered markdown preview (Coding Playground + Markdown viewer) */
+  .ps-markdown {
+    @apply text-sm leading-relaxed text-slate-800 dark:text-slate-200;
+  }
+  .ps-markdown h1 {
+    @apply mb-3 mt-5 border-b border-slate-200 pb-1.5 text-2xl font-bold text-slate-900 first:mt-0 dark:border-slate-700 dark:text-white;
+  }
+  .ps-markdown h2 {
+    @apply mb-2.5 mt-5 border-b border-slate-200 pb-1 text-xl font-bold text-slate-900 first:mt-0 dark:border-slate-700 dark:text-white;
+  }
+  .ps-markdown h3 {
+    @apply mb-2 mt-4 text-lg font-semibold text-slate-900 first:mt-0 dark:text-white;
+  }
+  .ps-markdown h4,
+  .ps-markdown h5,
+  .ps-markdown h6 {
+    @apply mb-1.5 mt-3 text-sm font-semibold text-slate-900 dark:text-white;
+  }
+  .ps-markdown p {
+    @apply my-2;
+  }
+  .ps-markdown a {
+    @apply text-indigo-600 underline underline-offset-2 dark:text-indigo-400;
+  }
+  .ps-markdown ul {
+    @apply my-2 list-disc space-y-1 pl-6;
+  }
+  .ps-markdown ol {
+    @apply my-2 list-decimal space-y-1 pl-6;
+  }
+  .ps-markdown blockquote {
+    @apply my-3 border-l-4 border-indigo-300 bg-indigo-50/60 px-3 py-1.5 text-slate-600 dark:border-indigo-700 dark:bg-indigo-950/30 dark:text-slate-300;
+  }
+  .ps-markdown code {
+    @apply rounded bg-slate-200/80 px-1 py-0.5 font-mono text-[0.85em] text-rose-700 dark:bg-slate-800 dark:text-rose-300;
+  }
+  .ps-markdown pre {
+    @apply my-3 overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900;
+  }
+  .ps-markdown pre code {
+    @apply bg-transparent p-0 text-[12px] text-slate-800 dark:text-slate-100;
+  }
+  .ps-markdown table {
+    @apply my-3 w-full border-collapse text-xs;
+  }
+  .ps-markdown th {
+    @apply border border-slate-300 bg-slate-100 px-2 py-1 text-left font-semibold dark:border-slate-700 dark:bg-slate-800;
+  }
+  .ps-markdown td {
+    @apply border border-slate-300 px-2 py-1 dark:border-slate-700;
+  }
+  .ps-markdown hr {
+    @apply my-4 border-slate-200 dark:border-slate-700;
+  }
+  .ps-markdown img {
+    @apply my-2 max-w-full rounded-lg;
+  }
+}

@@ -20,6 +20,7 @@ msix-dist/
 **/target/
 target/
 .cargo-target-local/
+src-tauri/target-check-tmp/
 
 # Tauri (generated + local bundle noise)
 src-tauri/gen/schemas/

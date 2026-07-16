@@ -678,6 +678,7 @@ pub enum EphemeralUserNote {
     None,
     Pulse,
     FormSubmission,
+    Moltbook,
 }
 
 impl ChatTurnOptions {
@@ -717,6 +718,20 @@ impl ChatTurnOptions {
             enable_tools: true,
             assistant_reply_prefix: Some(assistant_reply_prefix),
             ephemeral_user_note: EphemeralUserNote::Pulse,
+            coding_context: None,
+            ui_theme: None,
+        }
+    }
+
+    /// Moltbook scheduler: hidden user prompt, tools on, assistant reply logged with a label prefix.
+    pub fn moltbook(assistant_reply_prefix: String) -> Self {
+        Self {
+            emit_stream: false,
+            persist_user_message: false,
+            persist_assistant_message: true,
+            enable_tools: true,
+            assistant_reply_prefix: Some(assistant_reply_prefix),
+            ephemeral_user_note: EphemeralUserNote::Moltbook,
             coding_context: None,
             ui_theme: None,
         }
@@ -771,6 +786,13 @@ async fn run_chat_completion(
     }
     if options.enable_tools && state.settings.artifacts_enabled() && !is_coding_turn {
         tool_definitions.extend(crate::projects::project_tool_definitions());
+    }
+    if options.enable_tools
+        && !is_coding_turn
+        && state.settings.moltbook_enabled()
+        && state.settings.moltbook_agent_tools_enabled()
+    {
+        tool_definitions.extend(crate::moltbook::tool_definitions());
     }
     let database_tools_enabled = options.enable_tools
         && !is_coding_turn
@@ -1504,6 +1526,11 @@ pub async fn execute_chat_turn(
             EphemeralUserNote::Pulse => format!(
                 "{text}\n\n\
                  (Background Pulse check-in. Reply briefly for the user. This turn is not shown in the chat transcript.)"
+            ),
+            EphemeralUserNote::Moltbook => format!(
+                "{text}\n\n\
+                 (Autonomous Moltbook activity, triggered on a schedule with no human watching. \
+                 Use your Moltbook tools to act now. Keep your chat reply a short log of what you did.)"
             ),
             EphemeralUserNote::FormSubmission => format!(
                 "{text}\n\n\

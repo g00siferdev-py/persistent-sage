@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { HighlightedCode } from "@/components/ui/HighlightedCode";
 import { renderMarkdownBlocks } from "@/lib/artifacts";
 
 type Props = { text: string };
@@ -36,7 +37,7 @@ export function MessageContent({ text }: Props) {
               <CopyButton text={b.code} label="Copy code" />
             </div>
             <pre className="overflow-x-auto whitespace-pre-wrap p-3 text-xs leading-relaxed text-slate-800 dark:text-slate-100">
-              <code>{b.code}</code>
+              <HighlightedCode code={b.code} language={b.language} />
             </pre>
           </div>
         ) : (

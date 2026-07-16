@@ -137,6 +137,46 @@ pub struct SettingsFile {
     /// When true, assistant replies may include renderable chat artifacts (HTML, charts, forms).
     #[serde(default = "default_artifacts_enabled")]
     pub artifacts_enabled: bool,
+    /// Master switch for the Moltbook (social network for AI agents) integration.
+    #[serde(default)]
+    pub moltbook_enabled: bool,
+    /// Moltbook REST API base URL (override for self-hosted / testing).
+    #[serde(default = "default_moltbook_base_url")]
+    pub moltbook_base_url: String,
+    /// Default submolt (community) used when sharing/posting without an explicit target.
+    #[serde(default = "default_moltbook_submolt")]
+    pub moltbook_default_submolt: String,
+    /// When true (and Moltbook is enabled), the companion gets Moltbook agent tools (read feed, search, post, comment).
+    #[serde(default)]
+    pub moltbook_agent_tools_enabled: bool,
+    /// Master switch for the autonomous Moltbook scheduler (agent-only browsing + posting on a timer).
+    #[serde(default)]
+    pub moltbook_scheduler_enabled: bool,
+    /// How often the agent browses/engages with Moltbook (reads feed, votes, comments).
+    #[serde(default = "default_moltbook_interact_interval_minutes")]
+    pub moltbook_interact_interval_minutes: u32,
+    /// How often the agent composes and publishes its own Moltbook post.
+    #[serde(default = "default_moltbook_post_interval_minutes")]
+    pub moltbook_post_interval_minutes: u32,
+    /// Conversation id the scheduler logs its Moltbook activity to (auto-created). Null = none yet.
+    #[serde(default)]
+    pub moltbook_scheduler_conversation_id: Option<String>,
+}
+
+fn default_moltbook_interact_interval_minutes() -> u32 {
+    120
+}
+
+fn default_moltbook_post_interval_minutes() -> u32 {
+    720
+}
+
+fn default_moltbook_base_url() -> String {
+    "https://www.moltbook.com/api/v1".into()
+}
+
+fn default_moltbook_submolt() -> String {
+    "general".into()
 }
 
 fn default_artifacts_enabled() -> bool {
@@ -284,6 +324,14 @@ impl Default for SettingsFile {
             onboarding_completed: false,
             whats_new_seen_version: String::new(),
             artifacts_enabled: default_artifacts_enabled(),
+            moltbook_enabled: false,
+            moltbook_base_url: default_moltbook_base_url(),
+            moltbook_default_submolt: default_moltbook_submolt(),
+            moltbook_agent_tools_enabled: false,
+            moltbook_scheduler_enabled: false,
+            moltbook_interact_interval_minutes: default_moltbook_interact_interval_minutes(),
+            moltbook_post_interval_minutes: default_moltbook_post_interval_minutes(),
+            moltbook_scheduler_conversation_id: None,
         }
     }
 }
@@ -331,9 +379,17 @@ pub struct SettingsView {
     pub has_gemini_api_key: bool,
     pub has_xai_api_key: bool,
     pub has_github_pat: bool,
+    pub has_moltbook_api_key: bool,
     pub onboarding_completed: bool,
     pub whats_new_seen_version: String,
     pub artifacts_enabled: bool,
+    pub moltbook_enabled: bool,
+    pub moltbook_base_url: String,
+    pub moltbook_default_submolt: String,
+    pub moltbook_agent_tools_enabled: bool,
+    pub moltbook_scheduler_enabled: bool,
+    pub moltbook_interact_interval_minutes: u32,
+    pub moltbook_post_interval_minutes: u32,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -377,6 +433,13 @@ pub struct SettingsUpdatePayload {
     pub onboarding_completed: Option<bool>,
     pub whats_new_seen_version: Option<String>,
     pub artifacts_enabled: Option<bool>,
+    pub moltbook_enabled: Option<bool>,
+    pub moltbook_base_url: Option<String>,
+    pub moltbook_default_submolt: Option<String>,
+    pub moltbook_agent_tools_enabled: Option<bool>,
+    pub moltbook_scheduler_enabled: Option<bool>,
+    pub moltbook_interact_interval_minutes: Option<u32>,
+    pub moltbook_post_interval_minutes: Option<u32>,
 }
 
 // --- Crypto ------------------------------------------------------------------
@@ -746,9 +809,20 @@ impl SettingsManager {
                 &self.aes_key,
                 inner.encrypted_api_keys.get("github"),
             ),
+            has_moltbook_api_key: can_decrypt_api_blob(
+                &self.aes_key,
+                inner.encrypted_api_keys.get("moltbook"),
+            ),
             onboarding_completed: inner.onboarding_completed,
             whats_new_seen_version: inner.whats_new_seen_version.clone(),
             artifacts_enabled: inner.artifacts_enabled,
+            moltbook_enabled: inner.moltbook_enabled,
+            moltbook_base_url: inner.moltbook_base_url.clone(),
+            moltbook_default_submolt: inner.moltbook_default_submolt.clone(),
+            moltbook_agent_tools_enabled: inner.moltbook_agent_tools_enabled,
+            moltbook_scheduler_enabled: inner.moltbook_scheduler_enabled,
+            moltbook_interact_interval_minutes: inner.moltbook_interact_interval_minutes,
+            moltbook_post_interval_minutes: inner.moltbook_post_interval_minutes,
         })
     }
 
@@ -757,6 +831,83 @@ impl SettingsManager {
             .read()
             .map(|g| g.artifacts_enabled)
             .unwrap_or(true)
+    }
+
+    pub fn moltbook_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn moltbook_base_url(&self) -> String {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_base_url.clone())
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(default_moltbook_base_url)
+    }
+
+    pub fn moltbook_default_submolt(&self) -> String {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_default_submolt.clone())
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(default_moltbook_submolt)
+    }
+
+    pub fn moltbook_agent_tools_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_agent_tools_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn moltbook_scheduler_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_scheduler_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn moltbook_interact_interval_minutes(&self) -> u32 {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_interact_interval_minutes)
+            .unwrap_or_else(|_| default_moltbook_interact_interval_minutes())
+    }
+
+    pub fn moltbook_post_interval_minutes(&self) -> u32 {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_post_interval_minutes)
+            .unwrap_or_else(|_| default_moltbook_post_interval_minutes())
+    }
+
+    pub fn moltbook_scheduler_conversation_id(&self) -> Option<String> {
+        self.inner
+            .read()
+            .ok()
+            .and_then(|g| g.moltbook_scheduler_conversation_id.clone())
+            .filter(|s| !s.trim().is_empty())
+    }
+
+    /// Persist the auto-created conversation id the Moltbook scheduler logs to.
+    pub fn set_moltbook_scheduler_conversation_id(
+        &self,
+        conversation_id: Option<String>,
+    ) -> Result<(), SettingsError> {
+        {
+            let mut inner = self
+                .inner
+                .write()
+                .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
+            inner.moltbook_scheduler_conversation_id =
+                conversation_id.filter(|s| !s.trim().is_empty());
+        }
+        self.persist()
     }
 
     pub fn temperature(&self) -> f32 {
@@ -1149,6 +1300,41 @@ impl SettingsManager {
         if let Some(b) = patch.artifacts_enabled {
             inner.artifacts_enabled = b;
         }
+        if let Some(b) = patch.moltbook_enabled {
+            inner.moltbook_enabled = b;
+        }
+        if let Some(s) = patch.moltbook_base_url {
+            let t = s.trim().trim_end_matches('/').to_string();
+            inner.moltbook_base_url = if t.is_empty() {
+                default_moltbook_base_url()
+            } else {
+                t
+            };
+        }
+        if let Some(s) = patch.moltbook_default_submolt {
+            let t = s
+                .trim()
+                .trim_start_matches("m/")
+                .trim()
+                .to_string();
+            inner.moltbook_default_submolt = if t.is_empty() {
+                default_moltbook_submolt()
+            } else {
+                t
+            };
+        }
+        if let Some(b) = patch.moltbook_agent_tools_enabled {
+            inner.moltbook_agent_tools_enabled = b;
+        }
+        if let Some(b) = patch.moltbook_scheduler_enabled {
+            inner.moltbook_scheduler_enabled = b;
+        }
+        if let Some(m) = patch.moltbook_interact_interval_minutes {
+            inner.moltbook_interact_interval_minutes = m.clamp(5, 7 * 24 * 60);
+        }
+        if let Some(m) = patch.moltbook_post_interval_minutes {
+            inner.moltbook_post_interval_minutes = m.clamp(30, 7 * 24 * 60);
+        }
         inner.version = SETTINGS_VERSION;
         drop(inner);
         self.persist()
@@ -1220,6 +1406,7 @@ fn normalize_key_slot(provider: &str) -> Result<String, SettingsError> {
         "gemini" | "google" => Ok("gemini".into()),
         "xai" | "grok" => Ok("xai".into()),
         "github" | "github_pat" => Ok("github".into()),
+        "moltbook" => Ok("moltbook".into()),
         _ => Err(SettingsError::InvalidKeySlot(provider.to_string())),
     }
 }

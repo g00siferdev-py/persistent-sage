@@ -28,6 +28,8 @@ mod embedding;
 mod memory;
 mod memory_extract;
 mod memory_tools;
+mod moltbook;
+mod moltbook_scheduler;
 mod personality;
 mod personality_tools;
 mod playground;
@@ -40,6 +42,8 @@ mod settings;
 mod store_updates;
 mod token_counter;
 mod tool_stream;
+mod webview_media;
+mod webcam;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -58,6 +62,7 @@ use provider::{
 use serde::Serialize;
 use settings::{SettingsManager, SettingsUpdatePayload, SettingsView};
 use token_counter::TokenContextInfo;
+use webcam::WebcamService;
 use std::time::Duration;
 use tauri::{Manager, State};
 
@@ -393,6 +398,40 @@ fn external_url_host_allowed(host: &str) -> bool {
         || host.ends_with(".paypal.com")
         || host == "cash.app"
         || host.ends_with(".cash.app")
+}
+
+/// Hosts allowed for the message "Share" menu (social share intents only).
+fn share_url_host_allowed(host: &str) -> bool {
+    matches!(
+        host,
+        "twitter.com"
+            | "x.com"
+            | "www.facebook.com"
+            | "facebook.com"
+            | "www.reddit.com"
+            | "reddit.com"
+            | "www.linkedin.com"
+            | "linkedin.com"
+            | "t.me"
+            | "wa.me"
+            | "bsky.app"
+            | "moltbook.com"
+            | "www.moltbook.com"
+    )
+}
+
+/// Open an https social-share URL in the system default browser.
+#[tauri::command]
+fn open_share_url(url: String) -> Result<(), String> {
+    let parsed = url::Url::parse(url.trim()).map_err(|e| format!("invalid URL: {e}"))?;
+    if parsed.scheme() != "https" {
+        return Err("only https URLs can be opened externally".into());
+    }
+    let host = parsed.host_str().ok_or_else(|| "URL has no host".to_string())?;
+    if !share_url_host_allowed(host) {
+        return Err(format!("share URL host not allowed: {host}"));
+    }
+    opener::open(parsed.as_str()).map_err(|e| format!("open URL: {e}"))
 }
 
 /// Open an https URL in the system default browser (donation links, docs, etc.).
@@ -752,6 +791,35 @@ fn memory_get_recent(
     Ok(recent)
 }
 
+/// Star or unstar a message (favorites).
+#[tauri::command]
+fn memory_set_message_favorite(
+    state: State<NovaState>,
+    message_id: i64,
+    favorite: bool,
+) -> Result<(), String> {
+    state
+        .memory
+        .set_message_favorite(message_id, favorite)
+        .map_err(|e| e.to_string())
+}
+
+/// Starred messages for the active companion, newest first (with conversation titles).
+#[tauri::command]
+fn memory_list_favorites(
+    state: State<NovaState>,
+    limit: usize,
+) -> Result<Vec<StoredMessage>, String> {
+    let mut favorites = state
+        .memory
+        .list_favorite_messages(limit.max(1).min(500))
+        .map_err(|e| e.to_string())?;
+    if state.settings.artifacts_enabled() {
+        artifacts::repair_assistant_messages(&mut favorites);
+    }
+    Ok(favorites)
+}
+
 #[tauri::command]
 fn memory_get_token_context(
     state: State<NovaState>,
@@ -1016,6 +1084,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build());
 
     builder
+        .manage(WebcamService::default())
         .manage(NovaState::new(
             memory,
             settings,
@@ -1025,6 +1094,7 @@ pub fn run() {
         ))
         .setup(|app| {
             let handle = app.handle().clone();
+            webview_media::allow_webview_camera_permissions(&handle);
             tauri::async_runtime::spawn(async move {
                 // Branded splash (~3.5s), then show main window.
                 tokio::time::sleep(Duration::from_millis(3_500)).await;
@@ -1035,8 +1105,10 @@ pub fn run() {
                     let _ = main.show();
                     let _ = main.set_focus();
                 }
+                webview_media::allow_webview_camera_permissions(&handle);
             });
             pulse::spawn_pulse_loop(app.handle().clone());
+            moltbook_scheduler::spawn_moltbook_scheduler_loop(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1050,6 +1122,19 @@ pub fn run() {
             reveal_data_directory,
             open_feedback_issue,
             open_external_url,
+            open_share_url,
+            moltbook::moltbook_status,
+            moltbook::moltbook_register_agent,
+            moltbook::moltbook_me,
+            moltbook::moltbook_agent_status,
+            moltbook::moltbook_feed,
+            moltbook::moltbook_create_post,
+            moltbook::moltbook_search,
+            moltbook::moltbook_post_comments,
+            moltbook::moltbook_create_comment,
+            moltbook::moltbook_upvote_post,
+            moltbook_scheduler::moltbook_scheduler_run_interact,
+            moltbook_scheduler::moltbook_scheduler_run_post,
             provider_info,
             provider_list_available,
             ollama_cloud_list_models,
@@ -1076,6 +1161,8 @@ pub fn run() {
             delete_conversation,
             memory_store_message,
             memory_get_recent,
+            memory_set_message_favorite,
+            memory_list_favorites,
             memory_get_token_context,
             memory_startup_briefing,
             memory_update_startup_briefing,
@@ -1117,6 +1204,10 @@ pub fn run() {
             agent_stream::agent_stream_replay_recent,
             agent_stream::agent_stream_emit_synthetic,
             agent_stream::agent_stream_snapshot,
+            webcam::webcam_start,
+            webcam::webcam_preview,
+            webcam::webcam_capture,
+            webcam::webcam_stop,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Persistent Sage (Tauri application)");

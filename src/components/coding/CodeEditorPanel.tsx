@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ExternalLink, Loader2, RotateCcw, Save, X } from "lucide-react";
+import { CodeEditor } from "@/components/ui/CodeEditor";
 import type { OpenEditorFile } from "@/hooks/useCodingIde";
 
 type Props = {
@@ -31,18 +32,7 @@ export function CodeEditorPanel({
   onSave,
   onRevert,
 }: Props) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const active = files.find((f) => f.pathRel === activePath) ?? null;
-
-  const lineCount = useMemo(() => {
-    if (!active) return 1;
-    return Math.max(1, active.content.split("\n").length);
-  }, [active?.content]);
-
-  const lineNumbers = useMemo(
-    () => Array.from({ length: lineCount }, (_, i) => i + 1),
-    [lineCount],
-  );
 
   const openExternal = useCallback(async () => {
     if (!active) return;
@@ -150,24 +140,11 @@ export function CodeEditorPanel({
       ) : active?.error ? (
         <div className="flex-1 overflow-auto p-4 text-xs text-red-300">{active.error}</div>
       ) : active ? (
-        <div className="flex min-h-0 flex-1 overflow-hidden">
-          <div
-            className="shrink-0 select-none overflow-hidden border-r border-slate-800 bg-slate-900/50 py-2 pr-2 text-right font-mono text-[11px] leading-[1.45rem] text-slate-600"
-            aria-hidden
-          >
-            {lineNumbers.map((n) => (
-              <div key={n}>{n}</div>
-            ))}
-          </div>
-          <textarea
-            ref={textareaRef}
-            value={active.content}
-            onChange={(e) => onChange(e.target.value)}
-            spellCheck={false}
-            className="min-h-0 w-full flex-1 resize-none bg-transparent py-2 pl-2 font-mono text-[12px] leading-[1.45rem] text-slate-100 outline-none"
-            data-language={active.language}
-          />
-        </div>
+        <CodeEditor
+          value={active.content}
+          onChange={onChange}
+          language={active.language}
+        />
       ) : null}
     </div>
   );

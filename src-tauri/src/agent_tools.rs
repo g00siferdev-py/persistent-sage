@@ -57,6 +57,10 @@ fn tool_user_facing_label(name: &str) -> String {
         "coding_git_status" => "Git Status".into(),
         "coding_git_diff" => "Git Diff".into(),
         "coding_git_commit" => "Git Commit".into(),
+        "moltbook_feed" => "Moltbook Feed".into(),
+        "moltbook_search" => "Moltbook Search".into(),
+        "moltbook_create_post" => "Moltbook Post".into(),
+        "moltbook_comment" => "Moltbook Comment".into(),
         other => other.to_string(),
     }
 }
@@ -1270,6 +1274,14 @@ pub async fn run_builtin_tool(
             .ok_or_else(|| tool_err("personality self-edit tools are not enabled in Settings"))?;
         let (body, _) = crate::personality_tools::run_personality_tool(mgr, n, arguments_json)?;
         return Ok(body);
+    }
+
+    if crate::moltbook::is_moltbook_tool_name(n) {
+        let settings =
+            settings.ok_or_else(|| tool_err("Moltbook tools need settings context"))?;
+        let v: Value = serde_json::from_str(arguments_json)
+            .map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
+        return crate::moltbook::run_moltbook_tool(http, settings, n, &v).await;
     }
 
     let v: Value = serde_json::from_str(arguments_json)

@@ -42,6 +42,8 @@ export interface StoredMessage {
   imageMime?: string;
   imageDisplayPath?: string;
   artifactJson?: string;
+  /** True when the user starred this message as a favorite. */
+  favorite?: boolean;
   /** Present when returned from cross-thread `memory_recall`. */
   conversationId?: string;
   conversationTitle?: string;
@@ -64,6 +66,8 @@ export interface ChatMessage {
   imageDisplayPath?: string;
   imageMime?: string;
   artifactJson?: string;
+  /** True when the user starred this message as a favorite. */
+  favorite?: boolean;
 }
 
 /** Result of `chat_send_message` (camelCase from Rust). */
@@ -91,6 +95,7 @@ export function storedToChatMessage(m: StoredMessage): ChatMessage {
       imageDisplayPath: m.imageDisplayPath,
       imageMime: m.imageMime,
       artifactJson: prepared.artifactJson,
+      favorite: m.favorite ?? false,
     };
   }
   return {
@@ -101,5 +106,6 @@ export function storedToChatMessage(m: StoredMessage): ChatMessage {
     imageDisplayPath: m.imageDisplayPath,
     imageMime: m.imageMime,
     artifactJson: m.artifactJson,
+    favorite: m.favorite ?? false,
   };
 }

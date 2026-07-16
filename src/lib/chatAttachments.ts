@@ -15,3 +15,9 @@ export function readImageFileAsDataUrl(file: File): Promise<{ base64: string; mi
     reader.readAsDataURL(file);
   });
 }
+
+/** Build a `File` from a captured image blob (e.g. webcam). */
+export function fileFromImageBlob(blob: Blob, filename = "webcam.jpg"): File {
+  const mime = blob.type && blob.type.startsWith("image/") ? blob.type : "image/jpeg";
+  return new File([blob], filename, { type: mime });
+}

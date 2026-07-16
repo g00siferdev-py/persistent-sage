@@ -108,6 +108,9 @@ pub struct StoredMessage {
     /// Serialized [`crate::artifacts::ChatArtifact`] JSON when the assistant returned an artifact block.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifact_json: Option<String>,
+    /// True when the user starred this message as a favorite.
+    #[serde(default)]
+    pub favorite: bool,
     /// Set when a row is returned from cross-thread recall (`memory_recall` with global scope).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation_id: Option<String>,
@@ -214,6 +217,12 @@ pub trait ConversationMemory: Send + Sync {
         conversation_id: &str,
         limit: usize,
     ) -> Result<Vec<StoredMessage>, MemoryError>;
+
+    /// Star or unstar a message (favorites).
+    fn set_message_favorite(&self, message_id: i64, favorite: bool) -> Result<(), MemoryError>;
+
+    /// Starred messages for the active personality, newest first, with conversation titles.
+    fn list_favorite_messages(&self, limit: usize) -> Result<Vec<StoredMessage>, MemoryError>;
 
     /// Rich briefing: recent transcript + anchors + projects + preferences.
     fn get_startup_briefing(
@@ -458,6 +467,7 @@ fn migrate_schema(conn: &Connection) -> Result<(), MemoryError> {
     if ver >= SCHEMA_VERSION {
         migrate_message_image_columns(conn)?;
         migrate_message_artifact_column(conn)?;
+        migrate_message_favorite_column(conn)?;
         migrate_conversation_coding_columns(conn)?;
         ensure_seed_conversation(conn)?;
         return Ok(());
@@ -500,6 +510,7 @@ fn migrate_schema(conn: &Connection) -> Result<(), MemoryError> {
     }
     migrate_message_image_columns(conn)?;
     migrate_message_artifact_column(conn)?;
+    migrate_message_favorite_column(conn)?;
     migrate_conversation_coding_columns(conn)?;
     ensure_seed_conversation(conn)?;
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -509,6 +520,16 @@ fn migrate_schema(conn: &Connection) -> Result<(), MemoryError> {
 fn migrate_message_artifact_column(conn: &Connection) -> Result<(), MemoryError> {
     if table_exists(conn, "messages")? && !column_exists(conn, "messages", "artifact_json")? {
         conn.execute("ALTER TABLE messages ADD COLUMN artifact_json TEXT", [])?;
+    }
+    Ok(())
+}
+
+fn migrate_message_favorite_column(conn: &Connection) -> Result<(), MemoryError> {
+    if table_exists(conn, "messages")? && !column_exists(conn, "messages", "favorite")? {
+        conn.execute(
+            "ALTER TABLE messages ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0",
+            [],
+        )?;
     }
     Ok(())
 }
@@ -721,7 +742,8 @@ fn create_fresh_current(conn: &Connection) -> Result<(), MemoryError> {
             role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
             content TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
-            personality_id TEXT NOT NULL DEFAULT 'default'
+            personality_id TEXT NOT NULL DEFAULT 'default',
+            favorite INTEGER NOT NULL DEFAULT 0
         );
         CREATE INDEX idx_messages_conversation ON messages (conversation_id, id);
         CREATE INDEX idx_messages_created ON messages (created_at);
@@ -1617,6 +1639,7 @@ impl MemoryAnchor {
                 image_mime: None,
                 image_display_path: None,
                 artifact_json: None,
+                favorite: false,
                 conversation_id: None,
                 conversation_title: None,
             });
@@ -1701,6 +1724,7 @@ impl MemoryAnchor {
                 image_mime: None,
                 image_display_path: None,
                 artifact_json: None,
+                favorite: false,
                 conversation_id: row.get(4)?,
                 conversation_title: row.get(5)?,
             });
@@ -2037,11 +2061,56 @@ impl ConversationMemory for MemoryAnchor {
         let limit_i: i64 = limit.try_into().unwrap_or(i64::MAX);
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, role, content, created_at, image_attachment, image_mime, artifact_json FROM messages
+            "SELECT id, role, content, created_at, image_attachment, image_mime, artifact_json, favorite FROM messages
              WHERE conversation_id = ?1 AND personality_id = ?2
              ORDER BY id DESC LIMIT ?3",
         )?;
         let mut rows = stmt.query(params![conversation_id, pid, limit_i])?;
+        let mut batch = Vec::new();
+        while let Some(row) = rows.next()? {
+            let role_str: String = row.get(1)?;
+            let fav: i64 = row.get(7)?;
+            let mut msg = StoredMessage {
+                id: row.get(0)?,
+                role: MessageRole::parse_db(&role_str)?,
+                content: row.get(2)?,
+                created_at: row.get(3)?,
+                image_attachment: row.get(4)?,
+                image_mime: row.get(5)?,
+                image_display_path: None,
+                artifact_json: row.get(6)?,
+                favorite: fav != 0,
+                conversation_id: None,
+                conversation_title: None,
+            };
+            enrich_message_image_paths(&mut msg, &self.data_directory);
+            batch.push(msg);
+        }
+        batch.reverse();
+        Ok(batch)
+    }
+
+    fn set_message_favorite(&self, message_id: i64, favorite: bool) -> Result<(), MemoryError> {
+        let conn = self.conn()?;
+        conn.execute(
+            "UPDATE messages SET favorite = ?2 WHERE id = ?1",
+            params![message_id, i64::from(favorite)],
+        )?;
+        Ok(())
+    }
+
+    fn list_favorite_messages(&self, limit: usize) -> Result<Vec<StoredMessage>, MemoryError> {
+        let pid = self.active_personality()?;
+        let limit_i: i64 = limit.try_into().unwrap_or(i64::MAX);
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(
+            "SELECT m.id, m.role, m.content, m.created_at, m.image_attachment, m.image_mime, m.artifact_json, m.conversation_id, c.title
+             FROM messages m
+             JOIN conversations c ON c.id = m.conversation_id
+             WHERE m.favorite = 1 AND m.personality_id = ?1
+             ORDER BY m.id DESC LIMIT ?2",
+        )?;
+        let mut rows = stmt.query(params![pid, limit_i])?;
         let mut batch = Vec::new();
         while let Some(row) = rows.next()? {
             let role_str: String = row.get(1)?;
@@ -2054,13 +2123,13 @@ impl ConversationMemory for MemoryAnchor {
                 image_mime: row.get(5)?,
                 image_display_path: None,
                 artifact_json: row.get(6)?,
-                conversation_id: None,
-                conversation_title: None,
+                favorite: true,
+                conversation_id: row.get(7)?,
+                conversation_title: row.get(8)?,
             };
             enrich_message_image_paths(&mut msg, &self.data_directory);
             batch.push(msg);
         }
-        batch.reverse();
         Ok(batch)
     }
 

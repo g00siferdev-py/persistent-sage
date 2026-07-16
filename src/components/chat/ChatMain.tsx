@@ -1,25 +1,33 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import {
   Brain,
+  Camera,
   ChevronDown,
   FolderOpen,
+  Globe,
   ImagePlus,
   Loader2,
   OctagonX,
   PanelRightOpen,
   Send,
   Sparkles,
+  Star,
   Users,
   X,
 } from "lucide-react";
 import type { ChatMessage } from "@/types/chat";
 import type { StreamAssistantState } from "@/hooks/useChat";
-import { readImageFileAsDataUrl } from "@/lib/chatAttachments";
+import { fileFromImageBlob, readImageFileAsDataUrl } from "@/lib/chatAttachments";
 import { settingsLayoutLabel, type SettingsLayoutMode } from "@/lib/settingsLayout";
 import { formatChatHeader } from "@/lib/chatTimestamp";
 import { ArtifactRenderer } from "@/components/chat/ArtifactRenderer";
+import { FavoritesPanel } from "@/components/chat/FavoritesPanel";
+import { MessageActions } from "@/components/chat/MessageActions";
 import { MessageContent } from "@/components/chat/MessageContent";
+import { MoltbookPanel } from "@/components/chat/MoltbookPanel";
+import { WebcamCaptureModal } from "@/components/chat/WebcamCaptureModal";
 
 export type CompanionHeaderOption = {
   id: string;
@@ -127,8 +135,23 @@ export function ChatMain({
 }: Props) {
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const attachMenuRef = useRef<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState("");
   const [pendingImage, setPendingImage] = useState<PendingComposerImage | null>(null);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [webcamOpen, setWebcamOpen] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
+  const [moltbookOpen, setMoltbookOpen] = useState(false);
+  const [moltbookReady, setMoltbookReady] = useState(false);
+
+  useEffect(() => {
+    invoke<{ enabled: boolean; hasApiKey: boolean }>("moltbook_status")
+      .then((s) => {
+        setMoltbookReady(s.enabled && s.hasApiKey);
+      })
+      .catch(() => setMoltbookReady(false));
+  }, [settingsLayoutMode]);
 
   useEffect(() => {
     const el = scrollAreaRef.current;
@@ -169,6 +192,7 @@ export function ChatMain({
   const onPickImage = async (file: File | null) => {
     if (!file || !file.type.startsWith("image/")) return;
     try {
+      setAttachError(null);
       const { base64, mime } = await readImageFileAsDataUrl(file);
       const previewUrl = URL.createObjectURL(file);
       setPendingImage((prev) => {
@@ -177,10 +201,26 @@ export function ChatMain({
         }
         return { file, previewUrl, base64, mime };
       });
-    } catch {
-      /* ignore read errors */
+    } catch (e) {
+      setAttachError(e instanceof Error ? e.message : String(e));
     }
   };
+
+  const onWebcamCapture = async (blob: Blob) => {
+    const file = fileFromImageBlob(blob);
+    await onPickImage(file);
+  };
+
+  useEffect(() => {
+    if (!attachMenuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!attachMenuRef.current?.contains(event.target as Node)) {
+        setAttachMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [attachMenuOpen]);
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-gradient-to-b from-slate-100 dark:from-slate-950 via-slate-100 dark:via-slate-950 to-slate-200 dark:to-slate-900/80">
@@ -258,6 +298,26 @@ export function ChatMain({
         </div>
         <button
           type="button"
+          onClick={() => setFavoritesOpen(true)}
+          title="Favorites — messages you starred"
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-900/60 px-3 py-1.5 text-xs font-medium text-slate-800 dark:text-slate-200 shadow-sm transition hover:bg-slate-200 dark:hover:bg-slate-800/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+        >
+          <Star className="size-4 text-amber-400" aria-hidden />
+          Favorites
+        </button>
+        {moltbookReady ? (
+          <button
+            type="button"
+            onClick={() => setMoltbookOpen(true)}
+            title="Browse Moltbook — the social network for AI agents"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-900/60 px-3 py-1.5 text-xs font-medium text-slate-800 dark:text-slate-200 shadow-sm transition hover:bg-slate-200 dark:hover:bg-slate-800/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+          >
+            <Globe className="size-4 text-indigo-400" aria-hidden />
+            Moltbook
+          </button>
+        ) : null}
+        <button
+          type="button"
           onClick={onCycleSettingsLayout}
           aria-expanded={settingsLayoutMode !== "hidden"}
           aria-controls="nova-settings-panel"
@@ -271,12 +331,12 @@ export function ChatMain({
         </button>
       </header>
 
-      {error ? (
+      {error || attachError ? (
         <div
           role="alert"
           className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-200"
         >
-          {error}
+          {error ?? attachError}
         </div>
       ) : null}
 
@@ -315,8 +375,8 @@ export function ChatMain({
                 key={m.id}
                 className={
                   m.role === "user"
-                    ? "ml-8 rounded-2xl rounded-br-md border border-slate-200 dark:border-slate-800/80 bg-slate-100 dark:bg-slate-900/70 px-4 py-3 text-sm leading-relaxed text-slate-900 dark:text-slate-100 shadow-sm"
-                    : "mr-8 rounded-2xl rounded-bl-md border border-indigo-500/20 bg-indigo-500/10 px-4 py-3 text-sm leading-relaxed text-slate-900 dark:text-slate-100 shadow-sm"
+                    ? "group ml-8 rounded-2xl rounded-br-md border border-slate-200 dark:border-slate-800/80 bg-slate-100 dark:bg-slate-900/70 px-4 py-3 text-sm leading-relaxed text-slate-900 dark:text-slate-100 shadow-sm"
+                    : "group mr-8 rounded-2xl rounded-bl-md border border-indigo-500/20 bg-indigo-500/10 px-4 py-3 text-sm leading-relaxed text-slate-900 dark:text-slate-100 shadow-sm"
                 }
               >
                 <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
@@ -342,6 +402,13 @@ export function ChatMain({
                     ) : null}
                     {m.content ? (
                   <MessageContent text={m.content} />
+                ) : null}
+                {m.content ? (
+                  <MessageActions
+                    messageId={m.id}
+                    content={m.content}
+                    favorite={m.favorite}
+                  />
                 ) : null}
               </article>
             ))
@@ -438,6 +505,7 @@ export function ChatMain({
             </div>
           ) : null}
           <div className="flex gap-2">
+          <div className="relative" ref={attachMenuRef}>
           <input
             ref={fileInputRef}
             type="file"
@@ -448,10 +516,41 @@ export function ChatMain({
               e.target.value = "";
             }}
           />
+          {attachMenuOpen ? (
+            <div
+              role="menu"
+              className="absolute bottom-full left-0 z-20 mb-1 min-w-[11rem] overflow-hidden rounded-lg border border-slate-300 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                onClick={() => {
+                  setAttachMenuOpen(false);
+                  fileInputRef.current?.click();
+                }}
+              >
+                <ImagePlus className="size-3.5 shrink-0 text-slate-500" aria-hidden />
+                Choose from computer
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                onClick={() => {
+                  setAttachMenuOpen(false);
+                  setWebcamOpen(true);
+                }}
+              >
+                <Camera className="size-3.5 shrink-0 text-slate-500" aria-hidden />
+                Take photo with webcam
+              </button>
+            </div>
+          ) : null}
           <button
             type="button"
             disabled={threadLoading || sending || !hasActiveConversation || !visionSupported}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => setAttachMenuOpen((open) => !open)}
             title={
               visionSupported
                 ? "Attach image"
@@ -459,9 +558,12 @@ export function ChatMain({
             }
             className="inline-flex shrink-0 items-center justify-center self-end rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-900/60 px-3 py-2 text-slate-700 dark:text-slate-300 transition hover:border-slate-300 dark:border-slate-600 hover:bg-slate-200 dark:bg-slate-800/80 disabled:pointer-events-none disabled:opacity-40"
             aria-label="Attach image"
+            aria-haspopup="menu"
+            aria-expanded={attachMenuOpen}
           >
             <ImagePlus className="size-4" aria-hidden />
           </button>
+          </div>
           <label className="sr-only" htmlFor="nova-composer">
             Message
           </label>
@@ -510,6 +612,13 @@ export function ChatMain({
           </div>
         </form>
       </footer>
+      <WebcamCaptureModal
+        open={webcamOpen}
+        onClose={() => setWebcamOpen(false)}
+        onCapture={(blob) => void onWebcamCapture(blob)}
+      />
+      <FavoritesPanel open={favoritesOpen} onClose={() => setFavoritesOpen(false)} />
+      <MoltbookPanel open={moltbookOpen} onClose={() => setMoltbookOpen(false)} />
     </section>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Loader2, OctagonX, Send } from "lucide-react";
 import { ToolActivityPanel } from "@/components/coding/ToolActivityPanel";
 import { ArtifactRenderer } from "@/components/chat/ArtifactRenderer";
+import { MessageActions } from "@/components/chat/MessageActions";
 import { MessageContent } from "@/components/chat/MessageContent";
 import { formatChatHeader } from "@/lib/chatTimestamp";
 import { prepareAssistantMessage } from "@/lib/artifacts";
@@ -80,7 +81,7 @@ export function CodingChatMain({
               return (
                 <li
                   key={m.id}
-                  className={`rounded-lg px-3 py-2 text-sm leading-relaxed ${
+                  className={`group rounded-lg px-3 py-2 text-sm leading-relaxed ${
                     m.role === "user"
                       ? "ml-8 bg-violet-100 text-violet-950 dark:bg-violet-950/40 dark:text-violet-50"
                       : "mr-8 bg-white text-slate-800 shadow-sm dark:bg-slate-900/80 dark:text-slate-200 dark:shadow-none"
@@ -93,6 +94,13 @@ export function CodingChatMain({
                     <ArtifactRenderer artifactJson={prepared.artifactJson} />
                   ) : null}
                   {prepared.content ? <MessageContent text={prepared.content} /> : null}
+                  {prepared.content ? (
+                    <MessageActions
+                      messageId={m.id}
+                      content={prepared.content}
+                      favorite={m.favorite}
+                    />
+                  ) : null}
                 </li>
               );
             })}
