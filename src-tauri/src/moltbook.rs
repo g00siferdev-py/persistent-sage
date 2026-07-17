@@ -15,6 +15,7 @@ use crate::NovaState;
 
 const MAX_TITLE_LEN: usize = 300;
 const MAX_CONTENT_LEN: usize = 40_000;
+const API_KEY_REDACTION: &str = "(saved to encrypted settings)";
 
 // --- HTTP helpers --------------------------------------------------------------
 
@@ -34,6 +35,31 @@ fn api_key(settings: &SettingsManager) -> Result<String, String> {
 
 fn normalize_submolt(raw: &str) -> String {
     raw.trim().trim_start_matches("m/").trim().to_string()
+}
+
+/// Remove API keys from an API response before it crosses the IPC boundary.
+///
+/// Moltbook currently nests the registration key under `agent.api_key`, but
+/// recursively redact both snake_case and camelCase fields so response-shape
+/// changes cannot accidentally expose the credential to the webview.
+fn redact_api_keys(value: &mut Value) {
+    match value {
+        Value::Object(object) => {
+            for (key, child) in object {
+                if key.eq_ignore_ascii_case("api_key") || key.eq_ignore_ascii_case("apiKey") {
+                    *child = Value::String(API_KEY_REDACTION.into());
+                } else {
+                    redact_api_keys(child);
+                }
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                redact_api_keys(item);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Moltbook wraps lists in several shapes (`[]`, `{data:[]}`, `{data:{posts:[]}}`, `{posts:[]}`).
@@ -213,9 +239,7 @@ pub async fn moltbook_register_agent(
         .map_err(|e| format!("registered, but saving the API key failed: {e}"))?;
     // Never echo the raw key back to the UI; it is already stored encrypted.
     let mut sanitized = body;
-    if let Some(obj) = sanitized.as_object_mut() {
-        obj.insert("api_key".into(), Value::String("(saved to encrypted settings)".into()));
-    }
+    redact_api_keys(&mut sanitized);
     Ok(sanitized)
 }
 
@@ -592,7 +616,9 @@ pub async fn run_moltbook_tool(
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_submolt, sanitize_id};
+    use serde_json::json;
+
+    use super::{normalize_submolt, redact_api_keys, sanitize_id, API_KEY_REDACTION};
 
     #[test]
     fn normalizes_submolt_prefix() {
@@ -606,5 +632,31 @@ mod tests {
         assert!(sanitize_id("../etc").is_err());
         assert!(sanitize_id("a/b").is_err());
         assert!(sanitize_id("").is_err());
+    }
+
+    #[test]
+    fn registration_response_redacts_nested_api_keys() {
+        let mut body = json!({
+            "agent": {
+                "api_key": "moltbook_nested_secret",
+                "claim_url": "https://www.moltbook.com/claim/example"
+            },
+            "api_key": "moltbook_top_level_secret",
+            "metadata": [{ "apiKey": "moltbook_future_secret" }]
+        });
+
+        redact_api_keys(&mut body);
+
+        assert_eq!(body["agent"]["api_key"], API_KEY_REDACTION);
+        assert_eq!(body["api_key"], API_KEY_REDACTION);
+        assert_eq!(body["metadata"][0]["apiKey"], API_KEY_REDACTION);
+        assert_eq!(
+            body["agent"]["claim_url"],
+            "https://www.moltbook.com/claim/example"
+        );
+        let rendered = body.to_string();
+        assert!(!rendered.contains("moltbook_nested_secret"));
+        assert!(!rendered.contains("moltbook_top_level_secret"));
+        assert!(!rendered.contains("moltbook_future_secret"));
     }
 }
