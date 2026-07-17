@@ -2966,6 +2966,7 @@ dependencies = [
  "hex",
  "image",
  "keyring",
+ "libc",
  "nokhwa",
  "opener",
  "regex",
