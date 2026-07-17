@@ -41,6 +41,7 @@ regex = "1"
 which = "7"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 nokhwa = { version = "0.10", features = ["input-native"] }
+libc = "0.2.186"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38.2"
