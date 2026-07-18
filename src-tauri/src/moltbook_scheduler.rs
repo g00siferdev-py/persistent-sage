@@ -156,7 +156,7 @@ async fn run_action(app: &AppHandle, state: &NovaState, action: MoltbookAction, 
         action.prompt(),
         &pid,
         None,
-        chat::ChatTurnOptions::moltbook(label),
+        chat::ChatTurnOptions::moltbook(label, action == MoltbookAction::Post),
     )
     .await
     {

@@ -210,6 +210,22 @@ fn completion_for_tool_round(
     }
 }
 
+fn ensure_tool_calls_are_advertised(
+    tool_calls: &[ToolCall],
+    tools: &[ToolDefinition],
+) -> Result<(), ProviderError> {
+    if let Some(call) = tool_calls
+        .iter()
+        .find(|call| !tools.iter().any(|tool| tool.name == call.name))
+    {
+        return Err(ProviderError::Api(format!(
+            "Model requested unavailable tool '{}'; the call was blocked.",
+            call.name
+        )));
+    }
+    Ok(())
+}
+
 fn anthropic_user_tool_results(tool_calls: &[ToolCall], bodies: &[String]) -> serde_json::Value {
     let blocks: Vec<serde_json::Value> = tool_calls
         .iter()
@@ -518,6 +534,7 @@ async fn agent_complete_with_tools(
             }
             return Ok(resp.content);
         }
+        ensure_tool_calls_are_advertised(&tool_calls, &tools)?;
         if resp.tool_calls.is_empty() {
             eprintln!(
                 "persistent-sage: executing {} tool call(s) parsed from model text (native tool_calls empty)",
@@ -575,6 +592,7 @@ async fn try_complete_after_embedded_tool_xml(
     if calls.is_empty() {
         return Ok(None);
     }
+    ensure_tool_calls_are_advertised(&calls, &tools)?;
     eprintln!(
         "persistent-sage: running {} embedded tool call(s) from model text (not native API)",
         calls.len()
@@ -669,6 +687,8 @@ pub struct ChatTurnOptions {
     pub coding_context: Option<CodingTurnContext>,
     /// Frontend UI theme hint for artifact styling (`light` | `dark`).
     pub ui_theme: Option<String>,
+    /// Scheduler turns are restricted to Moltbook tools; the value controls posting.
+    pub moltbook_scheduler_allow_create_post: Option<bool>,
 }
 
 /// Ephemeral user text is sent to the model but not stored in SQLite / chat UI.
@@ -692,6 +712,7 @@ impl ChatTurnOptions {
             ephemeral_user_note: EphemeralUserNote::None,
             coding_context: None,
             ui_theme: None,
+            moltbook_scheduler_allow_create_post: None,
         }
     }
 
@@ -706,6 +727,7 @@ impl ChatTurnOptions {
             ephemeral_user_note: EphemeralUserNote::FormSubmission,
             coding_context: None,
             ui_theme: None,
+            moltbook_scheduler_allow_create_post: None,
         }
     }
 
@@ -720,11 +742,12 @@ impl ChatTurnOptions {
             ephemeral_user_note: EphemeralUserNote::Pulse,
             coding_context: None,
             ui_theme: None,
+            moltbook_scheduler_allow_create_post: None,
         }
     }
 
     /// Moltbook scheduler: hidden user prompt, tools on, assistant reply logged with a label prefix.
-    pub fn moltbook(assistant_reply_prefix: String) -> Self {
+    pub fn moltbook(assistant_reply_prefix: String, allow_create_post: bool) -> Self {
         Self {
             emit_stream: false,
             persist_user_message: false,
@@ -734,6 +757,7 @@ impl ChatTurnOptions {
             ephemeral_user_note: EphemeralUserNote::Moltbook,
             coding_context: None,
             ui_theme: None,
+            moltbook_scheduler_allow_create_post: Some(allow_create_post),
         }
     }
 
@@ -747,6 +771,7 @@ impl ChatTurnOptions {
             ephemeral_user_note: EphemeralUserNote::None,
             coding_context: Some(ctx),
             ui_theme: None,
+            moltbook_scheduler_allow_create_post: None,
         }
     }
 }
@@ -773,7 +798,12 @@ async fn run_chat_completion(
 
     let mut tool_definitions: Vec<ToolDefinition> = Vec::new();
     let is_coding_turn = options.coding_context.is_some();
-    if options.enable_tools && state.settings.agent_web_tools_enabled() && !is_coding_turn {
+    let is_moltbook_scheduler_turn = options.moltbook_scheduler_allow_create_post.is_some();
+    if options.enable_tools
+        && state.settings.agent_web_tools_enabled()
+        && !is_coding_turn
+        && !is_moltbook_scheduler_turn
+    {
         tool_definitions.extend(crate::agent_tools::builtin_tool_definitions());
         if state.settings.agent_browser_fetch_enabled() {
             tool_definitions.push(crate::agent_tools::browser_fetch_tool_definition(
@@ -781,10 +811,18 @@ async fn run_chat_completion(
             ));
         }
     }
-    if options.enable_tools && state.settings.agent_workspace_enabled() && !is_coding_turn {
+    if options.enable_tools
+        && state.settings.agent_workspace_enabled()
+        && !is_coding_turn
+        && !is_moltbook_scheduler_turn
+    {
         tool_definitions.extend(crate::agent_tools::workspace_tool_definitions());
     }
-    if options.enable_tools && state.settings.artifacts_enabled() && !is_coding_turn {
+    if options.enable_tools
+        && state.settings.artifacts_enabled()
+        && !is_coding_turn
+        && !is_moltbook_scheduler_turn
+    {
         tool_definitions.extend(crate::projects::project_tool_definitions());
     }
     if options.enable_tools
@@ -792,16 +830,23 @@ async fn run_chat_completion(
         && state.settings.moltbook_enabled()
         && state.settings.moltbook_agent_tools_enabled()
     {
-        tool_definitions.extend(crate::moltbook::tool_definitions());
+        tool_definitions.extend(crate::moltbook::tool_definitions(
+            options
+                .moltbook_scheduler_allow_create_post
+                .unwrap_or(true),
+        ));
     }
     let database_tools_enabled = options.enable_tools
         && !is_coding_turn
+        && !is_moltbook_scheduler_turn
         && (state.settings.agent_workspace_enabled() || state.settings.database_app_data_enabled());
     if database_tools_enabled {
         tool_definitions.extend(crate::database_query::tool_definitions());
     }
-    let personality_edit_enabled =
-        options.enable_tools && !is_coding_turn && state.settings.agent_personality_edit_enabled();
+    let personality_edit_enabled = options.enable_tools
+        && !is_coding_turn
+        && !is_moltbook_scheduler_turn
+        && state.settings.agent_personality_edit_enabled();
     if personality_edit_enabled {
         tool_definitions.extend(crate::personality_tools::tool_definitions());
     }
@@ -830,8 +875,10 @@ async fn run_chat_completion(
         }
     }
     let provider_id = engine.provider_id();
-    let memory_tools_active =
-        options.enable_tools && provider_id != "placeholder" && !is_coding_turn;
+    let memory_tools_active = options.enable_tools
+        && provider_id != "placeholder"
+        && !is_coding_turn
+        && !is_moltbook_scheduler_turn;
     if memory_tools_active {
         tool_definitions.extend(crate::memory_tools::tool_definitions());
     }
@@ -844,13 +891,14 @@ async fn run_chat_completion(
     let coding_ctx_ref = options.coding_context.as_ref();
     let settings_for_tools = Some(&*state.settings);
     let max_tool_rounds = if is_coding_turn { 32 } else { 8 };
-    let workspace_root_for_tools = if state.settings.agent_workspace_enabled()
-        || state.settings.artifacts_enabled()
-        || (is_coding_turn
-            && (state.settings.agent_coding_tools_enabled()
-                || state.settings.agent_coding_shell_enabled()
-                || state.settings.agent_coding_git_enabled()
-                || state.settings.agent_coding_git_remote_enabled()))
+    let workspace_root_for_tools = if !is_moltbook_scheduler_turn
+        && (state.settings.agent_workspace_enabled()
+            || state.settings.artifacts_enabled()
+            || (is_coding_turn
+                && (state.settings.agent_coding_tools_enabled()
+                    || state.settings.agent_coding_shell_enabled()
+                    || state.settings.agent_coding_git_enabled()
+                    || state.settings.agent_coding_git_remote_enabled())))
     {
         Some(state.workspace_root.as_path())
     } else {
@@ -1687,4 +1735,35 @@ pub async fn chat_vision_supported(state: State<'_, NovaState>) -> Result<bool, 
     let engine = state.llm.read().await.clone();
     let info = engine.model_info();
     Ok(model_supports_vision(&info.provider_id, &info.model_id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ensure_tool_calls_are_advertised;
+    use crate::provider::{ToolCall, ToolDefinition};
+    use serde_json::json;
+
+    fn tool(name: &str) -> ToolDefinition {
+        ToolDefinition {
+            name: name.to_string(),
+            description: None,
+            parameters: json!({"type": "object"}),
+        }
+    }
+
+    fn call(name: &str) -> ToolCall {
+        ToolCall {
+            id: "call-1".into(),
+            name: name.to_string(),
+            arguments_json: "{}".into(),
+        }
+    }
+
+    #[test]
+    fn blocks_tool_calls_not_advertised_for_the_turn() {
+        let tools = vec![tool("moltbook_feed")];
+        assert!(ensure_tool_calls_are_advertised(&[call("moltbook_feed")], &tools).is_ok());
+        assert!(ensure_tool_calls_are_advertised(&[call("workspace_write_file")], &tools).is_err());
+        assert!(ensure_tool_calls_are_advertised(&[call("moltbook_create_post")], &tools).is_err());
+    }
 }

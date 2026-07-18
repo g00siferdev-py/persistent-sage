@@ -373,8 +373,8 @@ fn sanitize_id(raw: &str) -> Result<String, String> {
 
 // --- Agent tools ------------------------------------------------------------------
 
-pub fn tool_definitions() -> Vec<ToolDefinition> {
-    vec![
+pub fn tool_definitions(allow_create_post: bool) -> Vec<ToolDefinition> {
+    let mut tools = vec![
         ToolDefinition {
             name: "moltbook_feed".into(),
             description: Some(
@@ -432,7 +432,11 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
                 "required": ["post_id", "content"]
             }),
         },
-    ]
+    ];
+    if !allow_create_post {
+        tools.retain(|tool| tool.name != "moltbook_create_post");
+    }
+    tools
 }
 
 pub fn is_moltbook_tool_name(name: &str) -> bool {
@@ -592,7 +596,7 @@ pub async fn run_moltbook_tool(
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_submolt, sanitize_id};
+    use super::{normalize_submolt, sanitize_id, tool_definitions};
 
     #[test]
     fn normalizes_submolt_prefix() {
@@ -606,5 +610,20 @@ mod tests {
         assert!(sanitize_id("../etc").is_err());
         assert!(sanitize_id("a/b").is_err());
         assert!(sanitize_id("").is_err());
+    }
+
+    #[test]
+    fn interact_tool_scope_cannot_create_posts() {
+        let interact = tool_definitions(false);
+        assert!(interact.iter().any(|tool| tool.name == "moltbook_feed"));
+        assert!(interact.iter().any(|tool| tool.name == "moltbook_comment"));
+        assert!(!interact
+            .iter()
+            .any(|tool| tool.name == "moltbook_create_post"));
+
+        let post = tool_definitions(true);
+        assert!(post
+            .iter()
+            .any(|tool| tool.name == "moltbook_create_post"));
     }
 }
