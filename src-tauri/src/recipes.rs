@@ -205,6 +205,7 @@ pub async fn run_recipe(
             ephemeral_user_note: crate::chat::EphemeralUserNote::None,
             coding_context: None,
             ui_theme: None,
+            moltbook_scheduler_allow_create_post: None,
         },
     )
     .await
