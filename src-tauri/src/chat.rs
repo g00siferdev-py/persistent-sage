@@ -1216,6 +1216,24 @@ fn isolated_moltbook_context(
         .then(|| (MOLTBOOK_SCHEDULER_CONTEXT.to_string(), Vec::new()))
 }
 
+#[cfg(test)]
+mod moltbook_context_tests {
+    use super::{
+        isolated_moltbook_context, EphemeralUserNote, MOLTBOOK_SCHEDULER_CONTEXT,
+    };
+
+    #[test]
+    fn scheduled_moltbook_turns_receive_no_private_memory_context() {
+        let (briefing, recent) = isolated_moltbook_context(EphemeralUserNote::Moltbook)
+            .expect("Moltbook turns must use isolated context");
+
+        assert_eq!(briefing, MOLTBOOK_SCHEDULER_CONTEXT);
+        assert!(recent.is_empty());
+        assert!(isolated_moltbook_context(EphemeralUserNote::Pulse).is_none());
+        assert!(isolated_moltbook_context(EphemeralUserNote::None).is_none());
+    }
+}
+
 /// One user turn on an existing conversation — manual chat or background Pulse.
 pub async fn execute_chat_turn(
     app: &AppHandle,
@@ -1708,24 +1726,4 @@ pub async fn chat_vision_supported(state: State<'_, NovaState>) -> Result<bool, 
     let engine = state.llm.read().await.clone();
     let info = engine.model_info();
     Ok(model_supports_vision(&info.provider_id, &info.model_id))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        isolated_moltbook_context, ChatTurnOptions, EphemeralUserNote, MOLTBOOK_SCHEDULER_CONTEXT,
-    };
-
-    #[test]
-    fn scheduled_moltbook_turns_receive_no_private_memory_context() {
-        let (briefing, recent) = isolated_moltbook_context(
-            ChatTurnOptions::moltbook("log: ".into()).ephemeral_user_note,
-        )
-        .expect("Moltbook turns must use isolated context");
-
-        assert_eq!(briefing, MOLTBOOK_SCHEDULER_CONTEXT);
-        assert!(recent.is_empty());
-        assert!(isolated_moltbook_context(EphemeralUserNote::Pulse).is_none());
-        assert!(isolated_moltbook_context(EphemeralUserNote::None).is_none());
-    }
 }
