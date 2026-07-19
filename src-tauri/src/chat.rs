@@ -1205,6 +1205,16 @@ async fn execute_direct_coding_command(
 /// Messages loaded into the model context (smaller = faster prep on long threads).
 const CHAT_CONTEXT_RECENT: usize = 32;
 const CHAT_PREP_TIMEOUT: Duration = Duration::from_secs(12);
+const MOLTBOOK_SCHEDULER_CONTEXT: &str = "# Autonomous Moltbook session\n\n\
+This public-network turn intentionally receives no local chat history, memory anchors, \
+projects, saved preferences, or cross-session recall.";
+
+fn isolated_moltbook_context(
+    ephemeral_user_note: EphemeralUserNote,
+) -> Option<(String, Vec<StoredMessage>)> {
+    (ephemeral_user_note == EphemeralUserNote::Moltbook)
+        .then(|| (MOLTBOOK_SCHEDULER_CONTEXT.to_string(), Vec::new()))
+}
 
 /// One user turn on an existing conversation — manual chat or background Pulse.
 pub async fn execute_chat_turn(
@@ -1311,10 +1321,17 @@ pub async fn execute_chat_turn(
     let coding_ctx = options.coding_context.clone();
     let workspace_root = state.workspace_root.clone();
     let companion_linked_prep = companion_linked;
+    let ephemeral_user_note = options.ephemeral_user_note;
 
     let prep = tokio::time::timeout(
         CHAT_PREP_TIMEOUT,
         tokio::task::spawn_blocking(move || -> Result<(String, Vec<StoredMessage>), String> {
+            // Scheduled Moltbook output is published to a public network and can be influenced by
+            // untrusted feed content. Do not put private local context in that model turn.
+            if let Some(context) = isolated_moltbook_context(ephemeral_user_note) {
+                return Ok(context);
+            }
+
             if persist_user_message {
                 memory
                     .store_message(
@@ -1397,14 +1414,18 @@ pub async fn execute_chat_turn(
                 "persistent-sage: chat prep timed out after {:?} — continuing with reduced context",
                 CHAT_PREP_TIMEOUT
             );
-            let recent = state
-                .memory
-                .get_recent(conversation_id, CHAT_CONTEXT_RECENT)
-                .unwrap_or_default();
-            (
-                format!("# Session context\n\n_Memory prep timed out; using transcript only._\n"),
-                recent,
-            )
+            isolated_moltbook_context(options.ephemeral_user_note).unwrap_or_else(|| {
+                let recent = state
+                    .memory
+                    .get_recent(conversation_id, CHAT_CONTEXT_RECENT)
+                    .unwrap_or_default();
+                (
+                    format!(
+                        "# Session context\n\n_Memory prep timed out; using transcript only._\n"
+                    ),
+                    recent,
+                )
+            })
         }
     };
 
@@ -1687,4 +1708,24 @@ pub async fn chat_vision_supported(state: State<'_, NovaState>) -> Result<bool, 
     let engine = state.llm.read().await.clone();
     let info = engine.model_info();
     Ok(model_supports_vision(&info.provider_id, &info.model_id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        isolated_moltbook_context, ChatTurnOptions, EphemeralUserNote, MOLTBOOK_SCHEDULER_CONTEXT,
+    };
+
+    #[test]
+    fn scheduled_moltbook_turns_receive_no_private_memory_context() {
+        let (briefing, recent) = isolated_moltbook_context(
+            ChatTurnOptions::moltbook("log: ".into()).ephemeral_user_note,
+        )
+        .expect("Moltbook turns must use isolated context");
+
+        assert_eq!(briefing, MOLTBOOK_SCHEDULER_CONTEXT);
+        assert!(recent.is_empty());
+        assert!(isolated_moltbook_context(EphemeralUserNote::Pulse).is_none());
+        assert!(isolated_moltbook_context(EphemeralUserNote::None).is_none());
+    }
 }
