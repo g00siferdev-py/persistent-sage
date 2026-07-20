@@ -47,6 +47,8 @@ fn tool_user_facing_label(name: &str) -> String {
         "workspace_read_file" => "Read Workspace File".into(),
         "workspace_write_file" => "Write Workspace File".into(),
         "workspace_list_directory" => "List Workspace Folder".into(),
+        "workspace_read_pdf" => "Read PDF".into(),
+        "workspace_write_pdf" => "Create PDF".into(),
         "database_query" => "Database Query".into(),
         "personality_get" => "View Personality".into(),
         "personality_update" => "Update Personality".into(),
@@ -59,8 +61,23 @@ fn tool_user_facing_label(name: &str) -> String {
         "coding_git_commit" => "Git Commit".into(),
         "moltbook_feed" => "Moltbook Feed".into(),
         "moltbook_search" => "Moltbook Search".into(),
+        "moltbook_home" => "Moltbook Home".into(),
+        "moltbook_get_comments" => "Moltbook Comments".into(),
         "moltbook_create_post" => "Moltbook Post".into(),
+        "moltbook_list_submolts" => "Moltbook Submolts".into(),
         "moltbook_comment" => "Moltbook Comment".into(),
+        "moltbook_upvote" => "Moltbook Upvote".into(),
+        "moltbook_mark_notifications_read" => "Moltbook Mark Read".into(),
+        "moltbook_dm_check" => "Moltbook DMs".into(),
+        "moltbook_dm_send" => "Moltbook DM Send".into(),
+        "moltbook_follow" => "Moltbook Follow".into(),
+        "moltbook_home" => "Moltbook Home".into(),
+        "moltbook_get_comments" => "Moltbook Comments".into(),
+        "moltbook_upvote" => "Moltbook Upvote".into(),
+        "moltbook_mark_notifications_read" => "Moltbook Mark Read".into(),
+        "moltbook_dm_check" => "Moltbook DMs".into(),
+        "moltbook_dm_send" => "Moltbook Send DM".into(),
+        "moltbook_follow" => "Moltbook Follow".into(),
         other => other.to_string(),
     }
 }
@@ -202,7 +219,7 @@ const WORKSPACE_REL_PATH_MAX: usize = 2048;
 
 /// Tools offered when agent workspace access is enabled (paths are relative to the workspace root).
 pub fn workspace_tool_definitions() -> Vec<ToolDefinition> {
-    vec![
+    let mut defs = vec![
         ToolDefinition {
             name: "workspace_read_file".into(),
             description: Some(
@@ -244,7 +261,9 @@ pub fn workspace_tool_definitions() -> Vec<ToolDefinition> {
                 "required": []
             }),
         },
-    ]
+    ];
+    defs.extend(crate::pdf::pdf_tool_definitions());
+    defs
 }
 
 /// Build `workspace_root/rel` with `rel` sanitized (no `..`, no absolute paths, forward slashes only).
@@ -1282,6 +1301,13 @@ pub async fn run_builtin_tool(
         let v: Value = serde_json::from_str(arguments_json)
             .map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
         return crate::moltbook::run_moltbook_tool(http, settings, n, &v).await;
+    }
+
+    if crate::pdf::is_pdf_tool_name(n) {
+        let root = workspace_root.ok_or_else(|| tool_err("workspace tools are not enabled"))?;
+        let v: Value = serde_json::from_str(arguments_json)
+            .map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
+        return crate::pdf::run_pdf_tool(root, data_directory, n, &v).await;
     }
 
     let v: Value = serde_json::from_str(arguments_json)

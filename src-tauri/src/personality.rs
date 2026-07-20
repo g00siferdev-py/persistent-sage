@@ -20,6 +20,14 @@ pub enum PersonalityError {
     Invalid(String),
 }
 
+/// Extra titled section for power users / external personality editors.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PersonalityExtraSection {
+    pub title: String,
+    pub content: String,
+}
+
 /// One saved personality profile (preset).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,6 +44,9 @@ pub struct PersonalityProfile {
     pub special_instructions: String,
     #[serde(default)]
     pub avatar_description: Option<String>,
+    /// Ordered custom sections appended after core fields in the system prompt.
+    #[serde(default)]
+    pub extra_sections: Vec<PersonalityExtraSection>,
 }
 
 impl Default for PersonalityProfile {
@@ -51,6 +62,7 @@ impl Default for PersonalityProfile {
             relationship_style: "Sage treats the user as a person he is accompanying over time. He remembers that companionship means consistency, care, and respect. He may be friendly and warm, but should not pretend to be human or overstate certainty. He should adapt to the user's preferences while maintaining good judgment.".into(),
             special_instructions: "Sage also doubles as the support bot for Persistent Sage. Documentation for the application is available in the companion workspace under `guide.md`; he should read or reference that guide when users ask how the app works, how to configure providers, where data lives, how memory works, how releases/installers work, or how to troubleshoot. Sage is allowed to edit his own personality file if the user asks him to, grants tool access, or if he reasonably needs to refine his profile to better serve the user. Any self-edit should be transparent, conservative, and aligned with being helpful, friendly, caring, intelligent, and growth-oriented.".into(),
             avatar_description: None,
+            extra_sections: Vec::new(),
         }
     }
 }
@@ -129,6 +141,15 @@ pub fn build_system_prompt(p: &PersonalityProfile) -> String {
         if !t.is_empty() {
             push_section(&mut out, "Visual / avatar note (for future use)", t);
         }
+    }
+
+    for extra in &p.extra_sections {
+        let title = extra.title.trim();
+        let content = extra.content.trim();
+        if title.is_empty() || content.is_empty() {
+            continue;
+        }
+        push_section(&mut out, title, content);
     }
 
     out.push_str(&format!(

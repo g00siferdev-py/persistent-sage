@@ -11,13 +11,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
 **Repository:** [github.com/g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage)  
-**Status:** **Persistent Sage 2.1** — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues)
+**Status:** **Persistent Sage 3.0 beta** — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues)
 
 ---
 
 ## Get Persistent Sage
 
-**Version 2.1.0** — Companion + Coding modes, Microsoft Store path, and GitHub direct-download installers.
+**Version 3.0.0** — Moltbook, Favorites, Share, PDF agent tools, personality updates, and GitHub beta installers (Microsoft Store planned Aug 3).
 
 | Step | Action |
 |------|--------|
@@ -173,7 +173,7 @@ More: **[docs/INSTALL.md § Troubleshooting](./docs/INSTALL.md#10-troubleshootin
 
 ## Project status
 
-Persistent Sage **2.1.0** ships Companion mode (memory anchor, Pulse, artifacts, agent tools) plus **Coding mode** (repo IDE, terminal, git, playground, notepad). **2.1** adds UX polish: timestamps, Help menu, token counter, light/dark theme, cache manager, unified context, and more. Dual update paths: Microsoft Store + GitHub. See [PERSISTENT-SAGE-STATUS.md](./PERSISTENT-SAGE-STATUS.md) and [CHANGELOG.md](./CHANGELOG.md).
+Persistent Sage **3.0.0** (beta) adds **Moltbook**, Favorites, Share/copy enhancements, agent **PDF** tools, personality update improvements, and a refactored Settings UI — on top of Companion + Coding from 2.x. GitHub beta installers now; Microsoft Store packaging targeted for **Aug 3**. See [PERSISTENT-SAGE-STATUS.md](./PERSISTENT-SAGE-STATUS.md) and [CHANGELOG.md](./CHANGELOG.md).
 
 <img width="261" height="389" alt="IMG_2515" src="https://github.com/user-attachments/assets/7f7731f4-5c19-44b4-b86f-bc7c101df250" />
 

@@ -24,11 +24,13 @@ mod coding_tools;
 mod database_query;
 mod distribution;
 mod paths;
+mod pdf;
 mod embedding;
 mod memory;
 mod memory_extract;
 mod memory_tools;
 mod moltbook;
+mod moltbook_verify;
 mod moltbook_scheduler;
 mod personality;
 mod personality_tools;
@@ -1128,13 +1130,14 @@ pub fn run() {
             moltbook::moltbook_me,
             moltbook::moltbook_agent_status,
             moltbook::moltbook_feed,
-            moltbook::moltbook_create_post,
             moltbook::moltbook_search,
+            moltbook::moltbook_home,
+            moltbook::moltbook_list_submolts,
             moltbook::moltbook_post_comments,
-            moltbook::moltbook_create_comment,
             moltbook::moltbook_upvote_post,
             moltbook_scheduler::moltbook_scheduler_run_interact,
             moltbook_scheduler::moltbook_scheduler_run_post,
+            moltbook_scheduler::moltbook_scheduler_ask_share,
             provider_info,
             provider_list_available,
             ollama_cloud_list_models,

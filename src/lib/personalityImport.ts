@@ -28,6 +28,21 @@ function newId(): string {
   return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `p-${Date.now()}`;
 }
 
+function normalizeExtraSections(raw: Record<string, unknown>): PersonalityProfile["extraSections"] {
+  const v = raw.extraSections ?? raw.extra_sections;
+  if (!Array.isArray(v)) return [];
+  const out: NonNullable<PersonalityProfile["extraSections"]> = [];
+  for (const item of v) {
+    const r = asRecord(item);
+    if (!r) continue;
+    const title = pickStr(r, "title", "name", "heading").trim();
+    const content = pickStr(r, "content", "body", "text").trim();
+    if (!title && !content) continue;
+    out.push({ title: title || "Custom section", content });
+  }
+  return out;
+}
+
 function normalizeProfile(raw: Record<string, unknown>, fallbackId: string): PersonalityProfile {
   return {
     id: pickStr(raw, "id", "profileId") || fallbackId,
@@ -45,6 +60,7 @@ function normalizeProfile(raw: Record<string, unknown>, fallbackId: string): Per
       if (typeof v === "string") return v.trim() === "" ? null : v;
       return null;
     })(),
+    extraSections: normalizeExtraSections(raw),
   };
 }
 
@@ -57,7 +73,8 @@ function profileLooksNonEmpty(p: PersonalityProfile): boolean {
     p.backgroundStory.trim() !== "" ||
     p.coreValues.trim() !== "" ||
     p.relationshipStyle.trim() !== "" ||
-    p.specialInstructions.trim() !== ""
+    p.specialInstructions.trim() !== "" ||
+    (p.extraSections?.some((s) => s.title.trim() || s.content.trim()) ?? false)
   );
 }
 
@@ -393,6 +410,7 @@ function emptyOpenclawPreview(fatalError: string, unrecognizedFileNames: string[
       relationshipStyle: "",
       specialInstructions: "",
       avatarDescription: null,
+      extraSections: [],
     },
     filesFound: [],
     unrecognizedFileNames,
@@ -476,6 +494,7 @@ export function openclawBundleToProfile(bundle: OpenclawBundle): OpenclawImportP
       : "",
     specialInstructions: joinBlocks(specialParts),
     avatarDescription: avatarParts.length ? joinBlocks(avatarParts) : null,
+    extraSections: [],
   };
 
   if (!profileLooksNonEmpty(profile)) {

@@ -161,6 +161,42 @@ pub struct SettingsFile {
     /// Conversation id the scheduler logs its Moltbook activity to (auto-created). Null = none yet.
     #[serde(default)]
     pub moltbook_scheduler_conversation_id: Option<String>,
+    /// Engagement: browse the feed during interact cycles.
+    #[serde(default = "default_true")]
+    pub moltbook_engage_browse_feed: bool,
+    /// Engagement: search Moltbook during interact cycles.
+    #[serde(default = "default_true")]
+    pub moltbook_engage_search: bool,
+    /// Engagement: upvote posts during interact cycles.
+    #[serde(default = "default_true")]
+    pub moltbook_engage_upvote: bool,
+    /// Engagement: comment on others' posts during interact cycles.
+    #[serde(default = "default_true")]
+    pub moltbook_engage_comment: bool,
+    /// Engagement: reply to comments on the agent's own posts.
+    #[serde(default = "default_true")]
+    pub moltbook_engage_reply_own: bool,
+    /// Engagement: send DMs during interact cycles.
+    #[serde(default)]
+    pub moltbook_engage_dms: bool,
+    /// Engagement: follow other agents during interact cycles.
+    #[serde(default)]
+    pub moltbook_engage_follow: bool,
+    /// Extra system prompt injected into Moltbook agent/scheduler runs.
+    #[serde(default)]
+    pub moltbook_agent_prompt: String,
+    /// When true, the agent must never discuss or reveal its human operator on Moltbook.
+    #[serde(default = "default_true")]
+    pub moltbook_never_discuss_human: bool,
+    /// Comma/newline-separated topics the agent should avoid on Moltbook.
+    #[serde(default)]
+    pub moltbook_blocked_topics: String,
+    /// When true, poll for replies to the agent's posts between interact cycles.
+    #[serde(default)]
+    pub moltbook_reply_watcher_enabled: bool,
+    /// How often (minutes) to poll for replies when the reply watcher is enabled.
+    #[serde(default = "default_moltbook_reply_poll_minutes")]
+    pub moltbook_reply_poll_minutes: u32,
 }
 
 fn default_moltbook_interact_interval_minutes() -> u32 {
@@ -171,12 +207,40 @@ fn default_moltbook_post_interval_minutes() -> u32 {
     720
 }
 
+fn default_moltbook_reply_poll_minutes() -> u32 {
+    2
+}
+
+fn default_true() -> bool {
+    true
+}
+
 fn default_moltbook_base_url() -> String {
     "https://www.moltbook.com/api/v1".into()
 }
 
+/// skill.md: always use `www` — bare `moltbook.com` redirects and strips Authorization.
+pub fn normalize_moltbook_base_url(raw: &str) -> String {
+    let t = raw.trim().trim_end_matches('/').to_string();
+    if t.is_empty() {
+        return default_moltbook_base_url();
+    }
+    let lowered = t.to_ascii_lowercase();
+    let normalized = if let Some(rest) = lowered.strip_prefix("https://moltbook.com") {
+        format!("https://www.moltbook.com{rest}")
+    } else if let Some(rest) = lowered.strip_prefix("http://moltbook.com") {
+        format!("https://www.moltbook.com{rest}")
+    } else if let Some(rest) = lowered.strip_prefix("http://www.moltbook.com") {
+        format!("https://www.moltbook.com{rest}")
+    } else {
+        t
+    };
+    normalized.trim_end_matches('/').to_string()
+}
+
 fn default_moltbook_submolt() -> String {
-    "general".into()
+    // Empty = agent chooses freely on each post (no preferred community).
+    String::new()
 }
 
 fn default_artifacts_enabled() -> bool {
@@ -332,6 +396,18 @@ impl Default for SettingsFile {
             moltbook_interact_interval_minutes: default_moltbook_interact_interval_minutes(),
             moltbook_post_interval_minutes: default_moltbook_post_interval_minutes(),
             moltbook_scheduler_conversation_id: None,
+            moltbook_engage_browse_feed: true,
+            moltbook_engage_search: true,
+            moltbook_engage_upvote: true,
+            moltbook_engage_comment: true,
+            moltbook_engage_reply_own: true,
+            moltbook_engage_dms: false,
+            moltbook_engage_follow: false,
+            moltbook_agent_prompt: String::new(),
+            moltbook_never_discuss_human: true,
+            moltbook_blocked_topics: String::new(),
+            moltbook_reply_watcher_enabled: false,
+            moltbook_reply_poll_minutes: default_moltbook_reply_poll_minutes(),
         }
     }
 }
@@ -390,6 +466,18 @@ pub struct SettingsView {
     pub moltbook_scheduler_enabled: bool,
     pub moltbook_interact_interval_minutes: u32,
     pub moltbook_post_interval_minutes: u32,
+    pub moltbook_engage_browse_feed: bool,
+    pub moltbook_engage_search: bool,
+    pub moltbook_engage_upvote: bool,
+    pub moltbook_engage_comment: bool,
+    pub moltbook_engage_reply_own: bool,
+    pub moltbook_engage_dms: bool,
+    pub moltbook_engage_follow: bool,
+    pub moltbook_agent_prompt: String,
+    pub moltbook_never_discuss_human: bool,
+    pub moltbook_blocked_topics: String,
+    pub moltbook_reply_watcher_enabled: bool,
+    pub moltbook_reply_poll_minutes: u32,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -440,6 +528,18 @@ pub struct SettingsUpdatePayload {
     pub moltbook_scheduler_enabled: Option<bool>,
     pub moltbook_interact_interval_minutes: Option<u32>,
     pub moltbook_post_interval_minutes: Option<u32>,
+    pub moltbook_engage_browse_feed: Option<bool>,
+    pub moltbook_engage_search: Option<bool>,
+    pub moltbook_engage_upvote: Option<bool>,
+    pub moltbook_engage_comment: Option<bool>,
+    pub moltbook_engage_reply_own: Option<bool>,
+    pub moltbook_engage_dms: Option<bool>,
+    pub moltbook_engage_follow: Option<bool>,
+    pub moltbook_agent_prompt: Option<String>,
+    pub moltbook_never_discuss_human: Option<bool>,
+    pub moltbook_blocked_topics: Option<String>,
+    pub moltbook_reply_watcher_enabled: Option<bool>,
+    pub moltbook_reply_poll_minutes: Option<u32>,
 }
 
 // --- Crypto ------------------------------------------------------------------
@@ -823,6 +923,18 @@ impl SettingsManager {
             moltbook_scheduler_enabled: inner.moltbook_scheduler_enabled,
             moltbook_interact_interval_minutes: inner.moltbook_interact_interval_minutes,
             moltbook_post_interval_minutes: inner.moltbook_post_interval_minutes,
+            moltbook_engage_browse_feed: inner.moltbook_engage_browse_feed,
+            moltbook_engage_search: inner.moltbook_engage_search,
+            moltbook_engage_upvote: inner.moltbook_engage_upvote,
+            moltbook_engage_comment: inner.moltbook_engage_comment,
+            moltbook_engage_reply_own: inner.moltbook_engage_reply_own,
+            moltbook_engage_dms: inner.moltbook_engage_dms,
+            moltbook_engage_follow: inner.moltbook_engage_follow,
+            moltbook_agent_prompt: inner.moltbook_agent_prompt.clone(),
+            moltbook_never_discuss_human: inner.moltbook_never_discuss_human,
+            moltbook_blocked_topics: inner.moltbook_blocked_topics.clone(),
+            moltbook_reply_watcher_enabled: inner.moltbook_reply_watcher_enabled,
+            moltbook_reply_poll_minutes: inner.moltbook_reply_poll_minutes,
         })
     }
 
@@ -843,7 +955,7 @@ impl SettingsManager {
     pub fn moltbook_base_url(&self) -> String {
         self.inner
             .read()
-            .map(|g| g.moltbook_base_url.clone())
+            .map(|g| normalize_moltbook_base_url(&g.moltbook_base_url))
             .ok()
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(default_moltbook_base_url)
@@ -855,7 +967,23 @@ impl SettingsManager {
             .map(|g| g.moltbook_default_submolt.clone())
             .ok()
             .filter(|s| !s.trim().is_empty())
-            .unwrap_or_else(default_moltbook_submolt)
+            .map(|s| {
+                s.trim()
+                    .trim_start_matches("m/")
+                    .trim()
+                    .to_string()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Preferred submolt when set; `None` means the agent must choose.
+    pub fn moltbook_preferred_submolt(&self) -> Option<String> {
+        let s = self.moltbook_default_submolt();
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
+        }
     }
 
     pub fn moltbook_agent_tools_enabled(&self) -> bool {
@@ -884,6 +1012,90 @@ impl SettingsManager {
             .read()
             .map(|g| g.moltbook_post_interval_minutes)
             .unwrap_or_else(|_| default_moltbook_post_interval_minutes())
+    }
+
+    pub fn moltbook_engage_browse_feed(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_engage_browse_feed)
+            .unwrap_or(true)
+    }
+
+    pub fn moltbook_engage_search(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_engage_search)
+            .unwrap_or(true)
+    }
+
+    pub fn moltbook_engage_upvote(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_engage_upvote)
+            .unwrap_or(true)
+    }
+
+    pub fn moltbook_engage_comment(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_engage_comment)
+            .unwrap_or(true)
+    }
+
+    pub fn moltbook_engage_reply_own(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_engage_reply_own)
+            .unwrap_or(true)
+    }
+
+    pub fn moltbook_engage_dms(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_engage_dms)
+            .unwrap_or(false)
+    }
+
+    pub fn moltbook_engage_follow(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_engage_follow)
+            .unwrap_or(false)
+    }
+
+    pub fn moltbook_agent_prompt(&self) -> String {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_agent_prompt.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn moltbook_never_discuss_human(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_never_discuss_human)
+            .unwrap_or(true)
+    }
+
+    pub fn moltbook_blocked_topics(&self) -> String {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_blocked_topics.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn moltbook_reply_watcher_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_reply_watcher_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn moltbook_reply_poll_minutes(&self) -> u32 {
+        self.inner
+            .read()
+            .map(|g| g.moltbook_reply_poll_minutes)
+            .unwrap_or_else(|_| default_moltbook_reply_poll_minutes())
     }
 
     pub fn moltbook_scheduler_conversation_id(&self) -> Option<String> {
@@ -1304,12 +1516,7 @@ impl SettingsManager {
             inner.moltbook_enabled = b;
         }
         if let Some(s) = patch.moltbook_base_url {
-            let t = s.trim().trim_end_matches('/').to_string();
-            inner.moltbook_base_url = if t.is_empty() {
-                default_moltbook_base_url()
-            } else {
-                t
-            };
+            inner.moltbook_base_url = normalize_moltbook_base_url(&s);
         }
         if let Some(s) = patch.moltbook_default_submolt {
             let t = s
@@ -1317,11 +1524,8 @@ impl SettingsManager {
                 .trim_start_matches("m/")
                 .trim()
                 .to_string();
-            inner.moltbook_default_submolt = if t.is_empty() {
-                default_moltbook_submolt()
-            } else {
-                t
-            };
+            // Empty string is intentional: agent picks the submolt each time.
+            inner.moltbook_default_submolt = t;
         }
         if let Some(b) = patch.moltbook_agent_tools_enabled {
             inner.moltbook_agent_tools_enabled = b;
@@ -1334,6 +1538,42 @@ impl SettingsManager {
         }
         if let Some(m) = patch.moltbook_post_interval_minutes {
             inner.moltbook_post_interval_minutes = m.clamp(30, 7 * 24 * 60);
+        }
+        if let Some(b) = patch.moltbook_engage_browse_feed {
+            inner.moltbook_engage_browse_feed = b;
+        }
+        if let Some(b) = patch.moltbook_engage_search {
+            inner.moltbook_engage_search = b;
+        }
+        if let Some(b) = patch.moltbook_engage_upvote {
+            inner.moltbook_engage_upvote = b;
+        }
+        if let Some(b) = patch.moltbook_engage_comment {
+            inner.moltbook_engage_comment = b;
+        }
+        if let Some(b) = patch.moltbook_engage_reply_own {
+            inner.moltbook_engage_reply_own = b;
+        }
+        if let Some(b) = patch.moltbook_engage_dms {
+            inner.moltbook_engage_dms = b;
+        }
+        if let Some(b) = patch.moltbook_engage_follow {
+            inner.moltbook_engage_follow = b;
+        }
+        if let Some(s) = patch.moltbook_agent_prompt {
+            inner.moltbook_agent_prompt = s;
+        }
+        if let Some(b) = patch.moltbook_never_discuss_human {
+            inner.moltbook_never_discuss_human = b;
+        }
+        if let Some(s) = patch.moltbook_blocked_topics {
+            inner.moltbook_blocked_topics = s;
+        }
+        if let Some(b) = patch.moltbook_reply_watcher_enabled {
+            inner.moltbook_reply_watcher_enabled = b;
+        }
+        if let Some(m) = patch.moltbook_reply_poll_minutes {
+            inner.moltbook_reply_poll_minutes = m.clamp(1, 30);
         }
         inner.version = SETTINGS_VERSION;
         drop(inner);

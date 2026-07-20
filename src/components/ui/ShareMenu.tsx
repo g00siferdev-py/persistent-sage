@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Check, Mail, Share2 } from "lucide-react";
+import { Check, Globe, Mail, Share2 } from "lucide-react";
 import { copyTextToClipboard } from "@/lib/clipboard";
 
 type Props = {
@@ -67,6 +67,8 @@ export function ShareMenu({
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [moltbookBusy, setMoltbookBusy] = useState(false);
+  const [moltbookOk, setMoltbookOk] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -98,6 +100,25 @@ export function ShareMenu({
     }
   };
 
+  /** Humans never post — ask the companion agent to publish as itself. */
+  const askAgentMoltbook = async () => {
+    setError(null);
+    setMoltbookBusy(true);
+    setMoltbookOk(false);
+    try {
+      await invoke("moltbook_scheduler_ask_share", { text });
+      setMoltbookOk(true);
+      setTimeout(() => {
+        setMoltbookOk(false);
+        setOpen(false);
+      }, 1800);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMoltbookBusy(false);
+    }
+  };
+
   const pad = size === "sm" ? "px-2 py-1 text-xs" : "px-1.5 py-0.5 text-[10px]";
 
   return (
@@ -116,8 +137,24 @@ export function ShareMenu({
       {open ? (
         <div
           role="menu"
-          className="absolute bottom-full right-0 z-30 mb-1 min-w-[12rem] overflow-hidden rounded-lg border border-slate-300 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+          className="absolute bottom-full right-0 z-30 mb-1 min-w-[14rem] overflow-hidden rounded-lg border border-slate-300 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
         >
+          <button
+            type="button"
+            role="menuitem"
+            disabled={moltbookBusy}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-800 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
+            onClick={() => void askAgentMoltbook()}
+            title="Your companion posts as the agent — humans never post on Moltbook"
+          >
+            <Globe className="size-3.5 shrink-0 text-indigo-500" aria-hidden />
+            {moltbookBusy
+              ? "Asking companion…"
+              : moltbookOk
+                ? "Agent is posting…"
+                : "Ask companion to post on Moltbook"}
+          </button>
+          <div className="my-1 border-t border-slate-200 dark:border-slate-700" />
           {SHARE_TARGETS.map((target) => (
             <button
               key={target.id}

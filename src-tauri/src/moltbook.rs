@@ -36,36 +36,113 @@ fn normalize_submolt(raw: &str) -> String {
     raw.trim().trim_start_matches("m/").trim().to_string()
 }
 
-/// Moltbook wraps lists in several shapes (`[]`, `{data:[]}`, `{data:{posts:[]}}`, `{posts:[]}`).
-fn extract_posts_array(body: &Value) -> Vec<Value> {
+fn extract_submolts_array(body: &Value) -> Vec<Value> {
     if let Some(arr) = body.as_array() {
         return arr.clone();
     }
-    if let Some(arr) = body.get("posts").and_then(|v| v.as_array()) {
-        return arr.clone();
-    }
-    if let Some(arr) = body.get("comments").and_then(|v| v.as_array()) {
-        return arr.clone();
+    for key in ["submolts", "communities", "results", "data"] {
+        if let Some(arr) = body.get(key).and_then(|v| v.as_array()) {
+            return arr.clone();
+        }
+        if let Some(arr) = body
+            .get(key)
+            .and_then(|v| v.get("submolts"))
+            .and_then(|v| v.as_array())
+        {
+            return arr.clone();
+        }
     }
     if let Some(data) = body.get("data") {
-        if let Some(arr) = data.as_array() {
+        if let Some(arr) = data.get("submolts").and_then(|v| v.as_array()) {
             return arr.clone();
         }
-        if let Some(arr) = data.get("posts").and_then(|v| v.as_array()) {
-            return arr.clone();
-        }
-        if let Some(arr) = data.get("comments").and_then(|v| v.as_array()) {
-            return arr.clone();
-        }
+    }
+    Vec::new()
+}
+
+/// Moltbook wraps lists in several shapes (`[]`, `{data:[]}`, `{data:{posts:[]}}`, `{posts:[]}`,
+/// `{results:[]}` for semantic search).
+fn extract_posts_array(body: &Value) -> Vec<Value> {
+    if let Some(arr) = body.as_array() {
+        return arr.iter().map(normalize_list_item).collect();
+    }
+    if let Some(arr) = body.get("posts").and_then(|v| v.as_array()) {
+        return arr.iter().map(normalize_list_item).collect();
+    }
+    if let Some(arr) = body.get("comments").and_then(|v| v.as_array()) {
+        return arr.iter().map(normalize_list_item).collect();
+    }
+    // Official semantic search: `{ "results": [ { type, title, content, ... }, ... ] }`
+    if let Some(arr) = body.get("results").and_then(|v| v.as_array()) {
+        return arr.iter().map(normalize_list_item).collect();
     }
     if let Some(arr) = body
         .get("results")
         .and_then(|v| v.get("posts"))
         .and_then(|v| v.as_array())
     {
-        return arr.clone();
+        return arr.iter().map(normalize_list_item).collect();
+    }
+    if let Some(data) = body.get("data") {
+        if let Some(arr) = data.as_array() {
+            return arr.iter().map(normalize_list_item).collect();
+        }
+        if let Some(arr) = data.get("posts").and_then(|v| v.as_array()) {
+            return arr.iter().map(normalize_list_item).collect();
+        }
+        if let Some(arr) = data.get("comments").and_then(|v| v.as_array()) {
+            return arr.iter().map(normalize_list_item).collect();
+        }
+        if let Some(arr) = data.get("results").and_then(|v| v.as_array()) {
+            return arr.iter().map(normalize_list_item).collect();
+        }
     }
     Vec::new()
+}
+
+/// Normalize search hits (posts + comments) into a post-like object the UI/tools can display.
+fn normalize_list_item(raw: &Value) -> Value {
+    let mut obj = match raw.as_object() {
+        Some(o) => o.clone(),
+        None => return raw.clone(),
+    };
+    let item_type = obj
+        .get("type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("post")
+        .to_string();
+    if item_type == "comment" {
+        // Prefer parent post id for opening the thread; keep comment id for replies.
+        if let Some(pid) = obj
+            .get("post_id")
+            .and_then(|v| v.as_str())
+            .or_else(|| {
+                obj.get("post")
+                    .and_then(|p| p.get("id"))
+                    .and_then(|v| v.as_str())
+            })
+            .map(str::to_string)
+        {
+            obj.insert("thread_post_id".into(), Value::String(pid.clone()));
+            // Panel opens comments by post id — surface parent as primary id when title missing.
+            if obj.get("title").and_then(|v| v.as_str()).unwrap_or("").is_empty() {
+                let parent_title = obj
+                    .get("post")
+                    .and_then(|p| p.get("title"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Comment");
+                obj.insert(
+                    "title".into(),
+                    Value::String(format!("💬 {parent_title}")),
+                );
+                obj.insert("id".into(), Value::String(pid));
+            }
+        }
+    }
+    if let Some(score) = obj.get("upvotes").cloned() {
+        obj.entry("score".to_string()).or_insert(score);
+    }
+    Value::Object(obj)
 }
 
 /// Prefer a flat agent profile object for the UI (`{name, karma, ...}`).
@@ -112,7 +189,7 @@ async fn parse_response(resp: reqwest::Response) -> Result<Value, String> {
     Err(msg.trim().to_string())
 }
 
-async fn mb_get(
+pub(crate) async fn mb_get(
     http: &reqwest::Client,
     settings: &SettingsManager,
     path: &str,
@@ -130,7 +207,7 @@ async fn mb_get(
     parse_response(resp).await
 }
 
-async fn mb_post(
+pub(crate) async fn mb_post(
     http: &reqwest::Client,
     settings: &SettingsManager,
     path: &str,
@@ -274,20 +351,40 @@ pub async fn moltbook_create_post(
         .as_deref()
         .map(normalize_submolt)
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| state.settings.moltbook_default_submolt());
+        .or_else(|| state.settings.moltbook_preferred_submolt())
+        .ok_or_else(|| {
+            "submolt is required when no preferred community is set in Settings (agent should pick one)"
+                .to_string()
+        })?;
     let body = json!({
         "type": "text",
         "title": title,
         "content": content,
         "submolt": target,
+        "submolt_name": target,
     });
-    mb_post(&state.http, &state.settings, "/posts", &body).await
+    let resp = mb_post(&state.http, &state.settings, "/posts", &body).await?;
+    let outcome = crate::moltbook_verify::complete_verification_if_needed(
+        &state.http,
+        &state.settings,
+        &resp,
+    )
+    .await;
+    if !outcome.is_verified() {
+        return Err(outcome.summary());
+    }
+    Ok(json!({
+        "response": resp,
+        "verification": outcome.summary(),
+        "verificationStatus": outcome.status_label(),
+    }))
 }
 
 #[tauri::command]
 pub async fn moltbook_search(
     query: String,
     limit: Option<u32>,
+    search_type: Option<String>,
     state: State<'_, NovaState>,
 ) -> Result<Value, String> {
     let q = query.trim().to_string();
@@ -295,27 +392,59 @@ pub async fn moltbook_search(
         return Err("search query is required".into());
     }
     let limit = limit.unwrap_or(25).clamp(1, 100).to_string();
+    let stype = search_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| ["posts", "comments", "all"].contains(s))
+        .unwrap_or("posts")
+        .to_string();
     let body = mb_get(
         &state.http,
         &state.settings,
         "/search",
-        &[("q", q), ("limit", limit)],
+        &[("q", q), ("limit", limit), ("type", stype)],
     )
     .await?;
     Ok(json!({ "posts": extract_posts_array(&body) }))
 }
 
 #[tauri::command]
+pub async fn moltbook_home(state: State<'_, NovaState>) -> Result<Value, String> {
+    fetch_home(&state.http, &state.settings).await
+}
+
+#[tauri::command]
+pub async fn moltbook_list_submolts(state: State<'_, NovaState>) -> Result<Value, String> {
+    let body = mb_get(&state.http, &state.settings, "/submolts", &[]).await?;
+    Ok(json!({ "submolts": extract_submolts_array(&body) }))
+}
+
+/// Shared by IPC and the reply-watcher scheduler.
+pub async fn fetch_home(
+    http: &reqwest::Client,
+    settings: &SettingsManager,
+) -> Result<Value, String> {
+    mb_get(http, settings, "/home", &[]).await
+}
+
+#[tauri::command]
 pub async fn moltbook_post_comments(
     post_id: String,
+    sort: Option<String>,
     state: State<'_, NovaState>,
 ) -> Result<Value, String> {
     let id = sanitize_id(&post_id)?;
+    let sort = sort
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| ["best", "top", "new", "old"].contains(s))
+        .unwrap_or("new")
+        .to_string();
     let body = mb_get(
         &state.http,
         &state.settings,
         &format!("/posts/{id}/comments"),
-        &[("sort", "top".into()), ("limit", "50".into())],
+        &[("sort", sort), ("limit", "50".into())],
     )
     .await?;
     Ok(json!({ "comments": extract_posts_array(&body) }))
@@ -325,6 +454,7 @@ pub async fn moltbook_post_comments(
 pub async fn moltbook_create_comment(
     post_id: String,
     content: String,
+    parent_id: Option<String>,
     state: State<'_, NovaState>,
 ) -> Result<Value, String> {
     let id = sanitize_id(&post_id)?;
@@ -332,13 +462,39 @@ pub async fn moltbook_create_comment(
     if content.is_empty() {
         return Err("comment content is required".into());
     }
-    mb_post(
+    let mut body = json!({ "content": content });
+    if let Some(pid) = parent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let parent = sanitize_id(pid)?;
+        body
+            .as_object_mut()
+            .unwrap()
+            .insert("parent_id".into(), Value::String(parent));
+    }
+    let resp = mb_post(
         &state.http,
         &state.settings,
         &format!("/posts/{id}/comments"),
-        &json!({ "content": content }),
+        &body,
     )
-    .await
+    .await?;
+    let outcome = crate::moltbook_verify::complete_verification_if_needed(
+        &state.http,
+        &state.settings,
+        &resp,
+    )
+    .await;
+    if !outcome.is_verified() {
+        return Err(outcome.summary());
+    }
+    Ok(json!({
+        "response": resp,
+        "verification": outcome.summary(),
+        "verificationStatus": outcome.status_label(),
+    }))
 }
 
 #[tauri::command]
@@ -354,6 +510,109 @@ pub async fn moltbook_upvote_post(
         &json!({}),
     )
     .await
+}
+
+#[tauri::command]
+pub async fn moltbook_upvote_comment(
+    comment_id: String,
+    state: State<'_, NovaState>,
+) -> Result<Value, String> {
+    let id = sanitize_id(&comment_id)?;
+    mb_post(
+        &state.http,
+        &state.settings,
+        &format!("/comments/{id}/upvote"),
+        &json!({}),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn moltbook_mark_notifications_read(
+    post_id: String,
+    state: State<'_, NovaState>,
+) -> Result<Value, String> {
+    let id = sanitize_id(&post_id)?;
+    mb_post(
+        &state.http,
+        &state.settings,
+        &format!("/notifications/read-by-post/{id}"),
+        &json!({}),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn moltbook_dm_check(state: State<'_, NovaState>) -> Result<Value, String> {
+    // Prefer dedicated check endpoint; fall back to conversations list.
+    match mb_get(&state.http, &state.settings, "/dms/check", &[]).await {
+        Ok(v) => Ok(v),
+        Err(_) => mb_get(&state.http, &state.settings, "/dms/conversations", &[("limit", "20".into())]).await,
+    }
+}
+
+#[tauri::command]
+pub async fn moltbook_dm_conversations(
+    limit: Option<u32>,
+    state: State<'_, NovaState>,
+) -> Result<Value, String> {
+    let limit = limit.unwrap_or(20).clamp(1, 50).to_string();
+    mb_get(
+        &state.http,
+        &state.settings,
+        "/dms/conversations",
+        &[("limit", limit)],
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn moltbook_dm_send(
+    conversation_id: String,
+    message: String,
+    state: State<'_, NovaState>,
+) -> Result<Value, String> {
+    let id = sanitize_id(&conversation_id)?;
+    let message: String = message.trim().chars().take(MAX_CONTENT_LEN).collect();
+    if message.is_empty() {
+        return Err("DM message is required".into());
+    }
+    mb_post(
+        &state.http,
+        &state.settings,
+        &format!("/dms/conversations/{id}"),
+        &json!({ "message": message, "content": message }),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn moltbook_follow_agent(
+    agent_name: String,
+    state: State<'_, NovaState>,
+) -> Result<Value, String> {
+    let name = agent_name.trim();
+    if name.is_empty() {
+        return Err("agent name is required".into());
+    }
+    // Official follow is typically POST /agents/{name}/follow
+    let path = format!(
+        "/agents/{}/follow",
+        urlencoding_simple(name)
+    );
+    mb_post(&state.http, &state.settings, &path, &json!({})).await
+}
+
+fn urlencoding_simple(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c.to_string()
+            } else {
+                format!("%{:02X}", c as u8)
+            }
+        })
+        .collect()
 }
 
 /// Ids go into URL paths — restrict to safe characters.
@@ -376,15 +635,22 @@ fn sanitize_id(raw: &str) -> Result<String, String> {
 pub fn tool_definitions() -> Vec<ToolDefinition> {
     vec![
         ToolDefinition {
+            name: "moltbook_home".into(),
+            description: Some(
+                "Check your Moltbook dashboard (GET /home): unread notifications, activity on your posts, DMs, and what to do next. Call this first on every engage or reply check-in.".into(),
+            ),
+            parameters: json!({ "type": "object", "properties": {} }),
+        },
+        ToolDefinition {
             name: "moltbook_feed".into(),
             description: Some(
-                "Read recent posts from Moltbook, the social network for AI agents. Optionally filter by submolt (community) and sort (hot, new, top, rising).".into(),
+                "Read recent posts from Moltbook. Optionally filter by submolt and sort (hot, new, top, rising).".into(),
             ),
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "sort": { "type": "string", "enum": ["hot", "new", "top", "rising"], "description": "Feed sort order (default hot)." },
-                    "submolt": { "type": "string", "description": "Optional community name, e.g. 'general' or 'm/aithoughts'." },
+                    "submolt": { "type": "string", "description": "Optional community name, e.g. 'general'." },
                     "limit": { "type": "integer", "description": "Number of posts (1-50, default 10)." }
                 }
             }),
@@ -392,44 +658,136 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
         ToolDefinition {
             name: "moltbook_search".into(),
             description: Some(
-                "Semantic search across Moltbook posts and comments. Good for finding what other AI agents are discussing about a topic.".into(),
+                "Semantic search across Moltbook posts and comments. Natural language works best.".into(),
             ),
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "query": { "type": "string", "description": "Natural-language search query." },
-                    "limit": { "type": "integer", "description": "Number of results (1-25, default 10)." }
+                    "limit": { "type": "integer", "description": "Number of results (1-25, default 10)." },
+                    "type": { "type": "string", "enum": ["posts", "comments", "all"], "description": "What to search (default all)." }
                 },
                 "required": ["query"]
             }),
         },
         ToolDefinition {
-            name: "moltbook_create_post".into(),
+            name: "moltbook_get_comments".into(),
             description: Some(
-                "Publish a text post to Moltbook under the user's registered agent identity. Rate limited to 1 post per 30 minutes — only post when the user explicitly asks you to share something.".into(),
+                "Read comments on a Moltbook post. Use sort=new when responding to recent replies.".into(),
             ),
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "title": { "type": "string", "description": "Post title (max 300 chars)." },
-                    "content": { "type": "string", "description": "Post body (markdown supported)." },
-                    "submolt": { "type": "string", "description": "Target community. Omit to use the default submolt from Settings." }
+                    "post_id": { "type": "string" },
+                    "sort": { "type": "string", "enum": ["best", "top", "new", "old"] },
+                    "limit": { "type": "integer" }
+                },
+                "required": ["post_id"]
+            }),
+        },
+        ToolDefinition {
+            name: "moltbook_create_post".into(),
+            description: Some(
+                "Publish a text post to Moltbook. Always pass submolt (community name, e.g. 'general' or 'philosophy') \
+                 unless Settings has a preferred default — then submolt is optional and you may still override it. \
+                 Completes verification automatically; only reports success when verification_status is verified. \
+                 Rate limited to 1 post per 30 minutes."
+                    .into(),
+            ),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string" },
+                    "content": { "type": "string" },
+                    "submolt": {
+                        "type": "string",
+                        "description": "Community to post in (e.g. general, philosophy). Choose the best fit yourself when no preferred default is configured."
+                    }
                 },
                 "required": ["title", "content"]
             }),
         },
         ToolDefinition {
+            name: "moltbook_list_submolts".into(),
+            description: Some(
+                "List Moltbook communities (submolts) you can post in. Use this when choosing where to publish."
+                    .into(),
+            ),
+            parameters: json!({ "type": "object", "properties": {} }),
+        },
+        ToolDefinition {
             name: "moltbook_comment".into(),
             description: Some(
-                "Comment on a Moltbook post (max 50 comments/hour). Use the post id from moltbook_feed or moltbook_search results.".into(),
+                "Comment on a Moltbook post. Pass parent_id to reply to a specific comment (threaded replies). Max 50 comments/hour. Verification challenges are solved automatically.".into(),
             ),
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "post_id": { "type": "string", "description": "Id of the post to comment on." },
-                    "content": { "type": "string", "description": "Comment text." }
+                    "post_id": { "type": "string" },
+                    "content": { "type": "string" },
+                    "parent_id": { "type": "string", "description": "Optional parent comment id for a threaded reply." }
                 },
                 "required": ["post_id", "content"]
+            }),
+        },
+        ToolDefinition {
+            name: "moltbook_upvote".into(),
+            description: Some(
+                "Upvote a Moltbook post or comment. Provide post_id and/or comment_id.".into(),
+            ),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "post_id": { "type": "string" },
+                    "comment_id": { "type": "string" }
+                }
+            }),
+        },
+        ToolDefinition {
+            name: "moltbook_mark_notifications_read".into(),
+            description: Some(
+                "Mark notifications for a post as read after you have responded. Call after replying to activity on your posts.".into(),
+            ),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "post_id": { "type": "string" }
+                },
+                "required": ["post_id"]
+            }),
+        },
+        ToolDefinition {
+            name: "moltbook_dm_check".into(),
+            description: Some(
+                "Check Moltbook direct messages: unread counts, pending requests, and recent conversations.".into(),
+            ),
+            parameters: json!({ "type": "object", "properties": {} }),
+        },
+        ToolDefinition {
+            name: "moltbook_dm_send".into(),
+            description: Some(
+                "Send a message in an existing Moltbook DM conversation.".into(),
+            ),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "conversation_id": { "type": "string" },
+                    "message": { "type": "string" }
+                },
+                "required": ["conversation_id", "message"]
+            }),
+        },
+        ToolDefinition {
+            name: "moltbook_follow".into(),
+            description: Some(
+                "Follow another Moltbook agent by name when you genuinely enjoy their content.".into(),
+            ),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "agent_name": { "type": "string" }
+                },
+                "required": ["agent_name"]
             }),
         },
     ]
@@ -438,7 +796,18 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
 pub fn is_moltbook_tool_name(name: &str) -> bool {
     matches!(
         name,
-        "moltbook_feed" | "moltbook_search" | "moltbook_create_post" | "moltbook_comment"
+        "moltbook_home"
+            | "moltbook_feed"
+            | "moltbook_search"
+            | "moltbook_get_comments"
+            | "moltbook_create_post"
+            | "moltbook_list_submolts"
+            | "moltbook_comment"
+            | "moltbook_upvote"
+            | "moltbook_mark_notifications_read"
+            | "moltbook_dm_check"
+            | "moltbook_dm_send"
+            | "moltbook_follow"
     )
 }
 
@@ -456,8 +825,16 @@ fn summarize_posts(body: &Value, limit: usize) -> String {
     for (i, p) in items.iter().take(limit).enumerate() {
         let title = p.get("title").and_then(|v| v.as_str()).unwrap_or("(untitled)");
         let id = p.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-        let submolt = p.get("submolt").and_then(|v| v.as_str()).unwrap_or("?");
-        let score = p.get("score").and_then(|v| v.as_i64()).unwrap_or(0);
+        let submolt = p
+            .get("submolt")
+            .and_then(|v| v.as_str())
+            .or_else(|| p.get("submolt").and_then(|v| v.get("name")).and_then(|v| v.as_str()))
+            .unwrap_or("?");
+        let score = p
+            .get("score")
+            .and_then(|v| v.as_i64())
+            .or_else(|| p.get("upvotes").and_then(|v| v.as_i64()))
+            .unwrap_or(0);
         let author = p
             .get("author")
             .and_then(|a| a.get("name"))
@@ -471,13 +848,43 @@ fn summarize_posts(body: &Value, limit: usize) -> String {
             .chars()
             .take(280)
             .collect();
+        let sim = p
+            .get("similarity")
+            .and_then(|v| v.as_f64())
+            .map(|s| format!(" · sim={s:.2}"))
+            .unwrap_or_default();
         out.push_str(&format!(
-            "{}. [{score}] {title}\n   id={id} · m/{submolt} · by {author} · {comments} comments\n",
+            "{}. [{score}] {title}\n   id={id} · m/{submolt} · by {author} · {comments} comments{sim}\n",
             i + 1
         ));
         if !snippet.trim().is_empty() {
             out.push_str(&format!("   {}\n", snippet.replace('\n', " ")));
         }
+    }
+    out
+}
+
+fn summarize_comments(body: &Value, limit: usize) -> String {
+    let items = extract_posts_array(body);
+    if items.is_empty() {
+        return format!("No comments. Raw: {body}");
+    }
+    let mut out = String::new();
+    for (i, c) in items.iter().take(limit).enumerate() {
+        let id = c.get("id").and_then(|v| v.as_str()).unwrap_or("?");
+        let author = c
+            .get("author")
+            .and_then(|a| a.get("name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let content: String = c
+            .get("content")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .chars()
+            .take(400)
+            .collect();
+        out.push_str(&format!("{}. id={id} by {author}\n   {content}\n", i + 1));
     }
     out
 }
@@ -494,6 +901,12 @@ pub async fn run_moltbook_tool(
         ));
     }
     match name {
+        "moltbook_home" => {
+            let body = mb_get(http, settings, "/home", &[])
+                .await
+                .map_err(tool_err)?;
+            Ok(format!("Moltbook /home:\n{body}"))
+        }
         "moltbook_feed" => {
             let sort = args
                 .get("sort")
@@ -530,15 +943,81 @@ pub async fn run_moltbook_tool(
                 .and_then(|v| v.as_u64())
                 .unwrap_or(10)
                 .clamp(1, 25);
+            let stype = args
+                .get("type")
+                .and_then(|v| v.as_str())
+                .filter(|s| ["posts", "comments", "all"].contains(s))
+                .unwrap_or("all");
             let body = mb_get(
                 http,
                 settings,
                 "/search",
-                &[("q", q.to_string()), ("limit", limit.to_string())],
+                &[
+                    ("q", q.to_string()),
+                    ("limit", limit.to_string()),
+                    ("type", stype.to_string()),
+                ],
             )
             .await
             .map_err(tool_err)?;
             Ok(summarize_posts(&body, limit as usize))
+        }
+        "moltbook_get_comments" => {
+            let post_id = args.get("post_id").and_then(|v| v.as_str()).unwrap_or("");
+            let id = sanitize_id(post_id).map_err(tool_err)?;
+            let sort = args
+                .get("sort")
+                .and_then(|v| v.as_str())
+                .filter(|s| ["best", "top", "new", "old"].contains(s))
+                .unwrap_or("new");
+            let limit = args
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(35)
+                .clamp(1, 50);
+            let body = mb_get(
+                http,
+                settings,
+                &format!("/posts/{id}/comments"),
+                &[("sort", sort.into()), ("limit", limit.to_string())],
+            )
+            .await
+            .map_err(tool_err)?;
+            Ok(summarize_comments(&body, limit as usize))
+        }
+        "moltbook_list_submolts" => {
+            let body = mb_get(http, settings, "/submolts", &[])
+                .await
+                .map_err(tool_err)?;
+            let items = extract_submolts_array(&body);
+            if items.is_empty() {
+                return Ok(format!("No submolts returned. Raw: {body}"));
+            }
+            let mut out = String::from("Available submolts:\n");
+            for (i, s) in items.iter().take(80).enumerate() {
+                let name = s
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| s.get("submolt").and_then(|v| v.as_str()))
+                    .unwrap_or("?");
+                let display = s
+                    .get("display_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(name);
+                let desc: String = s
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .chars()
+                    .take(120)
+                    .collect();
+                out.push_str(&format!("{}. m/{name} — {display}", i + 1));
+                if !desc.is_empty() {
+                    out.push_str(&format!(" ({desc})"));
+                }
+                out.push('\n');
+            }
+            Ok(out)
         }
         "moltbook_create_post" => {
             let title = args.get("title").and_then(|v| v.as_str()).unwrap_or("").trim();
@@ -551,12 +1030,19 @@ pub async fn run_moltbook_tool(
                 .and_then(|v| v.as_str())
                 .map(normalize_submolt)
                 .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| settings.moltbook_default_submolt());
+                .or_else(|| settings.moltbook_preferred_submolt())
+                .ok_or_else(|| {
+                    tool_err(
+                        "moltbook_create_post requires submolt (no preferred community in Settings). \
+                         Call moltbook_list_submolts, then pick the best community yourself.",
+                    )
+                })?;
             let body = json!({
                 "type": "text",
                 "title": title.chars().take(MAX_TITLE_LEN).collect::<String>(),
                 "content": content.chars().take(MAX_CONTENT_LEN).collect::<String>(),
                 "submolt": submolt,
+                "submolt_name": submolt,
             });
             let resp = mb_post(http, settings, "/posts", &body)
                 .await
@@ -565,8 +1051,37 @@ pub async fn run_moltbook_tool(
                 .get("id")
                 .and_then(|v| v.as_str())
                 .or_else(|| resp.get("post").and_then(|p| p.get("id")).and_then(|v| v.as_str()))
-                .unwrap_or("?");
-            Ok(format!("Posted to m/{submolt} (post id {id})."))
+                .unwrap_or("?")
+                .to_string();
+            let title_out: String = title.chars().take(80).collect();
+            let outcome =
+                crate::moltbook_verify::complete_verification_if_needed(http, settings, &resp)
+                    .await;
+            let confirmed = if outcome.is_verified() {
+                crate::moltbook_verify::confirm_content_verified(http, settings, "post", &id)
+                    .await
+            } else {
+                None
+            };
+            if !outcome.is_verified() {
+                return Err(tool_err(format!(
+                    "Post created in m/{submolt} (id {id}, title {title_out:?}) but NOT published. {}. \
+                     Do not tell the user it was posted — it is invisible until verified.",
+                    outcome.summary()
+                )));
+            }
+            if confirmed.as_deref() == Some("failed") {
+                return Err(tool_err(format!(
+                    "Post {id} verify API returned success but post verification_status=failed. {}",
+                    outcome.summary()
+                )));
+            }
+            let status = confirmed.unwrap_or_else(|| "verified".into());
+            Ok(format!(
+                "Published to m/{submolt} (post id {id}, title {title_out:?}). \
+                 verification_status={status}. {}",
+                outcome.summary()
+            ))
         }
         "moltbook_comment" => {
             let post_id = args.get("post_id").and_then(|v| v.as_str()).unwrap_or("");
@@ -575,16 +1090,137 @@ pub async fn run_moltbook_tool(
             if content.is_empty() {
                 return Err(tool_err("moltbook_comment requires content"));
             }
+            let mut payload = json!({
+                "content": content.chars().take(MAX_CONTENT_LEN).collect::<String>()
+            });
+            if let Some(parent) = args.get("parent_id").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()) {
+                let pid = sanitize_id(parent).map_err(tool_err)?;
+                payload.as_object_mut().unwrap().insert("parent_id".into(), Value::String(pid));
+            }
             let resp = mb_post(
                 http,
                 settings,
                 &format!("/posts/{id}/comments"),
-                &json!({ "content": content.chars().take(MAX_CONTENT_LEN).collect::<String>() }),
+                &payload,
             )
             .await
             .map_err(tool_err)?;
-            let cid = resp.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-            Ok(format!("Comment posted on {id} (comment id {cid})."))
+            let cid = resp
+                .get("id")
+                .and_then(|v| v.as_str())
+                .or_else(|| resp.get("comment").and_then(|c| c.get("id")).and_then(|v| v.as_str()))
+                .unwrap_or("?")
+                .to_string();
+            let outcome =
+                crate::moltbook_verify::complete_verification_if_needed(http, settings, &resp)
+                    .await;
+            let confirmed = if outcome.is_verified() {
+                crate::moltbook_verify::confirm_content_verified(http, settings, "comment", &cid)
+                    .await
+            } else {
+                None
+            };
+            if !outcome.is_verified() {
+                return Err(tool_err(format!(
+                    "Comment created on {id} (comment id {cid}) but NOT published. {}. \
+                     Do not claim the comment is live.",
+                    outcome.summary()
+                )));
+            }
+            if confirmed.as_deref() == Some("failed") {
+                return Err(tool_err(format!(
+                    "Comment {cid} verify API returned success but verification_status=failed. {}",
+                    outcome.summary()
+                )));
+            }
+            let status = confirmed.unwrap_or_else(|| "verified".into());
+            Ok(format!(
+                "Comment published on {id} (comment id {cid}). verification_status={status}. {}",
+                outcome.summary()
+            ))
+        }
+        "moltbook_upvote" => {
+            let mut parts = Vec::new();
+            if let Some(post_id) = args.get("post_id").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()) {
+                let id = sanitize_id(post_id).map_err(tool_err)?;
+                mb_post(http, settings, &format!("/posts/{id}/upvote"), &json!({}))
+                    .await
+                    .map_err(tool_err)?;
+                parts.push(format!("upvoted post {id}"));
+            }
+            if let Some(comment_id) = args.get("comment_id").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()) {
+                let id = sanitize_id(comment_id).map_err(tool_err)?;
+                mb_post(http, settings, &format!("/comments/{id}/upvote"), &json!({}))
+                    .await
+                    .map_err(tool_err)?;
+                parts.push(format!("upvoted comment {id}"));
+            }
+            if parts.is_empty() {
+                return Err(tool_err("moltbook_upvote requires post_id and/or comment_id"));
+            }
+            Ok(parts.join("; "))
+        }
+        "moltbook_mark_notifications_read" => {
+            let post_id = args.get("post_id").and_then(|v| v.as_str()).unwrap_or("");
+            let id = sanitize_id(post_id).map_err(tool_err)?;
+            mb_post(
+                http,
+                settings,
+                &format!("/notifications/read-by-post/{id}"),
+                &json!({}),
+            )
+            .await
+            .map_err(tool_err)?;
+            Ok(format!("Marked notifications read for post {id}."))
+        }
+        "moltbook_dm_check" => {
+            let body = match mb_get(http, settings, "/dms/check", &[]).await {
+                Ok(v) => v,
+                Err(_) => mb_get(
+                    http,
+                    settings,
+                    "/dms/conversations",
+                    &[("limit", "20".into())],
+                )
+                .await
+                .map_err(tool_err)?,
+            };
+            Ok(format!("Moltbook DMs:\n{body}"))
+        }
+        "moltbook_dm_send" => {
+            let cid = args
+                .get("conversation_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let message = args.get("message").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let id = sanitize_id(cid).map_err(tool_err)?;
+            if message.is_empty() {
+                return Err(tool_err("moltbook_dm_send requires message"));
+            }
+            mb_post(
+                http,
+                settings,
+                &format!("/dms/conversations/{id}"),
+                &json!({ "message": message, "content": message }),
+            )
+            .await
+            .map_err(tool_err)?;
+            Ok(format!("DM sent in conversation {id}."))
+        }
+        "moltbook_follow" => {
+            let name = args
+                .get("agent_name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
+            if name.is_empty() {
+                return Err(tool_err("moltbook_follow requires agent_name"));
+            }
+            let path = format!("/agents/{}/follow", urlencoding_simple(name));
+            mb_post(http, settings, &path, &json!({}))
+                .await
+                .map_err(tool_err)?;
+            Ok(format!("Now following {name}."))
         }
         other => Err(tool_err(format!("unknown Moltbook tool: {other}"))),
     }
@@ -592,7 +1228,8 @@ pub async fn run_moltbook_tool(
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_submolt, sanitize_id};
+    use super::{extract_posts_array, normalize_submolt, sanitize_id};
+    use serde_json::json;
 
     #[test]
     fn normalizes_submolt_prefix() {
@@ -606,5 +1243,19 @@ mod tests {
         assert!(sanitize_id("../etc").is_err());
         assert!(sanitize_id("a/b").is_err());
         assert!(sanitize_id("").is_err());
+    }
+
+    #[test]
+    fn extract_search_results_array() {
+        let body = json!({
+            "success": true,
+            "results": [
+                { "id": "abc", "type": "post", "title": "Hello", "content": "world", "upvotes": 3 }
+            ]
+        });
+        let items = extract_posts_array(&body);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].get("title").and_then(|v| v.as_str()), Some("Hello"));
+        assert_eq!(items[0].get("score").and_then(|v| v.as_i64()), Some(3));
     }
 }

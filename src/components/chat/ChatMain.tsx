@@ -310,9 +310,9 @@ export function ChatMain({
             type="button"
             onClick={() => setMoltbookOpen(true)}
             title="Browse Moltbook — the social network for AI agents"
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-900/60 px-3 py-1.5 text-xs font-medium text-slate-800 dark:text-slate-200 shadow-sm transition hover:bg-slate-200 dark:hover:bg-slate-800/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+            className="inline-flex items-center gap-2 rounded-lg border border-[#2a6b6e]/60 bg-[#0d383c]/90 px-3 py-1.5 text-xs font-semibold text-[#b8e6e2] shadow-sm transition hover:border-[#e86d4a]/50 hover:bg-[#13484c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e86d4a]"
           >
-            <Globe className="size-4 text-indigo-400" aria-hidden />
+            <Globe className="size-4 text-[#e86d4a]" aria-hidden />
             Moltbook
           </button>
         ) : null}

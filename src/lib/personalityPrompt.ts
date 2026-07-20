@@ -1,6 +1,13 @@
 /**
  * Mirrors `personality::build_system_prompt` in Rust — keep sections in sync when editing.
  */
+
+/** Extra titled sections for power users / external personality editors. */
+export type PersonalityExtraSection = {
+  title: string;
+  content: string;
+};
+
 export type PersonalityProfile = {
   id: string;
   profileName: string;
@@ -12,6 +19,8 @@ export type PersonalityProfile = {
   relationshipStyle: string;
   specialInstructions: string;
   avatarDescription?: string | null;
+  /** Ordered custom sections appended after core fields in the system prompt. */
+  extraSections?: PersonalityExtraSection[];
 };
 
 export type PersonalityFile = {
@@ -42,6 +51,13 @@ export function buildPersonalityPrompt(p: PersonalityProfile): string {
   const av = p.avatarDescription?.trim();
   if (av) section("Visual / avatar note (for future use)", av);
 
+  for (const extra of p.extraSections ?? []) {
+    const title = extra.title.trim();
+    const content = extra.content.trim();
+    if (!title || !content) continue;
+    section(title, content);
+  }
+
   out += `In the session transcript below, lines labeled **${display}** are your own earlier replies in this thread — not a separate assistant.\n`;
   out +=
     "Respect user privacy, follow their lead, and use the session context below when relevant.\n";
@@ -65,5 +81,6 @@ export function defaultProfile(): PersonalityProfile {
     relationshipStyle: "",
     specialInstructions: "",
     avatarDescription: null,
+    extraSections: [],
   };
 }

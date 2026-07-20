@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  ArrowLeft,
   ChevronDown,
+  ChevronRight,
   CopyPlus,
   FileJson,
   FileText,
   Heart,
+  Pencil,
   Plus,
   Save,
   Sparkles,
@@ -17,6 +20,7 @@ import {
   activeProfile,
   buildPersonalityPrompt,
   defaultProfile,
+  type PersonalityExtraSection,
   type PersonalityFile,
   type PersonalityProfile,
 } from "@/lib/personalityPrompt";
@@ -34,6 +38,8 @@ type Snapshot = {
   generatedSystemPrompt: string;
 };
 
+type CompanionView = "overview" | "edit" | "openclaw" | "json";
+
 function emptyProfile(id: string, profileName: string): PersonalityProfile {
   return {
     id,
@@ -46,8 +52,18 @@ function emptyProfile(id: string, profileName: string): PersonalityProfile {
     relationshipStyle: "",
     specialInstructions: "",
     avatarDescription: null,
+    extraSections: [],
   };
 }
+
+const CORE_FIELD_ROWS: Array<{ key: keyof PersonalityProfile; label: string }> = [
+  { key: "corePersonality", label: "Core personality" },
+  { key: "toneOfVoice", label: "Tone of voice" },
+  { key: "backgroundStory", label: "Background & role" },
+  { key: "coreValues", label: "Core values" },
+  { key: "relationshipStyle", label: "Relationship style" },
+  { key: "specialInstructions", label: "Special instructions" },
+];
 
 type CompanionProps = {
   visible: boolean;
@@ -62,6 +78,7 @@ export function CompanionPersonalitySection({
   chatActiveProfileId,
   onActiveProfileMemorySync,
 }: CompanionProps) {
+  const [view, setView] = useState<CompanionView>("overview");
   const [file, setFile] = useState<PersonalityFile | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -72,6 +89,7 @@ export function CompanionPersonalitySection({
   const [openclawPreview, setOpenclawPreview] = useState<OpenclawImportPreview | null>(null);
   const [importBusy, setImportBusy] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [showPromptPreview, setShowPromptPreview] = useState(false);
 
   const syncMemoryProfile = useCallback(
     (profileId: string) => {
@@ -102,7 +120,12 @@ export function CompanionPersonalitySection({
     void load();
   }, [visible, load]);
 
+  useEffect(() => {
+    if (!visible) setView("overview");
+  }, [visible]);
+
   const current = file ? activeProfile(file) : defaultProfile();
+  const extraSections = current.extraSections ?? [];
   const preview = useMemo(
     () => buildPersonalityPrompt(current),
     [
@@ -116,6 +139,7 @@ export function CompanionPersonalitySection({
       current.relationshipStyle,
       current.specialInstructions,
       current.avatarDescription,
+      current.extraSections,
     ],
   );
 
@@ -127,6 +151,10 @@ export function CompanionPersonalitySection({
         p.id === file.activeProfileId ? { ...p, ...patch } : p,
       ),
     });
+  };
+
+  const setExtraSections = (next: PersonalityExtraSection[]) => {
+    updateActive({ extraSections: next });
   };
 
   const setActiveId = (id: string) => {
@@ -222,16 +250,19 @@ export function CompanionPersonalitySection({
     input.value = "";
     if (!f || !file) return;
     setLoadErr(null);
+    setImportMsg(null);
     try {
       const text = await readFileText(f);
       const parsed = parsePersonalityJson(text);
       if (parsed.kind === "file") {
         const ok = window.confirm(
-          "Replace the entire personality file with this JSON? All current profiles in this form will be replaced (save to disk still required).",
+          "Replace the entire personality file with this JSON? All current profiles will be replaced.",
         );
         if (!ok) return;
-        setFile(parsed.file);
-        syncMemoryProfile(parsed.file.activeProfileId);
+        const saved = await persistFile(parsed.file);
+        syncMemoryProfile(saved.activeProfileId);
+        setImportMsg(`Replaced personality file with ${saved.profiles.length} profile(s).`);
+        setView("overview");
         return;
       }
       const ok = window.confirm(
@@ -239,9 +270,10 @@ export function CompanionPersonalitySection({
       );
       if (!ok) return;
       const next = appendImportedProfiles(file, parsed.profiles);
-      setFile(next);
       const saved = await persistFile(next);
       syncMemoryProfile(saved.activeProfileId);
+      setImportMsg(`Added ${parsed.profiles.length} profile(s) from JSON.`);
+      setView("overview");
     } catch (err) {
       setLoadErr(String(err));
     }
@@ -256,8 +288,8 @@ export function CompanionPersonalitySection({
     setImportMsg(null);
     setImportBusy(true);
     try {
-      const preview = previewOpenclawImport(parts);
-      setOpenclawPreview(preview);
+      const previewResult = previewOpenclawImport(parts);
+      setOpenclawPreview(previewResult);
       requestAnimationFrame(() => {
         openclawPreviewRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       });
@@ -311,7 +343,8 @@ export function CompanionPersonalitySection({
         const saved = await persistFile(next);
         syncMemoryProfile(saved.activeProfileId);
         setOpenclawPreview(null);
-        setImportMsg(null);
+        setImportMsg("OpenClaw profile added.");
+        setView("overview");
       } catch (e) {
         setLoadErr(String(e));
       }
@@ -361,8 +394,24 @@ export function CompanionPersonalitySection({
 
   if (!visible) return null;
 
+  const backButton = (
+    <button
+      type="button"
+      onClick={() => {
+        setView("overview");
+        setOpenclawPreview(null);
+        setImportMsg(null);
+        setLoadErr(null);
+      }}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800"
+    >
+      <ArrowLeft className="size-3.5 shrink-0" aria-hidden />
+      Back to companion
+    </button>
+  );
+
   const saveFooter =
-    file ? (
+    file && view === "edit" ? (
       <div
         className="-mx-4 shrink-0 border-t border-slate-200 dark:border-slate-800/90 bg-slate-50 dark:bg-slate-950/92 px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md"
         role="region"
@@ -411,429 +460,811 @@ export function CompanionPersonalitySection({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <section className="min-h-0 flex-1 space-y-4 overflow-y-auto rounded-xl border border-indigo-500/25 bg-gradient-to-b from-indigo-950/40 to-slate-950/40 p-4 shadow-inner">
-      {loadErr ? (
-        <p className="rounded border border-amber-900/50 bg-amber-950/30 px-2 py-1.5 text-xs text-amber-200">
-          {loadErr}
-        </p>
-      ) : null}
+        {loadErr ? (
+          <p className="rounded border border-amber-900/50 bg-amber-950/30 px-2 py-1.5 text-xs text-amber-200">
+            {loadErr}
+          </p>
+        ) : null}
 
-      {!file ? (
-        <p className="text-xs text-slate-500">Loading personality…</p>
-      ) : (
-        <>
-          <div className="overflow-hidden rounded-xl border border-indigo-400/35 bg-gradient-to-br from-indigo-600/25 via-indigo-950/50 to-slate-950/80 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-            <div className="flex flex-wrap items-center gap-2">
-              <UserCircle2 className="size-5 shrink-0 text-indigo-300" aria-hidden />
-              <p className="min-w-0 text-base font-semibold tracking-tight text-slate-900 dark:text-white">
-                <span className="font-medium text-indigo-200/90">Current profile: </span>
-                <span className="truncate">{current.profileName || "Unnamed profile"}</span>
-              </p>
-              <span className="inline-flex items-center rounded-full border border-indigo-400/40 bg-indigo-500/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-100">
-                Editing
-              </span>
-            </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-              Companion in chat:{" "}
-              <span className="font-medium text-slate-800 dark:text-slate-200">
-                {(current.companionName || "Sage").trim() || "Sage"}
-              </span>
-            </p>
-          </div>
-
-          <div className="flex items-start gap-2">
-            <Heart className="mt-0.5 size-5 shrink-0 text-indigo-400" aria-hidden />
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Customize companion</h3>
-              <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-                Companion personality · saved as <span className="font-mono">personality.json</span> in your data
-                folder. The generated prompt is sent with every message as the first system layer.
-              </p>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-amber-500/25 bg-amber-950/15 p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-200/90">
-              Import from file
-            </p>
-            <p className="mt-1 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-              <span className="font-medium text-slate-700 dark:text-slate-300">Personality JSON</span> — full{" "}
-              <span className="font-mono">personality.json</span>, a <span className="font-mono">profiles</span> array,
-              or one profile object. <span className="font-medium text-slate-700 dark:text-slate-300">OpenClaw</span> — select{" "}
-              <span className="font-mono">SOUL.md</span>, <span className="font-mono">IDENTITY.md</span>,{" "}
-              <span className="font-mono">USER.md</span>, <span className="font-mono">JOURNAL.md</span>,{" "}
-              <span className="font-mono">MEMORY.md</span>, <span className="font-mono">TOOLS.md</span> (any subset).
-              OpenClaw templates use bullet lists (<span className="font-mono">- Name:</span>, etc.) — we map those
-              into companion fields, show a preview, then add one profile. Use{" "}
-              <span className="text-indigo-300">Save changes</span> to persist.
-            </p>
-            <input
-              ref={jsonInputRef}
-              type="file"
-              accept=".json,application/json"
-              className="sr-only"
-              aria-hidden
-              onChange={(ev) => void onJsonSelected(ev)}
-            />
-            <input
-              ref={openclawInputRef}
-              type="file"
-              accept=".md,.markdown,.txt,text/markdown,text/plain"
-              multiple
-              className="sr-only"
-              aria-hidden
-              onChange={(ev) => void onOpenclawSelected(ev)}
-            />
-            {importBusy ? (
-              <p className="mt-2 text-[11px] text-slate-600 dark:text-slate-400">Reading markdown files…</p>
-            ) : null}
-            {importMsg ? (
-              <p className="mt-2 rounded border border-amber-900/50 bg-amber-950/30 px-2 py-1.5 text-[11px] text-amber-200">
-                {importMsg}
-              </p>
-            ) : null}
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={onPickJson}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-slate-100 dark:bg-slate-900/80 px-3 py-2 text-xs font-medium text-amber-100 hover:bg-slate-200 dark:bg-slate-800"
-              >
-                <FileJson className="size-3.5 shrink-0" aria-hidden />
-                Import personality JSON…
-              </button>
-              <button
-                type="button"
-                onClick={() => void onPickOpenclaw()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-slate-100 dark:bg-slate-900/80 px-3 py-2 text-xs font-medium text-amber-100 hover:bg-slate-200 dark:bg-slate-800"
-              >
-                <FileText className="size-3.5 shrink-0" aria-hidden />
-                Import OpenClaw markdown…
-              </button>
-            </div>
-            {openclawPreview ? (
-              <div
-                ref={openclawPreviewRef}
-                className="mt-3 rounded-lg border border-indigo-500/35 bg-indigo-950/25 p-3"
-              >
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-200/90">
-                  OpenClaw import preview
-                </p>
-                {openclawPreview.fatalError ? (
-                  <p className="mt-2 text-[11px] text-red-300">{openclawPreview.fatalError}</p>
-                ) : null}
-                <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">
-                  Files:{" "}
-                  <span className="font-mono text-slate-700 dark:text-slate-300">
-                    {openclawPreview.filesFound.length > 0
-                      ? openclawPreview.filesFound.map((f) => `${f.toUpperCase()}.md`).join(", ")
-                      : "(none recognized)"}
-                  </span>
-                  {openclawPreview.unrecognizedFileNames.length > 0 ? (
-                    <span className="text-amber-300/90">
-                      {" "}
-                      · skipped: {openclawPreview.unrecognizedFileNames.join(", ")}
-                    </span>
-                  ) : null}
-                </p>
-                {openclawPreview.missingRecommended.length > 0 ? (
-                  <p className="mt-1 text-[11px] text-amber-300/90">
-                    Not included (optional): {openclawPreview.missingRecommended.join(", ")}
-                  </p>
-                ) : null}
-                {openclawPreview.warnings.map((w) => (
-                  <p key={w} className="mt-1 text-[11px] text-amber-300/90">
-                    {w}
-                  </p>
-                ))}
-                <dl className="mt-3 grid gap-2 text-[11px]">
-                  <div className="grid grid-cols-[7rem_1fr] gap-2">
-                    <dt className="text-slate-500">Companion</dt>
-                    <dd className="text-slate-800 dark:text-slate-200">{openclawPreview.profile.companionName}</dd>
-                  </div>
-                  <div className="grid grid-cols-[7rem_1fr] gap-2">
-                    <dt className="text-slate-500">Core personality</dt>
-                    <dd className="text-slate-600 dark:text-slate-400">
-                      {previewFieldSummary(openclawPreview.profile.corePersonality)}
-                    </dd>
-                  </div>
-                  <div className="grid grid-cols-[7rem_1fr] gap-2">
-                    <dt className="text-slate-500">Tone</dt>
-                    <dd className="text-slate-600 dark:text-slate-400">
-                      {previewFieldSummary(openclawPreview.profile.toneOfVoice)}
-                    </dd>
-                  </div>
-                  <div className="grid grid-cols-[7rem_1fr] gap-2">
-                    <dt className="text-slate-500">Background</dt>
-                    <dd className="text-slate-600 dark:text-slate-400">
-                      {previewFieldSummary(openclawPreview.profile.backgroundStory)}
-                    </dd>
-                  </div>
-                  <div className="grid grid-cols-[7rem_1fr] gap-2">
-                    <dt className="text-slate-500">User relationship</dt>
-                    <dd className="text-slate-600 dark:text-slate-400">
-                      {previewFieldSummary(openclawPreview.profile.relationshipStyle)}
-                    </dd>
-                  </div>
-                  <div className="grid grid-cols-[7rem_1fr] gap-2">
-                    <dt className="text-slate-500">Special instructions</dt>
-                    <dd className="text-slate-600 dark:text-slate-400">
-                      {previewFieldSummary(openclawPreview.profile.specialInstructions, 160)}
-                    </dd>
-                  </div>
-                </dl>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={confirmOpenclawImport}
-                    disabled={Boolean(openclawPreview.fatalError)}
-                    className="rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-medium text-slate-900 dark:text-white hover:bg-indigo-400 disabled:opacity-40"
-                  >
-                    Add profile to list
-                  </button>
-                  <button
-                    type="button"
-                    onClick={cancelOpenclawImport}
-                    className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:bg-slate-800"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/50 p-3">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <label
-                  className="text-[10px] font-semibold uppercase tracking-wide text-slate-500"
-                  htmlFor="companion-profile-select"
-                >
-                  Switch profile
-                </label>
-                <p className="mt-0.5 text-xs leading-snug text-slate-500">
-                  Pick a saved profile — the form below updates immediately with that profile&apos;s fields.
-                </p>
-              </div>
-              <span className="hidden text-[10px] text-slate-600 sm:block">
-                {file.profiles.length} saved
-              </span>
-            </div>
-            <div className="relative mt-2">
-              <ChevronDown
-                className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-slate-500"
-                aria-hidden
-              />
-              <select
-                id="companion-profile-select"
-                value={file.activeProfileId}
-                onChange={(e) => setActiveId(e.target.value)}
-                className="w-full appearance-none rounded-lg border border-slate-300 dark:border-slate-700/90 bg-slate-100 dark:bg-slate-900/80 py-2.5 pl-3 pr-10 text-sm font-medium text-slate-900 dark:text-slate-100 outline-none ring-indigo-500/0 transition focus:border-indigo-500/55 focus:ring-2 focus:ring-indigo-500/25"
-              >
-                {file.profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.profileName || p.id}
-                    {p.id === file.activeProfileId ? " · editing" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={addProfile}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800"
-              >
-                <Plus className="size-3.5" aria-hidden />
-                New blank profile
-              </button>
-              <button
-                type="button"
-                disabled={file.profiles.length <= 1}
-                onClick={deleteActiveProfile}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-red-900/40 bg-red-950/30 px-3 py-2 text-xs font-medium text-red-200 hover:bg-red-950/50 disabled:opacity-40"
-              >
-                <Trash2 className="size-3.5" aria-hidden />
-                Delete this profile
-              </button>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-emerald-500/35 bg-gradient-to-br from-emerald-950/40 to-slate-950/50 p-3 shadow-inner">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-300/95">
-              Load / activate for chat
-            </p>
-            <p className="mt-1 text-[11px] leading-snug text-slate-600 dark:text-slate-400">
-              The companion marked <span className="font-medium text-emerald-200/90">Live in chat</span> is who
-              you&apos;re talking to and whose memory is used for new conversations. Same as the picker in the main
-              chat header.
-            </p>
-            <ul className="mt-3 space-y-2" aria-label="Companion profiles">
-              {file.profiles.map((p) => {
-                const cname = (p.companionName || "").trim() || "Sage";
-                const isLiveChat = p.id === chatActiveProfileId;
-                return (
-                  <li
-                    key={p.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-2.5 py-2"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{cname}</p>
-                      <p className="truncate text-[10px] text-slate-500">{p.profileName || p.id}</p>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1.5">
-                      {isLiveChat ? (
-                        <span className="whitespace-nowrap rounded-full border border-emerald-500/45 bg-emerald-600/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-100">
-                          Live in chat
-                        </span>
-                      ) : null}
-                      <button
-                        type="button"
-                        disabled={isLiveChat}
-                        onClick={() => {
-                          setFile({ ...file, activeProfileId: p.id });
-                          syncMemoryProfile(p.id);
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white shadow-md shadow-emerald-950/40 transition hover:bg-emerald-500 disabled:cursor-default disabled:bg-slate-200 dark:bg-slate-800 disabled:text-slate-500 disabled:shadow-none"
-                      >
-                        <Zap className="size-3.5 shrink-0" aria-hidden />
-                        {isLiveChat ? "Active for chat" : "Load / Activate for chat"}
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Profile name (preset label)
-            </label>
-            <input
-              value={current.profileName}
-              onChange={(e) => updateActive({ profileName: e.target.value })}
-              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Companion name
-            </label>
-            <input
-              value={current.companionName}
-              onChange={(e) => updateActive({ companionName: e.target.value })}
-              placeholder="Sage"
-              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Core personality
-            </label>
-            <textarea
-              rows={3}
-              value={current.corePersonality}
-              onChange={(e) => updateActive({ corePersonality: e.target.value })}
-              placeholder="e.g. warm, witty, patient, curious…"
-              className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Tone of voice
-            </label>
-            <input
-              value={current.toneOfVoice}
-              onChange={(e) => updateActive({ toneOfVoice: e.target.value })}
-              placeholder="e.g. concise, gentle, playful…"
-              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Background story / role
-            </label>
-            <textarea
-              rows={3}
-              value={current.backgroundStory}
-              onChange={(e) => updateActive({ backgroundStory: e.target.value })}
-              placeholder="Who you are in the user’s world…"
-              className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Core values / principles
-            </label>
-            <textarea
-              rows={2}
-              value={current.coreValues}
-              onChange={(e) => updateActive({ coreValues: e.target.value })}
-              placeholder="What you always stand for…"
-              className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Relationship style
-            </label>
-            <input
-              value={current.relationshipStyle}
-              onChange={(e) => updateActive({ relationshipStyle: e.target.value })}
-              placeholder="e.g. friend, mentor, creative partner…"
-              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Special instructions / quirks
-            </label>
-            <textarea
-              rows={2}
-              value={current.specialInstructions}
-              onChange={(e) => updateActive({ specialInstructions: e.target.value })}
-              placeholder="Habits, boundaries, in-jokes…"
-              className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Avatar description (optional)
-            </label>
-            <textarea
-              rows={2}
-              value={current.avatarDescription ?? ""}
-              onChange={(e) =>
-                updateActive({
-                  avatarDescription: e.target.value.trim() === "" ? null : e.target.value,
-                })
-              }
-              placeholder="For a future AI-generated avatar…"
-              className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              <Sparkles className="size-3.5 text-indigo-400" aria-hidden />
-              Live system prompt preview
-            </div>
-            <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/80 p-3 font-mono text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
-              {preview}
-            </pre>
-          </div>
-        </>
-      )}
+        {!file ? (
+          <p className="text-xs text-slate-500">Loading personality…</p>
+        ) : view === "overview" ? (
+          <OverviewView
+            file={file}
+            current={current}
+            chatActiveProfileId={chatActiveProfileId}
+            importMsg={importMsg}
+            showPromptPreview={showPromptPreview}
+            preview={preview}
+            onTogglePrompt={() => setShowPromptPreview((v) => !v)}
+            onSetActiveId={setActiveId}
+            onAddProfile={addProfile}
+            onDeleteActive={deleteActiveProfile}
+            onActivateChat={(id) => {
+              setFile({ ...file, activeProfileId: id });
+              syncMemoryProfile(id);
+            }}
+            onNavigate={setView}
+          />
+        ) : view === "edit" ? (
+          <EditView
+            current={current}
+            extraSections={extraSections}
+            preview={preview}
+            backButton={backButton}
+            onUpdate={updateActive}
+            onSetExtraSections={setExtraSections}
+          />
+        ) : view === "openclaw" ? (
+          <OpenclawView
+            backButton={backButton}
+            importBusy={importBusy}
+            importMsg={importMsg}
+            openclawPreview={openclawPreview}
+            openclawPreviewRef={openclawPreviewRef}
+            openclawInputRef={openclawInputRef}
+            onPickOpenclaw={() => void onPickOpenclaw()}
+            onOpenclawSelected={(ev) => void onOpenclawSelected(ev)}
+            onConfirm={confirmOpenclawImport}
+            onCancel={cancelOpenclawImport}
+          />
+        ) : (
+          <JsonImportView
+            backButton={backButton}
+            importMsg={importMsg}
+            jsonInputRef={jsonInputRef}
+            onPickJson={onPickJson}
+            onJsonSelected={(ev) => void onJsonSelected(ev)}
+          />
+        )}
       </section>
       {saveFooter}
     </div>
+  );
+}
+
+function OverviewView({
+  file,
+  current,
+  chatActiveProfileId,
+  importMsg,
+  showPromptPreview,
+  preview,
+  onTogglePrompt,
+  onSetActiveId,
+  onAddProfile,
+  onDeleteActive,
+  onActivateChat,
+  onNavigate,
+}: {
+  file: PersonalityFile;
+  current: PersonalityProfile;
+  chatActiveProfileId: string;
+  importMsg: string | null;
+  showPromptPreview: boolean;
+  preview: string;
+  onTogglePrompt: () => void;
+  onSetActiveId: (id: string) => void;
+  onAddProfile: () => void;
+  onDeleteActive: () => void;
+  onActivateChat: (id: string) => void;
+  onNavigate: (view: CompanionView) => void;
+}) {
+  const extras = current.extraSections ?? [];
+
+  return (
+    <>
+      <div className="overflow-hidden rounded-xl border border-indigo-400/35 bg-gradient-to-br from-indigo-600/25 via-indigo-950/50 to-slate-950/80 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <div className="flex flex-wrap items-center gap-2">
+          <UserCircle2 className="size-5 shrink-0 text-indigo-300" aria-hidden />
+          <p className="min-w-0 text-base font-semibold tracking-tight text-slate-900 dark:text-white">
+            <span className="font-medium text-indigo-200/90">Current profile: </span>
+            <span className="truncate">{current.profileName || "Unnamed profile"}</span>
+          </p>
+          {current.id === chatActiveProfileId ? (
+            <span className="inline-flex items-center rounded-full border border-emerald-500/45 bg-emerald-600/20 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-100">
+              Live in chat
+            </span>
+          ) : (
+            <span className="inline-flex items-center rounded-full border border-indigo-400/40 bg-indigo-500/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-100">
+              Editing
+            </span>
+          )}
+        </div>
+        <p className="mt-2 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+          Companion in chat:{" "}
+          <span className="font-medium text-slate-800 dark:text-slate-200">
+            {(current.companionName || "Sage").trim() || "Sage"}
+          </span>
+        </p>
+      </div>
+
+      <div className="flex items-start gap-2">
+        <Heart className="mt-0.5 size-5 shrink-0 text-indigo-400" aria-hidden />
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Companion personality</h3>
+          <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+            Saved as <span className="font-mono">personality.json</span>. Edit the form, or import from OpenClaw
+            / JSON — changes show up here.
+          </p>
+        </div>
+      </div>
+
+      {importMsg ? (
+        <p className="rounded border border-emerald-800/50 bg-emerald-950/30 px-2 py-1.5 text-[11px] text-emerald-200">
+          {importMsg}
+        </p>
+      ) : null}
+
+      <div className="rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/50 p-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <label
+              className="text-[10px] font-semibold uppercase tracking-wide text-slate-500"
+              htmlFor="companion-profile-select"
+            >
+              Switch profile
+            </label>
+            <p className="mt-0.5 text-xs leading-snug text-slate-500">
+              Pick a saved profile to review or edit.
+            </p>
+          </div>
+          <span className="hidden text-[10px] text-slate-600 sm:block">{file.profiles.length} saved</span>
+        </div>
+        <div className="relative mt-2">
+          <ChevronDown
+            className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-slate-500"
+            aria-hidden
+          />
+          <select
+            id="companion-profile-select"
+            value={file.activeProfileId}
+            onChange={(e) => onSetActiveId(e.target.value)}
+            className="w-full appearance-none rounded-lg border border-slate-300 dark:border-slate-700/90 bg-slate-100 dark:bg-slate-900/80 py-2.5 pl-3 pr-10 text-sm font-medium text-slate-900 dark:text-slate-100 outline-none ring-indigo-500/0 transition focus:border-indigo-500/55 focus:ring-2 focus:ring-indigo-500/25"
+          >
+            {file.profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.profileName || p.id}
+                {p.id === file.activeProfileId ? " · selected" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onAddProfile}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800"
+          >
+            <Plus className="size-3.5" aria-hidden />
+            New blank profile
+          </button>
+          <button
+            type="button"
+            disabled={file.profiles.length <= 1}
+            onClick={onDeleteActive}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-900/40 bg-red-950/30 px-3 py-2 text-xs font-medium text-red-200 hover:bg-red-950/50 disabled:opacity-40"
+          >
+            <Trash2 className="size-3.5" aria-hidden />
+            Delete this profile
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-emerald-500/35 bg-gradient-to-br from-emerald-950/40 to-slate-950/50 p-3 shadow-inner">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-300/95">
+          Load / activate for chat
+        </p>
+        <p className="mt-1 text-[11px] leading-snug text-slate-600 dark:text-slate-400">
+          The companion marked <span className="font-medium text-emerald-200/90">Live in chat</span> is who
+          you&apos;re talking to and whose memory is used for new conversations.
+        </p>
+        <ul className="mt-3 space-y-2" aria-label="Companion profiles">
+          {file.profiles.map((p) => {
+            const cname = (p.companionName || "").trim() || "Sage";
+            const isLiveChat = p.id === chatActiveProfileId;
+            return (
+              <li
+                key={p.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-2.5 py-2"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{cname}</p>
+                  <p className="truncate text-[10px] text-slate-500">{p.profileName || p.id}</p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  {isLiveChat ? (
+                    <span className="whitespace-nowrap rounded-full border border-emerald-500/45 bg-emerald-600/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-100">
+                      Live in chat
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={isLiveChat}
+                    onClick={() => onActivateChat(p.id)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white shadow-md shadow-emerald-950/40 transition hover:bg-emerald-500 disabled:cursor-default disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-500 disabled:shadow-none"
+                  >
+                    <Zap className="size-3.5 shrink-0" aria-hidden />
+                    {isLiveChat ? "Active for chat" : "Load / Activate for chat"}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/50 p-3">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          Current personality
+        </p>
+        <dl className="mt-3 grid gap-2.5 text-[11px]">
+          {CORE_FIELD_ROWS.map(({ key, label }) => {
+            const value = String(current[key] ?? "");
+            return (
+              <div key={key} className="grid grid-cols-[7.5rem_1fr] gap-2">
+                <dt className="text-slate-500">{label}</dt>
+                <dd className="text-slate-700 dark:text-slate-300">{previewFieldSummary(value)}</dd>
+              </div>
+            );
+          })}
+          {current.avatarDescription?.trim() ? (
+            <div className="grid grid-cols-[7.5rem_1fr] gap-2">
+              <dt className="text-slate-500">Avatar</dt>
+              <dd className="text-slate-700 dark:text-slate-300">
+                {previewFieldSummary(current.avatarDescription)}
+              </dd>
+            </div>
+          ) : null}
+          {extras.map((s, i) => (
+            <div key={`extra-${i}-${s.title}`} className="grid grid-cols-[7.5rem_1fr] gap-2">
+              <dt className="text-slate-500">{s.title.trim() || "Custom"}</dt>
+              <dd className="text-slate-700 dark:text-slate-300">{previewFieldSummary(s.content)}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Manage</p>
+        <nav className="grid gap-2" aria-label="Companion submenus">
+          <SubmenuNavCard
+            icon={Pencil}
+            title="Edit companion"
+            description="Fill out or refine the personality form and custom sections."
+            onClick={() => onNavigate("edit")}
+          />
+          <SubmenuNavCard
+            icon={FileText}
+            title="Import from OpenClaw"
+            description="Map SOUL.md, IDENTITY.md, USER.md, and related markdown into a profile."
+            onClick={() => onNavigate("openclaw")}
+          />
+          <SubmenuNavCard
+            icon={FileJson}
+            title="Import JSON"
+            description="Load a personality.json export or a profile from an external editor."
+            onClick={() => onNavigate("json")}
+          />
+        </nav>
+      </div>
+
+      <div className="space-y-2">
+        <button
+          type="button"
+          onClick={onTogglePrompt}
+          className="flex w-full items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+        >
+          <Sparkles className="size-3.5 text-indigo-400" aria-hidden />
+          Live system prompt preview
+          <ChevronRight
+            className={`ml-auto size-3.5 transition ${showPromptPreview ? "rotate-90" : ""}`}
+            aria-hidden
+          />
+        </button>
+        {showPromptPreview ? (
+          <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/80 p-3 font-mono text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
+            {preview}
+          </pre>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
+function SubmenuNavCard({
+  icon: Icon,
+  title,
+  description,
+  onClick,
+}: {
+  icon: typeof Pencil;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-start gap-3 rounded-lg border border-indigo-500/30 bg-indigo-950/20 px-3 py-3 text-left transition hover:border-indigo-400/50 hover:bg-indigo-950/35"
+    >
+      <Icon className="mt-0.5 size-4 shrink-0 text-indigo-300" aria-hidden />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-slate-900 dark:text-white">{title}</span>
+        <span className="mt-0.5 block text-[11px] leading-snug text-slate-600 dark:text-slate-400">
+          {description}
+        </span>
+      </span>
+      <ChevronRight className="mt-1 size-4 shrink-0 text-slate-500" aria-hidden />
+    </button>
+  );
+}
+
+function EditView({
+  current,
+  extraSections,
+  preview,
+  backButton,
+  onUpdate,
+  onSetExtraSections,
+}: {
+  current: PersonalityProfile;
+  extraSections: PersonalityExtraSection[];
+  preview: string;
+  backButton: React.ReactNode;
+  onUpdate: (patch: Partial<PersonalityProfile>) => void;
+  onSetExtraSections: (next: PersonalityExtraSection[]) => void;
+}) {
+  const updateExtra = (index: number, patch: Partial<PersonalityExtraSection>) => {
+    onSetExtraSections(extraSections.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  };
+
+  const removeExtra = (index: number) => {
+    onSetExtraSections(extraSections.filter((_, i) => i !== index));
+  };
+
+  const moveExtra = (index: number, dir: -1 | 1) => {
+    const next = [...extraSections];
+    const j = index + dir;
+    if (j < 0 || j >= next.length) return;
+    const tmp = next[index]!;
+    next[index] = next[j]!;
+    next[j] = tmp;
+    onSetExtraSections(next);
+  };
+
+  return (
+    <>
+      {backButton}
+      <div className="flex items-start gap-2">
+        <Pencil className="mt-0.5 size-5 shrink-0 text-indigo-400" aria-hidden />
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Edit companion</h3>
+          <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+            Core fields stay simple. Add custom sections below when you need more depth.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          Profile name (preset label)
+        </label>
+        <input
+          value={current.profileName}
+          onChange={(e) => onUpdate({ profileName: e.target.value })}
+          className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          Companion name
+        </label>
+        <input
+          value={current.companionName}
+          onChange={(e) => onUpdate({ companionName: e.target.value })}
+          placeholder="Sage"
+          className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          Core personality
+        </label>
+        <textarea
+          rows={3}
+          value={current.corePersonality}
+          onChange={(e) => onUpdate({ corePersonality: e.target.value })}
+          placeholder="e.g. warm, witty, patient, curious…"
+          className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          Tone of voice
+        </label>
+        <input
+          value={current.toneOfVoice}
+          onChange={(e) => onUpdate({ toneOfVoice: e.target.value })}
+          placeholder="e.g. concise, gentle, playful…"
+          className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          Background story / role
+        </label>
+        <textarea
+          rows={3}
+          value={current.backgroundStory}
+          onChange={(e) => onUpdate({ backgroundStory: e.target.value })}
+          placeholder="Who you are in the user’s world…"
+          className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          Core values / principles
+        </label>
+        <textarea
+          rows={2}
+          value={current.coreValues}
+          onChange={(e) => onUpdate({ coreValues: e.target.value })}
+          placeholder="What you always stand for…"
+          className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          Relationship style
+        </label>
+        <input
+          value={current.relationshipStyle}
+          onChange={(e) => onUpdate({ relationshipStyle: e.target.value })}
+          placeholder="e.g. friend, mentor, creative partner…"
+          className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          Special instructions / quirks
+        </label>
+        <textarea
+          rows={2}
+          value={current.specialInstructions}
+          onChange={(e) => onUpdate({ specialInstructions: e.target.value })}
+          placeholder="Habits, boundaries, in-jokes…"
+          className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          Avatar description (optional)
+        </label>
+        <textarea
+          rows={2}
+          value={current.avatarDescription ?? ""}
+          onChange={(e) =>
+            onUpdate({
+              avatarDescription: e.target.value.trim() === "" ? null : e.target.value,
+            })
+          }
+          placeholder="For a future AI-generated avatar…"
+          className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+        />
+      </div>
+
+      <div className="space-y-3 rounded-lg border border-violet-500/30 bg-violet-950/20 p-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-200/90">
+              Custom sections
+            </p>
+            <p className="mt-0.5 text-[11px] leading-snug text-slate-600 dark:text-slate-400">
+              Optional. Each section becomes a heading in the system prompt — useful for complex personas or
+              imports from an external personality editor.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onSetExtraSections([...extraSections, { title: "", content: "" }])}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/40 bg-violet-600/30 px-2.5 py-1.5 text-xs font-medium text-violet-100 hover:bg-violet-600/45"
+          >
+            <Plus className="size-3.5" aria-hidden />
+            Add section
+          </button>
+        </div>
+        {extraSections.length === 0 ? (
+          <p className="text-[11px] text-slate-500">No custom sections yet.</p>
+        ) : (
+          <ul className="space-y-3">
+            {extraSections.map((s, i) => (
+              <li
+                key={`extra-edit-${i}`}
+                className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50/80 dark:bg-slate-950/60 p-2.5"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    value={s.title}
+                    onChange={(e) => updateExtra(i, { title: e.target.value })}
+                    placeholder="Section title"
+                    className="min-w-0 flex-1 rounded-md border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
+                  />
+                  <button
+                    type="button"
+                    disabled={i === 0}
+                    onClick={() => moveExtra(i, -1)}
+                    className="rounded border border-slate-300 dark:border-slate-700 px-2 py-1 text-[10px] text-slate-600 dark:text-slate-300 disabled:opacity-40"
+                    aria-label="Move section up"
+                  >
+                    Up
+                  </button>
+                  <button
+                    type="button"
+                    disabled={i >= extraSections.length - 1}
+                    onClick={() => moveExtra(i, 1)}
+                    className="rounded border border-slate-300 dark:border-slate-700 px-2 py-1 text-[10px] text-slate-600 dark:text-slate-300 disabled:opacity-40"
+                    aria-label="Move section down"
+                  >
+                    Down
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeExtra(i)}
+                    className="inline-flex items-center gap-1 rounded border border-red-900/40 bg-red-950/30 px-2 py-1 text-[10px] font-medium text-red-200 hover:bg-red-950/50"
+                  >
+                    <Trash2 className="size-3" aria-hidden />
+                    Remove
+                  </button>
+                </div>
+                <textarea
+                  rows={3}
+                  value={s.content}
+                  onChange={(e) => updateExtra(i, { content: e.target.value })}
+                  placeholder="Section content…"
+                  className="w-full resize-y rounded-md border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          <Sparkles className="size-3.5 text-indigo-400" aria-hidden />
+          Live system prompt preview
+        </div>
+        <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/80 p-3 font-mono text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
+          {preview}
+        </pre>
+      </div>
+    </>
+  );
+}
+
+function OpenclawView({
+  backButton,
+  importBusy,
+  importMsg,
+  openclawPreview,
+  openclawPreviewRef,
+  openclawInputRef,
+  onPickOpenclaw,
+  onOpenclawSelected,
+  onConfirm,
+  onCancel,
+}: {
+  backButton: React.ReactNode;
+  importBusy: boolean;
+  importMsg: string | null;
+  openclawPreview: OpenclawImportPreview | null;
+  openclawPreviewRef: React.RefObject<HTMLDivElement | null>;
+  openclawInputRef: React.RefObject<HTMLInputElement | null>;
+  onPickOpenclaw: () => void;
+  onOpenclawSelected: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <>
+      {backButton}
+      <div className="flex items-start gap-2">
+        <FileText className="mt-0.5 size-5 shrink-0 text-amber-300" aria-hidden />
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Import from OpenClaw</h3>
+          <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+            Select <span className="font-mono">SOUL.md</span>, <span className="font-mono">IDENTITY.md</span>,{" "}
+            <span className="font-mono">USER.md</span>, <span className="font-mono">JOURNAL.md</span>,{" "}
+            <span className="font-mono">MEMORY.md</span>, <span className="font-mono">TOOLS.md</span> (any
+            subset). We map those into companion fields, show a preview, then add one profile.
+          </p>
+        </div>
+      </div>
+
+      <input
+        ref={openclawInputRef}
+        type="file"
+        accept=".md,.markdown,.txt,text/markdown,text/plain"
+        multiple
+        className="sr-only"
+        aria-hidden
+        onChange={onOpenclawSelected}
+      />
+
+      {importBusy ? (
+        <p className="text-[11px] text-slate-600 dark:text-slate-400">Reading markdown files…</p>
+      ) : null}
+      {importMsg ? (
+        <p className="rounded border border-amber-900/50 bg-amber-950/30 px-2 py-1.5 text-[11px] text-amber-200">
+          {importMsg}
+        </p>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={onPickOpenclaw}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-slate-100 dark:bg-slate-900/80 px-3 py-2 text-xs font-medium text-amber-100 hover:bg-slate-200 dark:hover:bg-slate-800"
+      >
+        <FileText className="size-3.5 shrink-0" aria-hidden />
+        Import OpenClaw markdown…
+      </button>
+
+      {openclawPreview ? (
+        <div
+          ref={openclawPreviewRef}
+          className="rounded-lg border border-indigo-500/35 bg-indigo-950/25 p-3"
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-200/90">
+            OpenClaw import preview
+          </p>
+          {openclawPreview.fatalError ? (
+            <p className="mt-2 text-[11px] text-red-300">{openclawPreview.fatalError}</p>
+          ) : null}
+          <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">
+            Files:{" "}
+            <span className="font-mono text-slate-700 dark:text-slate-300">
+              {openclawPreview.filesFound.length > 0
+                ? openclawPreview.filesFound.map((f) => `${f.toUpperCase()}.md`).join(", ")
+                : "(none recognized)"}
+            </span>
+            {openclawPreview.unrecognizedFileNames.length > 0 ? (
+              <span className="text-amber-300/90">
+                {" "}
+                · skipped: {openclawPreview.unrecognizedFileNames.join(", ")}
+              </span>
+            ) : null}
+          </p>
+          {openclawPreview.missingRecommended.length > 0 ? (
+            <p className="mt-1 text-[11px] text-amber-300/90">
+              Not included (optional): {openclawPreview.missingRecommended.join(", ")}
+            </p>
+          ) : null}
+          {openclawPreview.warnings.map((w) => (
+            <p key={w} className="mt-1 text-[11px] text-amber-300/90">
+              {w}
+            </p>
+          ))}
+          <dl className="mt-3 grid gap-2 text-[11px]">
+            <div className="grid grid-cols-[7rem_1fr] gap-2">
+              <dt className="text-slate-500">Companion</dt>
+              <dd className="text-slate-800 dark:text-slate-200">{openclawPreview.profile.companionName}</dd>
+            </div>
+            <div className="grid grid-cols-[7rem_1fr] gap-2">
+              <dt className="text-slate-500">Core personality</dt>
+              <dd className="text-slate-600 dark:text-slate-400">
+                {previewFieldSummary(openclawPreview.profile.corePersonality)}
+              </dd>
+            </div>
+            <div className="grid grid-cols-[7rem_1fr] gap-2">
+              <dt className="text-slate-500">Tone</dt>
+              <dd className="text-slate-600 dark:text-slate-400">
+                {previewFieldSummary(openclawPreview.profile.toneOfVoice)}
+              </dd>
+            </div>
+            <div className="grid grid-cols-[7rem_1fr] gap-2">
+              <dt className="text-slate-500">Background</dt>
+              <dd className="text-slate-600 dark:text-slate-400">
+                {previewFieldSummary(openclawPreview.profile.backgroundStory)}
+              </dd>
+            </div>
+            <div className="grid grid-cols-[7rem_1fr] gap-2">
+              <dt className="text-slate-500">User relationship</dt>
+              <dd className="text-slate-600 dark:text-slate-400">
+                {previewFieldSummary(openclawPreview.profile.relationshipStyle)}
+              </dd>
+            </div>
+            <div className="grid grid-cols-[7rem_1fr] gap-2">
+              <dt className="text-slate-500">Special instructions</dt>
+              <dd className="text-slate-600 dark:text-slate-400">
+                {previewFieldSummary(openclawPreview.profile.specialInstructions, 160)}
+              </dd>
+            </div>
+          </dl>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={Boolean(openclawPreview.fatalError)}
+              className="rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-medium text-slate-900 dark:text-white hover:bg-indigo-400 disabled:opacity-40"
+            >
+              Add profile to list
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function JsonImportView({
+  backButton,
+  importMsg,
+  jsonInputRef,
+  onPickJson,
+  onJsonSelected,
+}: {
+  backButton: React.ReactNode;
+  importMsg: string | null;
+  jsonInputRef: React.RefObject<HTMLInputElement | null>;
+  onPickJson: () => void;
+  onJsonSelected: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <>
+      {backButton}
+      <div className="flex items-start gap-2">
+        <FileJson className="mt-0.5 size-5 shrink-0 text-amber-300" aria-hidden />
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Import JSON</h3>
+          <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+            Accepts a full <span className="font-mono">personality.json</span>, a{" "}
+            <span className="font-mono">profiles</span> array, or one profile object. Custom{" "}
+            <span className="font-mono">extraSections</span> from an external personality editor are preserved
+            and appear in the companion overview.
+          </p>
+        </div>
+      </div>
+
+      <input
+        ref={jsonInputRef}
+        type="file"
+        accept=".json,application/json"
+        className="sr-only"
+        aria-hidden
+        onChange={onJsonSelected}
+      />
+
+      {importMsg ? (
+        <p className="rounded border border-amber-900/50 bg-amber-950/30 px-2 py-1.5 text-[11px] text-amber-200">
+          {importMsg}
+        </p>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={onPickJson}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-slate-100 dark:bg-slate-900/80 px-3 py-2 text-xs font-medium text-amber-100 hover:bg-slate-200 dark:hover:bg-slate-800"
+      >
+        <FileJson className="size-3.5 shrink-0" aria-hidden />
+        Import personality JSON…
+      </button>
+    </>
   );
 }

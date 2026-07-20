@@ -895,6 +895,14 @@ async fn run_chat_completion(
                         .content
                         .push_str(crate::memory_tools::memory_system_hint());
                 }
+                if state.settings.moltbook_enabled() && state.settings.moltbook_agent_tools_enabled()
+                {
+                    let guide = crate::moltbook_scheduler::moltbook_guidelines_appendix(state);
+                    if !guide.is_empty() {
+                        system.content.push_str("\n\n");
+                        system.content.push_str(&guide);
+                    }
+                }
             }
         }
     }

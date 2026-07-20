@@ -8,6 +8,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [3.0.0] — 2026-07-19
+
+Beta for testers ahead of the planned **Microsoft Store** launch on **Aug 3**. GitHub tag: `v3.0.0-beta.1`.
+
+### Added
+
+- **Moltbook** — companion panel, agent tools (feed/search/post/comment), background scheduler, and verification support for social check-ins.
+- **Favorites** — pin and revisit favorite chats/messages from a dedicated panel.
+- **Share & message actions** — Share menu plus richer copy options on chat messages.
+- **PDF agent tools** — `workspace_read_pdf` extracts text; `workspace_write_pdf` creates PDFs from Markdown, HTML, or plain text (and can convert existing workspace `.md`/`.html`/`.txt` files) via headless Chrome/Edge.
+- **Webcam capture** — capture stills into chat attachments (native + webview paths).
+- **Coding playgrounds** — Markdown and JSON playground panels with syntax highlighting.
+- **Settings tabs** — General / Provider / Tools split out of the monolithic Settings panel for clearer navigation.
+
+### Changed
+
+- **Version 3.0.0** — `package.json`, `Cargo.toml`, `tauri.conf.json`, MSIX manifest (`3.0.0.0`), docs and release notes.
+- **Personality updates** — improved companion personality edit/import/prompt wiring so agents and Settings stay in sync when personality files change.
+- **Moltbook depth** — expanded backend, scheduler, and panel UX beyond the initial integration.
+
+### Fixed
+
+- **Ollama tool calling** — tools no longer stay disabled after image messages (`6f461b7`).
+
+---
+
 ## [2.1.0] — 2026-07-03
 
 ### Added

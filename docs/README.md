@@ -2,7 +2,7 @@
 
 Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rust). Everything in this folder is written for users, contributors, and anyone performing a **fresh install** from source.
 
-**Repository:** [g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage) · **Version:** 2.1.0
+**Repository:** [g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage) · **Version:** 3.0.0
 
 ## Start here
 
@@ -17,6 +17,7 @@ Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rus
 | [**SIGNING-AND-UPDATES.md**](./SIGNING-AND-UPDATES.md) | Maintainers and testers | Tauri updater, release assets, SignPath readiness |
 | [**USER-GUIDE.md**](./USER-GUIDE.md) | Daily users | UI layout, Companion + Coding mode, memory, settings, Pulse |
 | [**SUPPORT.md**](./SUPPORT.md) | Users & maintainers | Optional donations, issues, Store donation policy notes |
+| [**releases/v3.0.0.md**](./releases/v3.0.0.md) | Everyone | 3.0.0 beta release highlights |
 | [**releases/v2.1.0.md**](./releases/v2.1.0.md) | Everyone | 2.1.0 release highlights |
 | [**CODING-MODE.md**](./CODING-MODE.md) | Developers & power users | Repos, IDE, terminal, coding agent tools, GitHub PAT |
 | [**PRODUCT-KNOWLEDGE-BASE.md**](./PRODUCT-KNOWLEDGE-BASE.md) | Marketing & support agents | Full product KB: positioning, features, FAQ, troubleshooting, copy blocks |
@@ -58,7 +59,7 @@ After you build and run Persistent Sage, **all conversation data lives on your m
 
 | Requirement | Version / notes |
 |-------------|-----------------|
-| Persistent Sage | **2.1.0** |
+| Persistent Sage | **3.0.0** |
 | Rust | **1.77+** (`rust-version` in `src-tauri/Cargo.toml`) |
 | Node.js | **LTS** (18 or 20 recommended) |
 | Desktop OS | Linux, macOS, Windows (see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)) |
@@ -71,4 +72,4 @@ Use **Settings → General → Send feedback** in the app, or open [GitHub Issue
 
 ---
 
-*Documentation aligns with app **2.1.0**. Update these files when user-visible behavior changes.*
+*Documentation aligns with app **3.0.0**. Update these files when user-visible behavior changes.*

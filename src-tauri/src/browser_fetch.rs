@@ -563,7 +563,7 @@ fn chrome_no_sandbox_enabled() -> bool {
     }
 }
 
-fn chrome_extra_launch_args() -> Vec<String> {
+pub(crate) fn chrome_extra_launch_args() -> Vec<String> {
     let mut args = Vec::new();
     if chrome_no_sandbox_enabled() {
         args.push("--no-sandbox".into());
@@ -580,7 +580,7 @@ fn chrome_extra_launch_args() -> Vec<String> {
 }
 
 /// Point Chromium at the system CA store (critical in minimal containers without bundled roots).
-fn apply_chrome_launch_env(cmd: &mut Command) {
+pub(crate) fn apply_chrome_launch_env(cmd: &mut Command) {
     for key in [
         "SSL_CERT_FILE",
         "SSL_CERT_DIR",
@@ -627,7 +627,7 @@ fn apply_chrome_launch_env(cmd: &mut Command) {
     }
 }
 
-fn chrome_stderr_hint(stderr: &str) -> &'static str {
+pub(crate) fn chrome_stderr_hint(stderr: &str) -> &'static str {
     if stderr.contains("SingletonLock") && stderr.contains("Permission denied") {
         " Chrome could not lock its profile directory (not writable, wrong owner, or another \
          Chrome is using the same profile). Persistent Sage stores browser data under the user cache \
