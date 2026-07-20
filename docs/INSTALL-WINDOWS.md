@@ -17,11 +17,14 @@ Two supported ways to run Persistent Sage: **desktop install** (recommended) and
 
 ### Install from GitHub Releases
 
-1. Open **[Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** and pick the latest (e.g. `v2.1.0`).
-2. Download **`Persistent.Sage_*_x64-setup.exe`**.
+**Beta testers (3.0):** use the **[v3.0.0-beta.1 prerelease](https://github.com/g00siferdev-py/persistent-sage/releases/tag/v3.0.0-beta.1)** — download **`Persistent.Sage_3.0.0_x64-setup.exe`** or **`PersistentSagePortable.zip`**.
+
+**General users (current public release):** open **[Releases → Latest](https://github.com/g00siferdev-py/persistent-sage/releases/latest)** (currently **2.0.0** until Store/GitHub GA for 3.0).
+
+1. Download **`Persistent.Sage_*_x64-setup.exe`** (or the beta filenames above).
 3. Run the installer. If **SmartScreen** warns (unsigned direct-download build): **More info → Run anyway**.
 4. Open **Persistent Sage** from the Start Menu and complete the **setup wizard**.
-5. Updates: **Settings → General → Updates → Check for updates** (Tauri updater).
+5. Updates: **Settings → General → Updates → Check for updates** (Tauri updater; beta builds use the prerelease tag until published as Latest).
 
 The installer will:
 
@@ -70,6 +73,7 @@ Creates `dist\PersistentSagePortable\` with `persistent-sage.exe`, `Start-Persis
 | Data not on USB | Use **Start Persistent Sage (Portable).bat**, not `persistent-sage.exe` only |
 | Reset setup wizard | Settings → General → **Show setup wizard again** (if enabled) or delete `onboarding_completed` from `settings.json` |
 | Donation links don't open | Update to 2.1.0+ (opens system browser via Tauri shell) |
+| Beta 3.0 install | Use [v3.0.0-beta.1](https://github.com/g00siferdev-py/persistent-sage/releases/tag/v3.0.0-beta.1), not Releases → Latest (still 2.0 until GA) |
 
 ---
 

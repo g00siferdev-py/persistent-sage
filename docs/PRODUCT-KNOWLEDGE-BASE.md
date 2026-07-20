@@ -2,8 +2,8 @@
 
 **Purpose:** This document is the canonical knowledge base for external agents that market, promote, and support Persistent Sage. Use it to answer product questions accurately, write marketing copy, troubleshoot user issues, and explain privacy tradeoffs in plain language.
 
-**Product version:** 2.1.0  
-**Last updated:** July 3, 2026  
+**Product version:** 3.0.0 (beta)  
+**Last updated:** July 20, 2026  
 **Repository:** https://github.com/g00siferdev-py/persistent-sage  
 **Maintainer:** g00siferdev-py / g00sifer Development Lab  
 **License:** MIT  
@@ -16,7 +16,7 @@
 
 When acting as a Persistent Sage marketing or support agent:
 
-1. **Be accurate.** Persistent Sage is local-first desktop software (2.1.0). Do not claim features that are not shipped or imply enterprise-grade security (database encryption, multi-user ACLs, audit logs are not implemented).
+1. **Be accurate.** Persistent Sage is local-first desktop software (3.0.0 beta on GitHub; Store GA planned Aug 3). Do not claim features that are not shipped or imply enterprise-grade security (database encryption, multi-user ACLs, audit logs are not implemented).
 2. **Lead with privacy and local-first.** This is a core differentiator: chats and memory stay on the user's machine; there is no Persistent Sage cloud for conversation storage.
 3. **Be honest about cloud providers.** When users choose OpenAI, Anthropic, Gemini, xAI, or Ollama Cloud, their messages leave the device to that provider. Local Ollama keeps inference on the user's machine.
 4. **Never ask for or repeat API keys, passwords, or private chat content** in public channels.
@@ -105,6 +105,22 @@ When acting as a Persistent Sage marketing or support agent:
 8. **Open source** — MIT license; inspectable codebase.
 9. **Dual distribution (2.1+)** — Microsoft Store MSIX and GitHub direct download with Tauri updater.
 10. **Optional support** — Voluntary PayPal / Cash App donations; no in-app paywall.
+
+---
+
+## Version 3.0 feature summary (beta)
+
+| Area | New in 3.0 |
+|------|------------|
+| **Moltbook** | Companion panel; agent tools (feed, search, post, comment); scheduler; verification |
+| **Chat UX** | Favorites panel; Share menu; enhanced copy / message actions |
+| **Agent PDF** | Read PDF text; create PDF from Markdown, HTML, or plain text in workspace |
+| **Personality** | Improved personality file update, import, and prompt sync |
+| **Settings** | Refactored General / Provider / Tools tabs |
+| **Webcam** | Capture stills into chat attachments |
+| **Coding** | Markdown/JSON playground panels with syntax highlighting |
+
+Beta download: https://github.com/g00siferdev-py/persistent-sage/releases/tag/v3.0.0-beta.1
 
 ---
 
@@ -665,6 +681,7 @@ Download for Windows: Microsoft Store or github.com/g00siferdev-py/persistent-sa
 
 | Version | Date | Notable changes |
 |---------|------|-----------------|
+| **3.0.0** | 2026-07-19 | Beta — Moltbook, Favorites, Share, PDF tools, personality updates, settings tabs, webcam |
 | **2.1.0** | 2026-07-03 | UX polish — timestamps, playground, notepad, debug panels, Help, cache, donations, light/dark, unified context |
 | **2.0.0** | 2026-06-13 | Coding mode — repos, IDE, terminal, coding agent tools, GitHub PAT, companion link |
 | **1.0.0** | 2026-06-05 | GA — artifacts, projects, browser fetch, dual update channels |
@@ -720,4 +737,4 @@ Update this file when:
 
 Align with [USER-GUIDE.md](./USER-GUIDE.md), [SAGE-GUIDE.md](./SAGE-GUIDE.md), and [CHANGELOG.md](../CHANGELOG.md).
 
-*Persistent Sage 2.1.0. MIT License.*
+*Persistent Sage 3.0.0. MIT License.*

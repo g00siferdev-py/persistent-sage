@@ -1,6 +1,6 @@
 # Persistent Sage — project status
 
-**Version:** 2.1.0  
+**Version:** 3.0.0 (beta — `v3.0.0-beta.1` on GitHub; Store GA planned Aug 3)  
 **Repository:** [g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage)  
 **Maintainer:** [g00siferdev-py](https://github.com/g00siferdev-py)
 
@@ -8,13 +8,13 @@
 
 ## Executive summary
 
-Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rust). **Version 2.0** added **Coding mode**; **2.1** adds UX polish (timestamps, playground, notepad, debug panels, Help, cache manager, light/dark theme, unified context).
+Persistent Sage is a **local-first desktop AI companion** (Tauri 2 + React + Rust). **Version 3.0** adds **Moltbook**, Favorites, Share/copy enhancements, agent **PDF** tools, personality update improvements, and a refactored Settings UI — on top of **Coding mode (2.0)** and **UX polish (2.1)**.
 
 Conversations and memory live in **SQLite on your machine**. **API keys and GitHub PATs are encrypted**; the **database file is not encrypted**. There is no Persistent Sage cloud for chat storage.
 
-**Release:** Persistent Sage **2.1.0** — Companion + Coding with Snowball-derived UX improvements (no security audit tooling). Feedback via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues).
+**Release:** GitHub **beta** at [v3.0.0-beta.1](https://github.com/g00siferdev-py/persistent-sage/releases/tag/v3.0.0-beta.1). **Latest** on the repo homepage remains **2.0.0** until Store/GitHub GA. Feedback via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues).
 
-**Documentation:** See **[docs/README.md](./docs/README.md)** — including **[CODING-MODE.md](./docs/CODING-MODE.md)**, **[releases/v2.1.0.md](./docs/releases/v2.1.0.md)**, and **[INSTALL.md](./docs/INSTALL.md)**.
+**Documentation:** See **[docs/README.md](./docs/README.md)** — including **[releases/v3.0.0.md](./docs/releases/v3.0.0.md)**, **[CODING-MODE.md](./docs/CODING-MODE.md)**, and **[INSTALL.md](./docs/INSTALL.md)**.
 
 ---
 
@@ -25,21 +25,23 @@ Conversations and memory live in **SQLite on your machine**. **API keys and GitH
 | **Dual mode** | Companion ↔ Coding switcher; unified active conversation (2.1+) |
 | Streaming chat | Per-thread history (Companion); per-repo coding threads |
 | Memory Anchor | Anchors, briefings, hybrid recall, personality scoping |
+| **Moltbook (3.0)** | Panel, agent tools, scheduler, verification (opt-in) |
+| **Favorites / Share (3.0)** | Favorites panel; Share menu and enhanced message copy |
+| **PDF tools (3.0)** | `workspace_read_pdf`, `workspace_write_pdf` (MD/HTML/text → PDF) |
+| **Personality (3.0)** | Improved edit/import/prompt sync in Settings → Companion |
+| **Settings UX (3.0)** | General / Provider / Tools tabs (refactored panel) |
 | **Coding mode** | Repos, file tree, editor tabs, terminal, coding agent tools |
-| **Coding UX (2.1)** | Playground, notepad, Agent Action Stream, Event Stream Debugger, Settings in coding |
-| **Companion UX (2.1)** | Timestamps, Help menu, token counter, abort turn, MessageContent, copy buttons |
+| **Coding UX (2.1)** | Playground, notepad, Agent Action Stream, Event Stream Debugger |
+| **Companion UX (2.1)** | Timestamps, Help menu, token counter, abort turn, MessageContent |
 | **Git integration** | Local git + HTTPS remote via encrypted GitHub PAT |
-| **New project templates** | empty, rust, node, python, tauri, csharp |
 | Providers | OpenAI, Google Gemini, xAI Grok, Ollama local, Ollama Cloud, Anthropic, placeholder |
-| Companion | Multi-profile `personality.json`, import, live prompt preview |
-| Agent tools (Companion) | Web, `fetch_browser`, workspace, projects, optional `database_query` |
-| Chat artifacts | HTML, charts, tables, forms (Companion + coding chat, 2.1+) |
+| Agent tools (Companion) | Web, `fetch_browser`, workspace, PDF, Moltbook, projects, optional `database_query` |
+| Chat artifacts | HTML, charts, tables, forms (Companion + coding chat) |
 | Updates | Microsoft Store (MSIX) **or** GitHub Tauri updater |
 | Pulse | Scheduled ticks in **open sidebar thread** (Companion) |
-| Vision | Image attach + multimodal provider payloads |
-| Settings | Companion, Provider, Tools (incl. Coding v2), General, **cache manager** |
+| Vision / webcam | Image attach + multimodal; webcam capture (3.0) |
 | Platform | Single-instance guard, ErrorBoundary, light/dark theme |
-| Docs | Full `docs/` suite including 2.1 release notes |
+| Docs | Full `docs/` suite including 3.0 release notes |
 
 ---
 
@@ -50,7 +52,7 @@ Conversations and memory live in **SQLite on your machine**. **API keys and GitH
 | Repos | `workspace/repos/`, `_index.json`, clone/create/list/tree IPC |
 | IDE | `coding_ide.rs`, `CodeEditorPanel`, read/write/shell IPC |
 | Agent | `coding_tools.rs`, `coding.rs` system prompt, up to 32 tool rounds |
-| Playground | `playground.rs`, `CodingPlaygroundPanel` |
+| Playground | `playground.rs`, `CodingPlaygroundPanel`, Markdown/JSON panels (3.0) |
 | Notepad | `coding_notes.rs`, `CodingNotepad` |
 | Stream UI | `agent_stream.rs`, `AgentActionStream`, `EventStreamDebugger` |
 | Git auth | `git_auth.rs`, `GIT_ASKPASS`, encrypted PAT |
@@ -77,22 +79,17 @@ Details: **[PRIVACY.md](./PRIVACY.md)** and **[docs/DATA-AND-PRIVACY.md](./docs/
 
 ## Backlog (high level)
 
-1. **Coding IDE** — Syntax highlighting, richer editor (Monaco or similar)
-2. **OpenClaw migration UX** — One-click fidelity matching the workspace workflow
-3. **Database encryption** — SQLCipher or OS-level guidance (not shipped)
-4. **Tauri capability tightening** — audit allowlists as surface grows
-5. **Projects UI** — data exists; no dedicated screen yet
-6. **Mobile** — planning docs in `docs/mobile/`; not shipped
+1. **Microsoft Store 3.0** — MSIX packaging and Partner Center submission (target Aug 3)
+2. **Coding IDE** — Syntax highlighting, richer editor (Monaco or similar)
+3. **OpenClaw migration** — smoother one-click import beyond workspace workflow
+4. **Mobile** — Android planning docs in `docs/mobile/` (desktop ships first)
 
 ---
 
-## Build verification
+## Links
 
-```bash
-npm install
-npm run build
-cd src-tauri && cargo check
-npm run tauri dev
-```
-
-Windows release: see **[docs/PUBLISH.md](./docs/PUBLISH.md)** and **[docs/MICROSOFT-STORE.md](./docs/MICROSOFT-STORE.md)**.
+| Resource | URL |
+|----------|-----|
+| Beta download | https://github.com/g00siferdev-py/persistent-sage/releases/tag/v3.0.0-beta.1 |
+| Releases | https://github.com/g00siferdev-py/persistent-sage/releases |
+| Issues | https://github.com/g00siferdev-py/persistent-sage/issues |

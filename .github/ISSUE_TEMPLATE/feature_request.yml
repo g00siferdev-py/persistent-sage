@@ -40,7 +40,7 @@ body:
     id: version
     attributes:
       label: Persistent Sage version
-      placeholder: "2.1.0"
+      placeholder: "3.0.0"
   - type: textarea
     id: context
     attributes:

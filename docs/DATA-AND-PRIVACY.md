@@ -148,7 +148,7 @@ Always **quit Persistent Sage** before copying or restoring `nova_memory.sqlite`
 
 ## Compliance-oriented notes
 
-Persistent Sage is **local-first desktop software** (`2.1.0`). It does not implement:
+Persistent Sage is **local-first desktop software** (`3.0.0`). It does not implement:
 
 - Database encryption
 - Multi-user access control

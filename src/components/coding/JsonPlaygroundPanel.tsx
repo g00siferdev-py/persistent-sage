@@ -11,7 +11,7 @@ import { CopyButton } from "@/components/ui/CopyButton";
 
 const DEFAULT_JSON = `{
   "name": "Persistent Sage",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "features": ["favorites", "moltbook", "json-validator"],
   "localFirst": true,
   "stats": { "conversations": 42, "anchors": 128 }

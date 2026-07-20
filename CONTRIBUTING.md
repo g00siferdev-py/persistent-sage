@@ -2,13 +2,13 @@
 
 Thank you for helping improve Persistent Sage. The project is maintained by **[g00siferdev-py](https://github.com/g00siferdev-py)** on [github.com/g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage).
 
-**Current release:** **2.1.0** — Companion mode, Coding mode, Microsoft Store MSIX path, and GitHub direct-download installers.
+**Current release:** **3.0.0 beta** ([v3.0.0-beta.1](https://github.com/g00siferdev-py/persistent-sage/releases/tag/v3.0.0-beta.1)) — Moltbook, Favorites, Share, PDF tools, personality updates. Store GA planned Aug 3.
 
 ---
 
 ## Testing and feedback (no code required)
 
-1. Install from the **[Microsoft Store](https://apps.microsoft.com)** (when listed), **[GitHub Releases](https://github.com/g00siferdev-py/persistent-sage/releases)**, or build from source per **[docs/INSTALL.md](./docs/INSTALL.md)**.
+1. Install from the **[v3.0.0-beta.1 prerelease](https://github.com/g00siferdev-py/persistent-sage/releases/tag/v3.0.0-beta.1)** (beta), **[Microsoft Store](https://apps.microsoft.com)** (when listed), **[GitHub Releases → Latest](https://github.com/g00siferdev-py/persistent-sage/releases/latest)**, or build from source per **[docs/INSTALL.md](./docs/INSTALL.md)**.
 2. Exercise **Companion** and **Coding** modes, **Settings**, optional **Pulse**, vision attachments, and agent tools if you use them.
 3. Open a **[GitHub issue](https://github.com/g00siferdev-py/persistent-sage/issues)** or use **Settings → General → Send feedback** with:
    - OS and Persistent Sage version (header badge or Settings → About)

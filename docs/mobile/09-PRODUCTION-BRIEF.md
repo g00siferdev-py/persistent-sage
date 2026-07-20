@@ -2,7 +2,7 @@
 
 One-page executive summary for stakeholders and the production team planning **Persistent Sage for Android**.
 
-**Baseline:** Desktop v2.1.0 (tag `v2.1.0` when released)  
+**Baseline:** Desktop **v3.0.0** (beta: `v3.0.0-beta.1`; Store GA Aug 3)  
 **Date:** June 2026  
 **Status:** Pre-development planning
 
@@ -144,7 +144,7 @@ One-page executive summary for stakeholders and the production team planning **P
 ## Contact and repository
 
 - **Repository:** https://github.com/g00siferdev-py/persistent-sage
-- **Desktop release:** v2.1.0 (Microsoft Store + GitHub) — Coding mode + 2.1 UX polish
+- **Desktop release:** v3.0.0 beta on GitHub; Store 3.0 planned Aug 3 — Moltbook, PDF tools, Favorites, Share, personality updates
 - **Maintainer:** g00siferdev-py
 - **License:** MIT
 

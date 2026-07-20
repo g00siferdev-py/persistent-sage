@@ -17,16 +17,17 @@
 
 ## Get Persistent Sage
 
-**Version 3.0.0** — Moltbook, Favorites, Share, PDF agent tools, personality updates, and GitHub beta installers (Microsoft Store planned Aug 3).
+**Version 3.0.0 (beta)** — Moltbook, Favorites, Share, PDF agent tools, personality updates. **Beta testers:** [v3.0.0-beta.1 prerelease](https://github.com/g00siferdev-py/persistent-sage/releases/tag/v3.0.0-beta.1). Microsoft Store **3.0** planned **Aug 3**.
 
 | Step | Action |
 |------|--------|
-| 1 | **Microsoft Store** — search for Persistent Sage (when listed), or use **[GitHub Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** → `Persistent.Sage_*_x64-setup.exe`. See **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)**. |
-| 2 | **Build from source** — `git clone https://github.com/g00siferdev-py/persistent-sage.git && cd persistent-sage` → **[docs/INSTALL.md](./docs/INSTALL.md)**. |
-| 3 | **Configure** — **Settings → Provider** (API key + model), then start a chat |
-| 4 | **Update** — **Store installs:** Microsoft Store → Library → Get updates. **GitHub installs:** **Settings → General → Updates** |
-| 5 | **Report** — **Settings → General → Send feedback** or [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues) with OS, app version, provider, steps to reproduce |
-| 6 | **Support development** — optional donations via **[docs/SUPPORT.md](./docs/SUPPORT.md)**; code contributions via **[CONTRIBUTING.md](./CONTRIBUTING.md)** |
+| 1 | **Beta testers** — download **[v3.0.0-beta.1](https://github.com/g00siferdev-py/persistent-sage/releases/tag/v3.0.0-beta.1)** (`Persistent.Sage_3.0.0_x64-setup.exe` or portable zip). |
+| 2 | **Microsoft Store** — search for Persistent Sage (currently **2.0**; **3.0** Store launch Aug 3), or use **[GitHub Releases](https://github.com/g00siferdev-py/persistent-sage/releases/latest)** for the current public installer. See **[docs/INSTALL-WINDOWS.md](./docs/INSTALL-WINDOWS.md)**. |
+| 3 | **Build from source** — `git clone https://github.com/g00siferdev-py/persistent-sage.git && cd persistent-sage` → **[docs/INSTALL.md](./docs/INSTALL.md)**. |
+| 4 | **Configure** — **Settings → Provider** (API key + model), then start a chat |
+| 5 | **Update** — **Store installs:** Microsoft Store → Library → Get updates. **GitHub installs:** **Settings → General → Updates** |
+| 6 | **Report** — **Settings → General → Send feedback** or [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues) with OS, app version, provider, steps to reproduce |
+| 7 | **Support development** — optional donations via **[docs/SUPPORT.md](./docs/SUPPORT.md)**; code contributions via **[CONTRIBUTING.md](./CONTRIBUTING.md)** |
 
 **Maintainers:** publish installers → **[docs/PUBLISH.md](./docs/PUBLISH.md)**; MSIX → **[docs/MICROSOFT-STORE.md](./docs/MICROSOFT-STORE.md)**; CI → **[docs/BUILD-CI.md](./docs/BUILD-CI.md)**.
 
@@ -51,6 +52,7 @@
 | **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** | Technical overview for developers |
 | **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)** | Dev workflow and pre-push checklist |
 | [CHANGELOG.md](./CHANGELOG.md) | Release notes |
+| **[docs/releases/v3.0.0.md](./docs/releases/v3.0.0.md)** | 3.0.0 beta release highlights |
 | [docs/REBRAND.md](./docs/REBRAND.md) | Codename, rebrand, and legacy data migration |
 | [PERSISTENT-SAGE-STATUS.md](./PERSISTENT-SAGE-STATUS.md) | Engineering status |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | How to test and contribute |
@@ -83,12 +85,13 @@ After you build and run Persistent Sage, **nothing is stored on a Persistent Sag
 
 ## Key features
 
+- **3.0 (beta)** — **Moltbook** panel and agent tools, **Favorites**, **Share** menu and enhanced copy, agent **PDF** read/create, improved personality update/import, webcam capture, Settings tab refactor.
 - **Coding mode (v2)** — Git repos, editor, terminal, coding agent, **playground**, **notepad**, Agent Action Stream. See **[docs/CODING-MODE.md](./docs/CODING-MODE.md)**.
-- **UX (2.1)** — Message timestamps, Help menu, token counter, light/dark theme, cache manager, abort turn, unified Companion↔Coding context.
+- **UX (2.1+)** — Message timestamps, Help menu, token counter, light/dark theme, cache manager, abort turn, unified Companion↔Coding context.
 - **Memory Anchor** — SQLite conversations, messages, anchors, projects, and preferences; hybrid FTS recall and startup briefings.
 - **Companion profiles** — Multiple personalities with live system-prompt preview; Persistent Sage JSON and OpenClaw markdown import; optional agent self-edit of `personality.json`.
 - **Providers** — OpenAI, Google Gemini, xAI Grok, Ollama (local), Ollama Cloud, Anthropic, or offline placeholder.
-- **Agent tools** (opt-in) — Web search, URL fetch, headless **`fetch_browser`**, HTTPS `http_request`, sandboxed workspace files, optional database query.
+- **Agent tools** (opt-in) — Web search, URL fetch, headless **`fetch_browser`**, HTTPS `http_request`, sandboxed workspace files, **PDF read/create**, optional database query, **Moltbook** (when enabled).
 - **Pulse** — Timer-driven check-ins that run as **normal chat turns** in your selected sidebar thread.
 - **Vision** — Attach images in the composer; multimodal payloads for supported models.
 - **In-app updates** — Store updates via Microsoft Store; GitHub installs use Tauri updater on Releases.

@@ -1,6 +1,6 @@
 # 01 — Project Overview
 
-**Persistent Sage** is a privacy-oriented, local-first desktop AI companion. Version **2.1.0** is the current desktop release (Microsoft Store MSIX and GitHub Releases). **2.0** added **Coding mode**; **2.1** adds playground, notepad, Help, and UX polish — alongside the **1.0** Companion feature set.
+**Persistent Sage** is a privacy-oriented, local-first desktop AI companion. Version **3.0.0** is in **beta** on GitHub (`v3.0.0-beta.1`); Microsoft Store **3.0** GA is planned **Aug 3**. **2.0** added **Coding mode**; **2.1** adds playground, notepad, Help, and UX polish — alongside the **1.0** Companion feature set.
 
 This document gives the production team a product-level understanding before diving into architecture and code.
 

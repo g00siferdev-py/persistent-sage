@@ -2,6 +2,8 @@
 
 This guide walks through a **complete fresh install** on a new machine. Persistent Sage is distributed as source; you build the desktop app locally with **Rust**, **Node.js**, and **Tauri 2** tooling.
 
+**Windows users who want a pre-built installer:** see **[INSTALL-WINDOWS.md](./INSTALL-WINDOWS.md)**. **Beta testers (3.0):** [v3.0.0-beta.1](https://github.com/g00siferdev-py/persistent-sage/releases/tag/v3.0.0-beta.1).
+
 ---
 
 ## 1. Overview

@@ -2,11 +2,12 @@
 
 ## Supported Versions
 
-Security fixes are applied to the **latest published release** (currently **2.1.0**).
+Security fixes are applied to the **latest published release** (currently **3.0.0 beta** on GitHub; **2.0.0** remains GitHub “Latest” until Store GA).
 
 | Version | Supported |
 |---------|-----------|
-| **2.1.x** (latest) | Yes |
+| **3.0.x** (beta / latest dev) | Yes |
+| **2.1.x** | Best effort |
 | **2.0.x** | Best effort |
 | Older releases | Not supported |
 

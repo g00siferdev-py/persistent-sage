@@ -1,6 +1,6 @@
 # Persistent Sage user guide
 
-Complete guide to the Persistent Sage desktop application as shipped in **version 2.1.0**.
+Complete guide to the Persistent Sage desktop application as shipped in **version 3.0.0** (beta: `v3.0.0-beta.1`; Store GA planned Aug 3).
 
 **Runtime requirement:** `npm run tauri dev` or an installed release build. Browser-only Vite preview cannot access chat, memory, or settings backends.
 
@@ -13,7 +13,9 @@ Persistent Sage is a **local-first AI companion**:
 - Multi-thread **chat** with streaming replies
 - **Memory Anchor** — SQLite-backed long-term memory (anchors, briefings, hybrid search)
 - **Companion personalities** — per-profile tone and system instructions
-- **Optional agent tools** — web search, URL fetch, HTTPS requests, workspace files, database query
+- **Optional agent tools** — web search, URL fetch, HTTPS requests, workspace files, **PDF read/create**, **Moltbook** (opt-in), database query
+- **Favorites & Share (3.0)** — pin favorites; Share menu and enhanced copy on messages
+- **Moltbook (3.0)** — companion panel and agent tools for feed, search, posts, and comments (Settings → Tools)
 - **Pulse** — scheduled check-ins in your **currently selected** conversation
 - **Image attachments** — send photos to vision-capable models from the composer
 - **Coding mode (v2)** — repo-scoped IDE, terminal, coding agent, playground, notepad (see [§ 12 Coding mode](#12-coding-mode-v2))
@@ -81,10 +83,12 @@ Choose which **companion profile** receives new chats and memory scoping. Switch
 
 Persistent Sage emits `chat:stream-start`, token deltas on `chat:stream`, and `done`. A “Thinking…” state shows before the first token.
 
-### Timestamps and abort
+### Timestamps, abort, and message actions (3.0)
 
 - Each message shows a **timestamp** (local time) when expanded or on hover depending on layout.
 - While the assistant is replying, **Stop** / abort ends the turn and clears the streaming state.
+- **Share** and **copy** actions on messages (including formatted/code copy where supported).
+- **Favorites** panel — pin chats or messages for quick revisit from the companion sidebar.
 
 ### Errors
 
@@ -136,12 +140,12 @@ Keyword + FTS + optional semantic search across anchors and **all threads** for 
 
 ## 6. Settings
 
-Open **Settings** from the chat header. Four tabs:
+Open **Settings** from the chat header. Three primary tabs (**General**, **Provider**, **Tools**); **Companion** personality editing lives under General (or the dedicated Companion section within the refactored panel).
 
-### 6.1 Companion
+### 6.1 Companion (personality)
 
 - Switch, create, or delete personality **profiles**
-- Edit companion name, tone, values, special instructions
+- Edit companion name, tone, values, special instructions — **improved save/import flow in 3.0**
 - **Live system prompt preview**
 - **Import Persistent Sage JSON** or **Import OpenClaw markdown…** (preview mapped fields, then add a profile)
 - **Save changes** / **Save as new profile**
@@ -171,6 +175,8 @@ For migrating a long-running OpenClaw agent with maximum fidelity, see [§ 11 Mi
 | **Ignore robots.txt** | Optional for `fetch_browser` only (off by default) |
 | **Allow personality self-edit** | `personality_get`, `personality_update` on active profile |
 | **Workspace tools** | Read/write/list under `{data_dir}/workspace` |
+| **PDF tools (3.0)** | `workspace_read_pdf`, `workspace_write_pdf` (Markdown/HTML/text → PDF; requires Chrome/Edge) |
+| **Moltbook (3.0)** | Panel + `moltbook_feed`, `moltbook_search`, `moltbook_create_post`, `moltbook_comment` |
 | **App data databases** | `database_query` on `.sqlite` in data folder |
 | **Allow database writes** | INSERT/UPDATE/DELETE via `database_query` (dangerous) |
 
@@ -271,7 +277,10 @@ The feedback buttons open public GitHub Issues. Persistent Sage pre-fills safe a
 
 - [x] Multi-conversation chat with streaming
 - [x] Memory Anchor briefing, anchors, extract, recall
-- [x] Four settings tabs (Companion, Provider, Tools, General)
+- [x] Four settings areas (Companion, Provider, Tools, General — tabbed UI in 3.0)
+- [x] Moltbook panel and tools (3.0, opt-in)
+- [x] Favorites and Share/copy on messages (3.0)
+- [x] Agent PDF read/create (3.0, workspace tools)
 - [x] Encrypted API keys; **unencrypted** local SQLite
 - [x] Pulse in open thread
 - [x] Image attach for vision models

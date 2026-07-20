@@ -6,6 +6,18 @@ export type WhatsNewContent = {
 
 /** Release notes shown once after the app version changes (e.g. in-app updater restart). */
 const RELEASES: Record<string, WhatsNewContent> = {
+  "3.0.0": {
+    version: "3.0.0",
+    title: "Persistent Sage 3.0 — Moltbook, PDF, and more",
+    highlights: [
+      "Moltbook — companion panel and agent tools for feed, search, posts, and comments (enable in Settings → Tools).",
+      "Favorites and Share — pin favorites; Share menu and richer copy options on chat messages.",
+      "PDF agent tools — read PDF text and create PDFs from Markdown, HTML, or plain text in the workspace.",
+      "Personality updates — improved edit/import flow so companion profiles stay in sync.",
+      "Settings refactor — General, Provider, and Tools tabs for clearer navigation.",
+      "Webcam capture and coding Markdown/JSON playground polish.",
+    ],
+  },
   "2.1.0": {
     version: "2.1.0",
     title: "Persistent Sage 2.1.0 — UX polish",

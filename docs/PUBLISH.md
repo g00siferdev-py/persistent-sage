@@ -19,14 +19,14 @@ How to ship **Windows installers** and **Microsoft Store MSIX** packages to user
 
 ### Option A — Tag + CI (automated draft)
 
-1. Confirm version in `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Package.appxmanifest` (e.g. `2.1.0` / `2.1.0.0`).
+1. Confirm version in `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `Package.appxmanifest` (e.g. `3.0.0` / `3.0.0.0`).
 2. Update **[CHANGELOG.md](../CHANGELOG.md)** for that version.
 3. Commit and push `main`.
 4. Create and push a tag (must start with `v`):
 
    ```bash
-   git tag v2.1.0
-   git push origin v2.1.0
+   git tag v3.0.0-beta.1
+   git push origin v3.0.0-beta.1
    ```
 
 5. Wait for **Actions → Build Windows** to finish (triggered by the tag).
@@ -37,7 +37,9 @@ How to ship **Windows installers** and **Microsoft Store MSIX** packages to user
    - `latest.json` (Tauri updater manifest)
 7. Edit the release notes (copy from CHANGELOG), then click **Publish release**.
 
-**Share with users:**
+**Beta builds:** mark GitHub releases as **Pre-release** so `releases/latest` stays on the prior GA until Store launch. Share the direct tag URL with testers (e.g. `.../releases/tag/v3.0.0-beta.1`).
+
+**Share with users (GA / updater):**
 
 ```text
 https://github.com/g00siferdev-py/persistent-sage/releases/latest
@@ -53,8 +55,8 @@ The Tauri updater uses GitHub's `releases/latest` endpoint, which excludes GitHu
 
 1. Download **Artifacts** from a successful **Build Windows** run.
 2. **Releases → Draft a new release**
-3. **Choose a tag:** create `v2.1.0` on `main`.
-4. Title: `Persistent Sage 2.1.0`
+3. **Choose a tag:** create `v3.0.0-beta.1` (or next version) on `main`.
+4. Title: `Persistent Sage 3.0.0-beta.1 (beta testers)`
 5. Leave **Set as a pre-release** unchecked for updater-enabled releases.
 6. Attach:
    - `Persistent.Sage_*_x64-setup.exe`
