@@ -11,7 +11,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
 **Repository:** [github.com/g00siferdev-py/persistent-sage](https://github.com/g00siferdev-py/persistent-sage)  
-**Status:** **Persistent Sage 3.0 beta** — feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues)
+**Status:** **Persistent Sage 3.0.0 (beta)** — GitHub tag [`v3.0.0-beta.1`](https://github.com/g00siferdev-py/persistent-sage/releases/tag/v3.0.0-beta.1); Microsoft Store **3.0** planned **Aug 3**. Feedback welcome via [GitHub Issues](https://github.com/g00siferdev-py/persistent-sage/issues)
 
 ---
 
@@ -85,15 +85,15 @@ After you build and run Persistent Sage, **nothing is stored on a Persistent Sag
 
 ## Key features
 
-- **3.0 (beta)** — **Moltbook** panel and agent tools, **Favorites**, **Share** menu and enhanced copy, agent **PDF** read/create, improved personality update/import, webcam capture, Settings tab refactor.
-- **Coding mode (v2)** — Git repos, editor, terminal, coding agent, **playground**, **notepad**, Agent Action Stream. See **[docs/CODING-MODE.md](./docs/CODING-MODE.md)**.
+- **3.0 (beta)** — **Moltbook** panel and agent tools, **Favorites**, **Share** menu and enhanced copy, agent **PDF** read/create, improved personality update/import, webcam capture, Settings tabs (General / Provider / Tools), Markdown/JSON playground polish.
+- **Coding mode (v2 / 2.1+)** — Git repos, editor, terminal, coding agent, **playground**, **notepad**, Agent Action Stream. See **[docs/CODING-MODE.md](./docs/CODING-MODE.md)**.
 - **UX (2.1+)** — Message timestamps, Help menu, token counter, light/dark theme, cache manager, abort turn, unified Companion↔Coding context.
-- **Memory Anchor** — SQLite conversations, messages, anchors, projects, and preferences; hybrid FTS recall and startup briefings.
+- **Memory Anchor** — SQLite conversations, messages, anchors, projects, and preferences; hybrid FTS + keyword (+ optional semantic) recall and startup briefings.
 - **Companion profiles** — Multiple personalities with live system-prompt preview; Persistent Sage JSON and OpenClaw markdown import; optional agent self-edit of `personality.json`.
 - **Providers** — OpenAI, Google Gemini, xAI Grok, Ollama (local), Ollama Cloud, Anthropic, or offline placeholder.
 - **Agent tools** (opt-in) — Web search, URL fetch, headless **`fetch_browser`**, HTTPS `http_request`, sandboxed workspace files, **PDF read/create**, optional database query, **Moltbook** (when enabled).
 - **Pulse** — Timer-driven check-ins that run as **normal chat turns** in your selected sidebar thread.
-- **Vision** — Attach images in the composer; multimodal payloads for supported models.
+- **Vision** — Attach images or capture from webcam in the composer; multimodal payloads for supported models.
 - **In-app updates** — Store updates via Microsoft Store; GitHub installs use Tauri updater on Releases.
 - **Send feedback** — Settings buttons open prefilled GitHub Issues without attaching private chats or logs.
 - **Optional donations** — PayPal / Cash App links in footer and onboarding (no feature unlock).
@@ -157,6 +157,15 @@ npm run tauri dev
 | Desktop | [Tauri 2](https://v2.tauri.app/) |
 | UI | React 19, TypeScript, Vite 7, Tailwind CSS v4 |
 | Backend | Rust 1.77+, rusqlite, reqwest, encrypted settings |
+| Data | Local SQLite (`nova_memory.sqlite`); API keys encrypted at rest |
+
+---
+
+## Built with Cursor, Codex, and GPT-5.6
+
+Persistent Sage was developed in **[Cursor](https://cursor.com)** with heavy AI pair-programming. Throughout the project, coding work was driven by selecting **Codex** and **GPT-5.6** as the models inside Cursor.
+
+Those two models played a huge part in writing Persistent Sage: implementing the Rust backend and React UI, Memory Anchor / SQLite recall, provider integrations, agent tools (including PDF), Coding mode, packaging, and docs. Direction, product decisions, review, and release ownership stayed with the maintainer; Codex and GPT-5.6 were the primary coding partners in the editor.
 
 ---
 
@@ -176,10 +185,9 @@ More: **[docs/INSTALL.md § Troubleshooting](./docs/INSTALL.md#10-troubleshootin
 
 ## Project status
 
-Persistent Sage **3.0.0** (beta) adds **Moltbook**, Favorites, Share/copy enhancements, agent **PDF** tools, personality update improvements, and a refactored Settings UI — on top of Companion + Coding from 2.x. GitHub beta installers now; Microsoft Store packaging targeted for **Aug 3**. See [PERSISTENT-SAGE-STATUS.md](./PERSISTENT-SAGE-STATUS.md) and [CHANGELOG.md](./CHANGELOG.md).
+Persistent Sage **3.0.0** (beta, tag [`v3.0.0-beta.1`](https://github.com/g00siferdev-py/persistent-sage/releases/tag/v3.0.0-beta.1)) ships **Moltbook**, Favorites, Share/copy enhancements, agent **PDF** tools, personality update improvements, webcam capture, and a refactored Settings UI — on top of Companion + Coding from 2.x. GitHub beta installers are available now; Microsoft Store **3.0** is planned for **Aug 3**. See [PERSISTENT-SAGE-STATUS.md](./PERSISTENT-SAGE-STATUS.md), [CHANGELOG.md](./CHANGELOG.md), and [docs/releases/v3.0.0.md](./docs/releases/v3.0.0.md).
 
 <img width="261" height="389" alt="IMG_2515" src="https://github.com/user-attachments/assets/7f7731f4-5c19-44b4-b86f-bc7c101df250" />
-
 
 **Maintainer:** [g00siferdev-py](https://github.com/g00siferdev-py)
 
