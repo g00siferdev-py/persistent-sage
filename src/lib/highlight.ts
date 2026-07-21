@@ -91,6 +91,11 @@ const LANGUAGE_ALIASES: Record<string, string> = {
   txt: "plaintext",
 };
 
+// highlight.js 11's C-family grammars can take quadratic time on repeated
+// tokens. Keep those synchronous renderer calls small; larger code remains
+// fully visible as escaped plaintext.
+const MAX_C_FAMILY_HIGHLIGHT_CHARS = 8_000;
+
 export function resolveHighlightLanguage(raw?: string | null): string | null {
   ensureRegistered();
   const lang = (raw ?? "").trim().toLowerCase();
@@ -105,10 +110,13 @@ export function highlightCode(code: string, language?: string | null): string {
   const lang = resolveHighlightLanguage(language);
   try {
     if (lang) {
-      return hljs.highlight(code, { language: lang }).value;
+      const cFamily = lang === "c" || lang === "cpp";
+      if (!cFamily || code.length <= MAX_C_FAMILY_HIGHLIGHT_CHARS) {
+        return hljs.highlight(code, { language: lang }).value;
+      }
     }
     // Auto-detect only for short snippets — auto-detect on huge blobs is slow.
-    if (code.length <= 20_000) {
+    if (!lang && code.length <= 20_000) {
       return hljs.highlightAuto(code).value;
     }
   } catch {
