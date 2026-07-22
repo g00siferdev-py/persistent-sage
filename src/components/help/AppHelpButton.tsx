@@ -18,7 +18,7 @@ export function AppHelpButton({ className }: Props) {
           className ??
           "ps-btn"
         }
-        title="Help — how to use Snowball AI"
+        title="Help — how to use Persistent Sage"
         aria-label="Open help"
       >
         <CircleHelp className="size-3.5" aria-hidden />
