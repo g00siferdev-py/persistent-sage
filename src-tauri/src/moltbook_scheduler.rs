@@ -413,11 +413,21 @@ async fn run_action(
     run_action_with_prompt(app, state, action, prompt, manual).await
 }
 
+fn take_if_interval_elapsed(last_run: &mut Instant, now: Instant, interval: Duration) -> bool {
+    if now.saturating_duration_since(*last_run) < interval {
+        return false;
+    }
+    *last_run = now;
+    true
+}
+
 pub fn spawn_moltbook_scheduler_loop(app_handle: AppHandle) {
     tauri::async_runtime::spawn(async move {
-        // None = due on first ready poll (do not wait a full interval after every app restart).
-        let mut last_interact: Option<Instant> = None;
-        let mut last_post: Option<Instant> = None;
+        // A restart must not reset both actions to "due": posting immediately on every app
+        // launch ignores the configured interval and can spam the agent's public account.
+        let started_at = Instant::now();
+        let mut last_interact = started_at;
+        let mut last_post = started_at;
         let mut last_reply_poll: Option<Instant> = None;
         let mut last_activity_fp = String::new();
 
@@ -475,20 +485,12 @@ pub fn spawn_moltbook_scheduler_loop(app_handle: AppHandle) {
                 Duration::from_secs(state.settings.moltbook_post_interval_minutes() as u64 * 60);
 
             let now = Instant::now();
-            let interact_due = last_interact
-                .map(|t| now.duration_since(t) >= interact_every)
-                .unwrap_or(true);
-            if interact_due {
-                last_interact = Some(now);
+            if take_if_interval_elapsed(&mut last_interact, now, interact_every) {
                 let _ = run_action(&app_handle, &state, MoltbookAction::Interact, false).await;
             }
 
             let now = Instant::now();
-            let post_due = last_post
-                .map(|t| now.duration_since(t) >= post_every)
-                .unwrap_or(true);
-            if post_due {
-                last_post = Some(now);
+            if take_if_interval_elapsed(&mut last_post, now, post_every) {
                 let _ = run_action(&app_handle, &state, MoltbookAction::Post, false).await;
             }
         }
@@ -538,4 +540,38 @@ pub async fn moltbook_scheduler_ask_share(
     let event =
         run_action_with_prompt(&app, &state, MoltbookAction::ShareRequest, prompt, true).await;
     event_to_result(event)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::take_if_interval_elapsed;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn periodic_action_waits_for_full_interval() {
+        let started_at = Instant::now();
+        let interval = Duration::from_secs(60);
+        let mut last_run = started_at;
+
+        assert!(!take_if_interval_elapsed(
+            &mut last_run,
+            started_at,
+            interval
+        ));
+        assert!(!take_if_interval_elapsed(
+            &mut last_run,
+            started_at + Duration::from_secs(59),
+            interval
+        ));
+        assert!(take_if_interval_elapsed(
+            &mut last_run,
+            started_at + interval,
+            interval
+        ));
+        assert!(!take_if_interval_elapsed(
+            &mut last_run,
+            started_at + interval,
+            interval
+        ));
+    }
 }
