@@ -52,22 +52,23 @@ export function CodingChatMain({
   }, [streamAssistant?.text]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-white dark:bg-slate-950/20">
-      <div className="shrink-0 border-b border-slate-200 px-4 py-2 dark:border-slate-800">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{repoName}</h2>
-        <p className="text-[11px] text-slate-500">
+    <div className="flex min-h-0 flex-1 flex-col bg-ps-surface/80">
+      <div className="shrink-0 border-b border-ps-border px-5 py-3">
+        <p className="ps-label mb-0.5">Repository</p>
+        <h2 className="font-display text-base font-semibold tracking-tight text-ps-ink">{repoName}</h2>
+        <p className="mt-0.5 text-[11px] text-ps-muted">
           Enable Coding tools in Settings → Tools → Coding mode (v2)
         </p>
       </div>
 
-      <div ref={scrollAreaRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+      <div ref={scrollAreaRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         {loading && messages.length === 0 && !streamAssistant ? (
-          <div className="flex items-center gap-2 text-xs text-slate-500">
+          <div className="flex items-center gap-2 text-xs text-ps-faint">
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
             Loading chat…
           </div>
         ) : messages.length === 0 && !streamAssistant ? (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-ps-faint">
             Ask about this codebase — read files, suggest changes, or explain structure. Enable
             workspace tools in Settings → Tools for file access.
           </p>
@@ -81,13 +82,11 @@ export function CodingChatMain({
               return (
                 <li
                   key={m.id}
-                  className={`group rounded-lg px-3 py-2 text-sm leading-relaxed ${
-                    m.role === "user"
-                      ? "ml-8 bg-violet-100 text-violet-950 dark:bg-violet-950/40 dark:text-violet-50"
-                      : "mr-8 bg-white text-slate-800 shadow-sm dark:bg-slate-900/80 dark:text-slate-200 dark:shadow-none"
+                  className={`group text-sm leading-relaxed ${
+                    m.role === "user" ? "ps-msg-user" : "ps-msg-assistant"
                   }`}
                 >
-                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
                     {formatChatHeader(m.role === "user" ? "You" : "Agent", m.createdAt)}
                   </div>
                   {prepared.artifactJson ? (
@@ -105,8 +104,8 @@ export function CodingChatMain({
               );
             })}
             {streamAssistant ? (
-              <li className="mr-8 rounded-lg bg-white px-3 py-2 text-sm text-slate-800 shadow-sm dark:bg-slate-900/80 dark:text-slate-200 dark:shadow-none">
-                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              <li className="ps-msg-assistant">
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
                   {formatChatHeader("Agent", new Date().toISOString())}
                 </div>
                 {streamAssistant.toolActivity ? (
@@ -122,12 +121,12 @@ export function CodingChatMain({
                     ) : null}
                   </>
                 ) : streamAssistant.statusDetail ? (
-                  <div className="flex items-center gap-2 text-slate-400">
+                  <div className="flex items-center gap-2 text-ps-faint">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                     {streamAssistant.statusDetail}
                   </div>
                 ) : !streamAssistant.toolActivity ? (
-                  <div className="flex items-center gap-2 text-slate-400">
+                  <div className="flex items-center gap-2 text-ps-faint">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                     Thinking…
                   </div>
@@ -145,14 +144,14 @@ export function CodingChatMain({
         </div>
       ) : null}
 
-      <form onSubmit={submit} className="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800">
+      <form onSubmit={submit} className="ps-composer !px-5 !py-3">
         <div className="flex gap-2">
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             rows={2}
             placeholder="Ask the coding agent…"
-            className="min-h-[2.5rem] flex-1 resize-none rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-violet-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-600"
+            className="ps-input min-h-[2.5rem] flex-1 resize-none"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -166,7 +165,7 @@ export function CodingChatMain({
             onClick={() => onAbortTurn?.()}
             disabled={!sending}
             title="Abort the current agent turn"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-red-400/50 bg-red-500/20 text-red-700 hover:bg-red-500/30 disabled:pointer-events-none disabled:opacity-30 dark:text-red-200"
+            className="ps-btn-danger h-10 w-10 shrink-0"
             aria-label="Abort turn"
           >
             <OctagonX className="h-4 w-4" aria-hidden />
@@ -174,7 +173,7 @@ export function CodingChatMain({
           <button
             type="submit"
             disabled={sending || !draft.trim()}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-700 text-white hover:bg-violet-600 disabled:opacity-40"
+            className="ps-btn-primary h-10 w-10 shrink-0"
             title="Send"
           >
             {sending ? (

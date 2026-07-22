@@ -16,7 +16,7 @@ export function AppHelpButton({ className }: Props) {
         onClick={() => setOpen(true)}
         className={
           className ??
-          "inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
+          "ps-btn"
         }
         title="Help — how to use Snowball AI"
         aria-label="Open help"

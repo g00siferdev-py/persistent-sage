@@ -94,14 +94,14 @@ export function SettingsPanel({
       aria-hidden={!open}
       className={`h-full min-h-0 shrink-0 overflow-hidden border-l transition-[width,opacity] duration-200 ease-out ${
         open
-          ? "border-slate-200 dark:border-slate-800/80 bg-slate-100 dark:bg-slate-900/35 shadow-[-8px_0_24px_rgba(15,23,42,0.08)] dark:shadow-[-16px_0_48px_rgba(0,0,0,0.4)] opacity-100"
+          ? "border-ps-border bg-ps-elevated opacity-100"
           : "border-transparent opacity-0"
       } ${panelWidthClass}`}
     >
       <div className={`flex h-full flex-col ${panelWidthClass}`} inert={!open ? true : undefined}>
-        <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 dark:border-slate-800/80 px-3 py-2.5">
-          <SlidersHorizontal className="size-4 shrink-0 text-slate-600 dark:text-slate-400" aria-hidden />
-          <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 dark:text-white">Settings</h2>
+        <div className="flex shrink-0 items-center gap-2 border-b border-ps-border px-3 py-2.5">
+          <SlidersHorizontal className="size-4 shrink-0 text-ps-muted" aria-hidden />
+          <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-ps-ink">Settings</h2>
           <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="Panel size">
             <button
               type="button"
@@ -110,8 +110,8 @@ export function SettingsPanel({
               onClick={() => onLayoutModeChange("compact")}
               className={`inline-flex size-7 items-center justify-center rounded-md border transition ${
                 layoutMode === "compact"
-                  ? "border-indigo-500/50 bg-indigo-100/80 dark:bg-indigo-950/50 text-indigo-200"
-                  : "border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:bg-slate-800/80 hover:text-slate-800 dark:text-slate-200"
+                  ? "border-ps-accent/50 bg-ps-accent-soft text-ps-accent"
+                  : "border-transparent text-ps-muted hover:bg-ps-surface hover:text-ps-ink"
               }`}
             >
               <Minimize2 className="size-3.5" aria-hidden />
@@ -124,8 +124,8 @@ export function SettingsPanel({
               onClick={() => onLayoutModeChange("full")}
               className={`inline-flex size-7 items-center justify-center rounded-md border transition ${
                 layoutMode === "full"
-                  ? "border-indigo-500/50 bg-indigo-100/80 dark:bg-indigo-950/50 text-indigo-200"
-                  : "border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:bg-slate-800/80 hover:text-slate-800 dark:text-slate-200"
+                  ? "border-ps-accent/50 bg-ps-accent-soft text-ps-accent"
+                  : "border-transparent text-ps-muted hover:bg-ps-surface hover:text-ps-ink"
               }`}
             >
               <Maximize2 className="size-3.5" aria-hidden />
@@ -135,7 +135,7 @@ export function SettingsPanel({
               type="button"
               title="Hide settings"
               onClick={() => onLayoutModeChange("hidden")}
-              className="inline-flex size-7 items-center justify-center rounded-md border border-transparent text-slate-600 dark:text-slate-400 transition hover:bg-slate-200 dark:bg-slate-800/80 hover:text-slate-800 dark:text-slate-200"
+              className="inline-flex size-7 items-center justify-center rounded-md border border-transparent text-ps-muted transition hover:bg-ps-surface hover:text-ps-ink"
             >
               <X className="size-3.5" aria-hidden />
               <span className="sr-only">Hide</span>
@@ -145,7 +145,7 @@ export function SettingsPanel({
 
         <div className="flex min-h-0 flex-1">
           <nav
-            className={`flex shrink-0 flex-col gap-0.5 border-r border-slate-200 dark:border-slate-800/80 p-2 ${
+            className={`flex shrink-0 flex-col gap-0.5 border-r border-ps-border p-2 ${
               panelDense ? "w-[5.5rem]" : "w-[6.75rem]"
             }`}
             aria-label="Settings sections"
@@ -164,8 +164,8 @@ export function SettingsPanel({
                 onClick={() => setSettingsTab(id)}
                 className={
                   settingsTab === id
-                    ? "flex flex-col items-center gap-1 rounded-lg bg-slate-200 dark:bg-slate-800/90 px-2 py-2.5 text-[10px] font-medium text-slate-900 dark:text-white shadow-sm ring-1 ring-slate-600/50"
-                    : "flex flex-col items-center gap-1 rounded-lg px-2 py-2.5 text-[10px] font-medium text-slate-600 dark:text-slate-400 transition hover:bg-slate-200 dark:bg-slate-800/40 hover:text-slate-800 dark:text-slate-200"
+                    ? "flex flex-col items-center gap-1 border-l-2 border-ps-accent bg-ps-accent-soft px-2 py-2.5 text-[10px] font-medium text-ps-ink"
+                    : "flex flex-col items-center gap-1 border-l-2 border-transparent px-2 py-2.5 text-[10px] font-medium text-ps-muted transition hover:bg-ps-surface hover:text-ps-ink"
                 }
               >
                 <Icon className="size-4 shrink-0" aria-hidden />
@@ -180,7 +180,7 @@ export function SettingsPanel({
             }`}
           >
             {error ? (
-              <p className="mb-2 shrink-0 rounded-md border border-red-900/60 bg-red-950/40 px-2 py-1.5 text-xs text-red-200">
+              <p className="mb-2 shrink-0 rounded-md border border-ps-danger/40 bg-ps-danger-soft px-2 py-1.5 text-xs text-ps-danger">
                 {error}
               </p>
             ) : null}

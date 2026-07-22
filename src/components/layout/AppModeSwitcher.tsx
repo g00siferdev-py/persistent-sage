@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Code2, MessageCircle } from "lucide-react";
 import { appModeLabel, type AppMode } from "@/lib/appMode";
@@ -10,6 +9,10 @@ type Props = {
   onModeChange: (mode: AppMode) => void;
 };
 
+/**
+ * Mode rail for Companion / Coding, with layout room for a future Productivity mode.
+ * Productivity is not selectable yet — the spacer keeps the visual system 3-mode ready.
+ */
 export function AppModeSwitcher({ mode, onModeChange }: Props) {
   const [versionLabel, setVersionLabel] = useState(`v${packageJson.version}`);
 
@@ -27,25 +30,43 @@ export function AppModeSwitcher({ mode, onModeChange }: Props) {
       cancelled = true;
     };
   }, []);
+
   return (
-    <div
-      className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-700/80 bg-slate-900/60 p-0.5"
-      role="tablist"
-      aria-label="Application mode"
-    >
-      <ModeButton
-        active={mode === "companion"}
-        label={appModeLabel("companion")}
-        icon={<MessageCircle className="h-3.5 w-3.5" aria-hidden />}
-        onClick={() => onModeChange("companion")}
-      />
-      <ModeButton
-        active={mode === "coding"}
-        label={appModeLabel("coding")}
-        icon={<Code2 className="h-3.5 w-3.5" aria-hidden />}
-        onClick={() => onModeChange("coding")}
-      />
-      <span className="ml-1 hidden rounded bg-violet-900/70 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-violet-200/90 sm:inline">
+    <div className="flex min-w-0 items-end gap-5">
+      <div className="hidden min-w-0 flex-col sm:flex">
+        <span className="ps-label">Persistent Sage</span>
+        <span className="font-display text-base font-semibold leading-none tracking-tight text-ps-ink">
+          Workspace
+        </span>
+      </div>
+
+      <div
+        className="flex items-stretch gap-0 border-b border-ps-border"
+        role="tablist"
+        aria-label="Application mode"
+      >
+        <ModeButton
+          active={mode === "companion"}
+          label={appModeLabel("companion")}
+          icon={<MessageCircle className="h-3.5 w-3.5" aria-hidden />}
+          onClick={() => onModeChange("companion")}
+        />
+        {/* Reserved slot for future Productivity Mode — keeps rhythm for three modes. */}
+        <div
+          className="pointer-events-none hidden w-0 overflow-hidden opacity-0 md:block"
+          aria-hidden
+          data-future-mode="productivity"
+        />
+        <ModeButton
+          active={mode === "coding"}
+          label={appModeLabel("coding")}
+          icon={<Code2 className="h-3.5 w-3.5" aria-hidden />}
+          onClick={() => onModeChange("coding")}
+          asymmetric
+        />
+      </div>
+
+      <span className="mb-1 hidden font-mono text-[10px] tracking-wide text-ps-faint lg:inline">
         {versionLabel}
       </span>
     </div>
@@ -57,11 +78,13 @@ function ModeButton({
   label,
   icon,
   onClick,
+  asymmetric = false,
 }: {
   active: boolean;
   label: string;
   icon: ReactNode;
   onClick: () => void;
+  asymmetric?: boolean;
 }) {
   return (
     <button
@@ -70,14 +93,20 @@ function ModeButton({
       aria-selected={active}
       title={label}
       onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-        active
-          ? "bg-slate-700 text-slate-100 shadow-sm"
-          : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-200"
-      }`}
+      className={`relative flex items-center gap-2 px-3 pb-2.5 pt-1 text-xs font-medium transition-colors ${
+        asymmetric ? "pl-4 pr-2" : "pl-2 pr-3"
+      } ${active ? "text-ps-ink" : "text-ps-faint hover:text-ps-muted"}`}
     >
       {icon}
       <span className="hidden sm:inline">{label}</span>
+      {active ? (
+        <span
+          className={`absolute -bottom-px h-[2px] bg-ps-accent ${
+            asymmetric ? "left-3 right-0" : "left-0 right-2"
+          }`}
+          aria-hidden
+        />
+      ) : null}
     </button>
   );
 }

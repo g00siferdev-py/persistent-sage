@@ -85,20 +85,20 @@ function ModelPickRow({
   const safeValue = optionIds.includes(value) ? value : optionIds[0] ?? "";
   return (
     <>
-      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor={htmlFor}>
+      <label className="block text-xs font-medium text-ps-muted" htmlFor={htmlFor}>
         {label}
       </label>
       <div className="flex items-center gap-2">
         <select
           id={htmlFor}
           title="Select model…"
-          className="min-w-0 flex-1 cursor-pointer rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 py-2 pl-3 pr-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50 disabled:cursor-not-allowed disabled:opacity-50 [color-scheme:light] dark:[color-scheme:dark]"
+          className="min-w-0 flex-1 cursor-pointer rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas py-2 pl-3 pr-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50 disabled:cursor-not-allowed disabled:opacity-50 [color-scheme:light] dark:[color-scheme:dark]"
           value={safeValue}
           disabled={disabled || optionIds.length === 0}
           onChange={(e) => onChangeModel(e.target.value)}
         >
           {optionIds.map((id) => (
-            <option key={id} value={id} className="bg-slate-100 dark:bg-slate-900">
+            <option key={id} value={id} className="bg-ps-elevated dark:bg-ps-elevated">
               {id}
             </option>
           ))}
@@ -107,10 +107,10 @@ function ModelPickRow({
           type="button"
           disabled={disabled || loading}
           onClick={() => void onRefresh()}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-2.5 py-2 text-[11px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-2.5 py-2 text-[11px] font-semibold text-ps-ink hover:bg-ps-elevated dark:bg-ps-surface disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? (
-            <Loader2 className="size-4 shrink-0 animate-spin text-slate-700 dark:text-slate-300" aria-hidden />
+            <Loader2 className="size-4 shrink-0 animate-spin text-ps-muted" aria-hidden />
           ) : null}
           <span className="whitespace-nowrap">{refreshLabel}</span>
         </button>
@@ -378,15 +378,15 @@ export function ProviderSettingsTab({
   return (
     <>
       <section className="space-y-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">
           Provider
         </h3>
-        <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="provider-select">
+        <label className="block text-xs font-medium text-ps-muted" htmlFor="provider-select">
           Active backend
         </label>
         <div className="relative">
           <Cpu
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ps-faint"
             aria-hidden
           />
           <select
@@ -394,7 +394,7 @@ export function ProviderSettingsTab({
             value={settings?.selectedProvider ?? "placeholder"}
             disabled={!settings}
             onChange={(e) => void onProviderChange(e.target.value)}
-            className="w-full appearance-none rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 py-2.5 pl-10 pr-9 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/25 disabled:opacity-50"
+            className="w-full appearance-none rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas py-2.5 pl-10 pr-9 text-sm text-ps-ink outline-none focus:border-ps-accent/50 focus:ring-2 focus:ring-ps-accent/25 disabled:opacity-50"
           >
             {providers
               .filter((p) => p.id !== "ollama" && p.id !== "ollama_cloud")
@@ -420,11 +420,11 @@ export function ProviderSettingsTab({
         </div>
       </section>
 
-      <section className="space-y-3 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+      <section className="space-y-3 rounded-lg border border-ps-border bg-ps-elevated p-3">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">
           OpenAI
         </h3>
-        <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="openai-base">
+        <label className="block text-xs font-medium text-ps-muted" htmlFor="openai-base">
           Base URL
         </label>
         <input
@@ -437,13 +437,13 @@ export function ProviderSettingsTab({
             setSettings((s) => (s ? { ...s, openaiBaseUrl: v } : s));
             schedulePatch({ openaiBaseUrl: v });
           }}
-          className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+          className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-ps-accent/50"
         />
         {settings?.selectedProvider === "openai" ? (
-          <p className="text-[11px] leading-relaxed text-slate-500">
-            With <span className="font-medium text-slate-700 dark:text-slate-300">OpenAI</span> selected, use{" "}
-            <span className="font-mono text-slate-600 dark:text-slate-400">Refresh Models</span> to pull ids from{" "}
-            <span className="font-mono text-slate-600 dark:text-slate-400">/v1/models</span> (saved key + Base URL). Common models
+          <p className="text-[11px] leading-relaxed text-ps-faint">
+            With <span className="font-medium text-ps-muted">OpenAI</span> selected, use{" "}
+            <span className="font-mono text-ps-muted">Refresh Models</span> to pull ids from{" "}
+            <span className="font-mono text-ps-muted">/v1/models</span> (saved key + Base URL). Common models
             stay listed without a refresh.
           </p>
         ) : null}
@@ -458,8 +458,8 @@ export function ProviderSettingsTab({
           onRefresh={refreshOpenaiModels}
           refreshLabel="Refresh Models"
         />
-        <details className="mt-2 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-2 py-2">
-          <summary className="cursor-pointer text-[11px] text-slate-500">Type model name…</summary>
+        <details className="mt-2 rounded-md border border-ps-border bg-ps-elevated px-2 py-2">
+          <summary className="cursor-pointer text-[11px] text-ps-faint">Type model name…</summary>
           <input
             type="text"
             placeholder="Custom or preview model id"
@@ -470,10 +470,10 @@ export function ProviderSettingsTab({
               setSettings((s) => (s ? { ...s, openaiModel: v } : s));
               schedulePatch({ openaiModel: v });
             }}
-            className="mt-2 w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+            className="mt-2 w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
           />
         </details>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex items-center gap-2 text-xs text-ps-faint">
           <KeyRound className="size-3.5 shrink-0" aria-hidden />
           <span>
             API key:{" "}
@@ -490,29 +490,29 @@ export function ProviderSettingsTab({
           placeholder="sk-…"
           value={openaiKeyInput}
           onChange={(e) => setOpenaiKeyInput(e.target.value)}
-          className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+          className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
         />
         <button
           type="button"
           onClick={() => void saveOpenaiKey()}
-          className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white hover:bg-indigo-500"
+          className="w-full rounded-lg bg-ps-accent px-3 py-2 text-xs font-semibold text-ps-accent-fg hover:bg-ps-accent"
         >
           Save OpenAI API key
         </button>
       </section>
 
-      <section className="space-y-4 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Ollama</h3>
+      <section className="space-y-4 rounded-lg border border-ps-border bg-ps-elevated p-3">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">Ollama</h3>
 
         <div className="space-y-3 rounded-md border border-emerald-950/50 bg-emerald-950/10 p-3 ring-1 ring-emerald-900/25">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-300/90">
             Ollama · Local
           </p>
-          <p className="text-[11px] leading-relaxed text-slate-500">
+          <p className="text-[11px] leading-relaxed text-ps-faint">
             Uses your own Ollama install (default{" "}
-            <span className="font-mono text-slate-600 dark:text-slate-400">http://127.0.0.1:11434</span>).
+            <span className="font-mono text-ps-muted">http://127.0.0.1:11434</span>).
           </p>
-          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="ollama-base">
+          <label className="block text-xs font-medium text-ps-muted" htmlFor="ollama-base">
             Base URL
           </label>
           <input
@@ -525,14 +525,14 @@ export function ProviderSettingsTab({
               setSettings((s) => (s ? { ...s, ollamaBaseUrl: v } : s));
               schedulePatch({ ollamaBaseUrl: v });
             }}
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+            className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-ps-accent/50"
           />
           {settings?.selectedProvider !== "ollama_cloud" ? (
             <>
               {settings?.selectedProvider === "ollama" ? (
-                <p className="text-[11px] leading-relaxed text-slate-500">
-                  <span className="font-mono text-slate-600 dark:text-slate-400">Refresh Models</span> loads tags from your local
-                  daemon (<span className="font-mono text-slate-600 dark:text-slate-400">/api/tags</span>).
+                <p className="text-[11px] leading-relaxed text-ps-faint">
+                  <span className="font-mono text-ps-muted">Refresh Models</span> loads tags from your local
+                  daemon (<span className="font-mono text-ps-muted">/api/tags</span>).
                 </p>
               ) : null}
               <ModelPickRow
@@ -546,8 +546,8 @@ export function ProviderSettingsTab({
                 onRefresh={refreshLocalOllamaModels}
                 refreshLabel="Refresh Models"
               />
-              <details className="mt-2 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-2 py-2">
-                <summary className="cursor-pointer text-[11px] text-slate-500">Type model name…</summary>
+              <details className="mt-2 rounded-md border border-ps-border bg-ps-elevated px-2 py-2">
+                <summary className="cursor-pointer text-[11px] text-ps-faint">Type model name…</summary>
                 <input
                   type="text"
                   placeholder="e.g. my.gguf:latest"
@@ -558,13 +558,13 @@ export function ProviderSettingsTab({
                     setSettings((s) => (s ? { ...s, ollamaModel: v } : s));
                     schedulePatch({ ollamaModel: v });
                   }}
-                  className="mt-2 w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+                  className="mt-2 w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
                 />
               </details>
             </>
           ) : (
-            <p className="text-[11px] leading-relaxed text-slate-500">
-              With <span className="font-medium text-slate-700 dark:text-slate-300">Ollama · Cloud</span> selected, set the model
+            <p className="text-[11px] leading-relaxed text-ps-faint">
+              With <span className="font-medium text-ps-muted">Ollama · Cloud</span> selected, set the model
               name in the cloud panel below.
             </p>
           )}
@@ -574,7 +574,7 @@ export function ProviderSettingsTab({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-300/95">Ollama · Cloud</p>
           {settings?.selectedProvider === "ollama_cloud" ? (
             <>
-              <p className="text-xs leading-relaxed text-slate-900 dark:text-slate-100">
+              <p className="text-xs leading-relaxed text-ps-ink">
                 Ollama Cloud runs models on Ollama&apos;s servers (not locally). Requires an Ollama API key from{" "}
                 <a
                   href={OLLAMA_CLOUD_KEYS_URL}
@@ -586,10 +586,10 @@ export function ProviderSettingsTab({
                 </a>
                 .
               </p>
-              <p className="text-[11px] leading-relaxed text-slate-500">
-                <span className="font-mono text-slate-600 dark:text-slate-400">Refresh Models</span> loads cloud tags from{" "}
-                <span className="font-mono text-slate-600 dark:text-slate-400">https://ollama.com/api/tags</span>. Preset{" "}
-                <span className="font-mono text-slate-600 dark:text-slate-400">{OLLAMA_CLOUD_MODEL_PLACEHOLDER}</span> entries stay
+              <p className="text-[11px] leading-relaxed text-ps-faint">
+                <span className="font-mono text-ps-muted">Refresh Models</span> loads cloud tags from{" "}
+                <span className="font-mono text-ps-muted">https://ollama.com/api/tags</span>. Preset{" "}
+                <span className="font-mono text-ps-muted">{OLLAMA_CLOUD_MODEL_PLACEHOLDER}</span> entries stay
                 available without a refresh.
               </p>
               <ModelPickRow
@@ -603,8 +603,8 @@ export function ProviderSettingsTab({
                 onRefresh={refreshOllamaCloudModels}
                 refreshLabel="Refresh Models"
               />
-              <details className="mt-2 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-2 py-2">
-                <summary className="cursor-pointer text-[11px] text-slate-500">Type model name…</summary>
+              <details className="mt-2 rounded-md border border-ps-border bg-ps-elevated px-2 py-2">
+                <summary className="cursor-pointer text-[11px] text-ps-faint">Type model name…</summary>
                 <input
                   type="text"
                   placeholder={OLLAMA_CLOUD_MODEL_PLACEHOLDER}
@@ -615,20 +615,20 @@ export function ProviderSettingsTab({
                     setSettings((s) => (s ? { ...s, ollamaCloudModel: v } : s));
                     schedulePatch({ ollamaCloudModel: v });
                   }}
-                  className="mt-2 w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-sky-500/50"
+                  className="mt-2 w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-sky-500/50"
                 />
               </details>
             </>
           ) : (
-            <p className="text-[11px] leading-relaxed text-slate-500">
+            <p className="text-[11px] leading-relaxed text-ps-faint">
               Choose <span className="font-medium text-sky-200/90">Ollama · Cloud — models on ollama.com</span>{" "}
               in the provider menu above to configure the cloud model, refresh the catalog from{" "}
-              <span className="font-mono text-slate-600 dark:text-slate-400">/api/tags</span>, and save your API key.
+              <span className="font-mono text-ps-muted">/api/tags</span>, and save your API key.
             </p>
           )}
 
-          <div className="space-y-2 border-t border-slate-200 dark:border-slate-800/70 pt-3">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
+          <div className="space-y-2 border-t border-ps-border/70 pt-3">
+            <div className="flex items-center gap-2 text-xs text-ps-faint">
               <KeyRound className="size-3.5 shrink-0" aria-hidden />
               <span>
                 Ollama Cloud API key:{" "}
@@ -645,12 +645,12 @@ export function ProviderSettingsTab({
               placeholder="Paste Ollama API key"
               value={ollamaKeyInput}
               onChange={(e) => setOllamaKeyInput(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-sky-500/50"
+              className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-sky-500/50"
             />
             <button
               type="button"
               onClick={() => void saveOllamaCloudKey()}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800"
+              className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-3 py-2 text-xs font-semibold text-ps-ink hover:bg-ps-elevated dark:bg-ps-surface"
             >
               Save Ollama Cloud API key
             </button>
@@ -658,13 +658,13 @@ export function ProviderSettingsTab({
         </div>
       </section>
 
-      <section className="space-y-3 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+      <section className="space-y-3 rounded-lg border border-ps-border bg-ps-elevated p-3">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">
           Anthropic (Claude)
         </h3>
         {settings?.selectedProvider === "anthropic" ? (
-          <p className="text-[11px] leading-relaxed text-slate-500">
-            <span className="font-mono text-slate-600 dark:text-slate-400">Refresh Models</span> lists models your API key can access.
+          <p className="text-[11px] leading-relaxed text-ps-faint">
+            <span className="font-mono text-ps-muted">Refresh Models</span> lists models your API key can access.
             Common Claude ids remain available without a refresh.
           </p>
         ) : null}
@@ -679,8 +679,8 @@ export function ProviderSettingsTab({
           onRefresh={refreshAnthropicModels}
           refreshLabel="Refresh Models"
         />
-        <details className="mt-2 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-2 py-2">
-          <summary className="cursor-pointer text-[11px] text-slate-500">Type model name…</summary>
+        <details className="mt-2 rounded-md border border-ps-border bg-ps-elevated px-2 py-2">
+          <summary className="cursor-pointer text-[11px] text-ps-faint">Type model name…</summary>
           <input
             type="text"
             placeholder="e.g. claude-3-5-sonnet-20241022"
@@ -691,10 +691,10 @@ export function ProviderSettingsTab({
               setSettings((s) => (s ? { ...s, anthropicModel: v } : s));
               schedulePatch({ anthropicModel: v });
             }}
-            className="mt-2 w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+            className="mt-2 w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
           />
         </details>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex items-center gap-2 text-xs text-ps-faint">
           <KeyRound className="size-3.5 shrink-0" aria-hidden />
           <span>
             API key:{" "}
@@ -711,22 +711,22 @@ export function ProviderSettingsTab({
           placeholder="sk-ant-…"
           value={anthropicKeyInput}
           onChange={(e) => setAnthropicKeyInput(e.target.value)}
-          className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+          className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
         />
         <button
           type="button"
           onClick={() => void saveAnthropicKey()}
-          className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800"
+          className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-3 py-2 text-xs font-semibold text-ps-ink hover:bg-ps-elevated dark:bg-ps-surface"
         >
           Save Anthropic API key
         </button>
       </section>
 
-      <section className="space-y-3 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+      <section className="space-y-3 rounded-lg border border-ps-border bg-ps-elevated p-3">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">
           Google Gemini
         </h3>
-        <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="gemini-base">
+        <label className="block text-xs font-medium text-ps-muted" htmlFor="gemini-base">
           Base URL
         </label>
         <input
@@ -739,7 +739,7 @@ export function ProviderSettingsTab({
             setSettings((s) => (s ? { ...s, geminiBaseUrl: v } : s));
             schedulePatch({ geminiBaseUrl: v });
           }}
-          className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+          className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-ps-accent/50"
         />
         <ModelPickRow
           htmlFor="gemini-model"
@@ -752,8 +752,8 @@ export function ProviderSettingsTab({
           onRefresh={refreshGeminiModels}
           refreshLabel="Refresh Models"
         />
-        <details className="mt-2 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-2 py-2">
-          <summary className="cursor-pointer text-[11px] text-slate-500">Type model name…</summary>
+        <details className="mt-2 rounded-md border border-ps-border bg-ps-elevated px-2 py-2">
+          <summary className="cursor-pointer text-[11px] text-ps-faint">Type model name…</summary>
           <input
             type="text"
             placeholder="e.g. gemini-2.5-flash"
@@ -764,10 +764,10 @@ export function ProviderSettingsTab({
               setSettings((s) => (s ? { ...s, geminiModel: v } : s));
               schedulePatch({ geminiModel: v });
             }}
-            className="mt-2 w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+            className="mt-2 w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
           />
         </details>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex items-center gap-2 text-xs text-ps-faint">
           <KeyRound className="size-3.5 shrink-0" aria-hidden />
           <span>
             API key:{" "}
@@ -784,22 +784,22 @@ export function ProviderSettingsTab({
           placeholder="Google AI Studio API key"
           value={geminiKeyInput}
           onChange={(e) => setGeminiKeyInput(e.target.value)}
-          className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+          className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
         />
         <button
           type="button"
           onClick={() => void saveGeminiKey()}
-          className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800"
+          className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-3 py-2 text-xs font-semibold text-ps-ink hover:bg-ps-elevated dark:bg-ps-surface"
         >
           Save Gemini API key
         </button>
       </section>
 
-      <section className="space-y-3 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+      <section className="space-y-3 rounded-lg border border-ps-border bg-ps-elevated p-3">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">
           xAI (Grok)
         </h3>
-        <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="xai-base">
+        <label className="block text-xs font-medium text-ps-muted" htmlFor="xai-base">
           Base URL
         </label>
         <input
@@ -812,7 +812,7 @@ export function ProviderSettingsTab({
             setSettings((s) => (s ? { ...s, xaiBaseUrl: v } : s));
             schedulePatch({ xaiBaseUrl: v });
           }}
-          className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+          className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-ps-accent/50"
         />
         <ModelPickRow
           htmlFor="xai-model"
@@ -825,8 +825,8 @@ export function ProviderSettingsTab({
           onRefresh={refreshXaiModels}
           refreshLabel="Refresh Models"
         />
-        <details className="mt-2 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-2 py-2">
-          <summary className="cursor-pointer text-[11px] text-slate-500">Type model name…</summary>
+        <details className="mt-2 rounded-md border border-ps-border bg-ps-elevated px-2 py-2">
+          <summary className="cursor-pointer text-[11px] text-ps-faint">Type model name…</summary>
           <input
             type="text"
             placeholder="e.g. grok-4-fast-reasoning"
@@ -837,10 +837,10 @@ export function ProviderSettingsTab({
               setSettings((s) => (s ? { ...s, xaiModel: v } : s));
               schedulePatch({ xaiModel: v });
             }}
-            className="mt-2 w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+            className="mt-2 w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
           />
         </details>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex items-center gap-2 text-xs text-ps-faint">
           <KeyRound className="size-3.5 shrink-0" aria-hidden />
           <span>
             API key:{" "}
@@ -857,35 +857,35 @@ export function ProviderSettingsTab({
           placeholder="xAI API key"
           value={xaiKeyInput}
           onChange={(e) => setXaiKeyInput(e.target.value)}
-          className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+          className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
         />
         <button
           type="button"
           onClick={() => void saveXaiKey()}
-          className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800"
+          className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-3 py-2 text-xs font-semibold text-ps-ink hover:bg-ps-elevated dark:bg-ps-surface"
         >
           Save xAI API key
         </button>
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">
           Generation
         </h3>
         <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+          <div className="flex items-center justify-between text-xs text-ps-muted">
             <span className="inline-flex items-center gap-1.5">
               <span>Temperature</span>
               <button
                 type="button"
-                className="inline-flex size-5 items-center justify-center rounded-full border border-slate-300 dark:border-slate-600/80 bg-slate-100 dark:bg-slate-900/80 text-[11px] font-semibold text-slate-600 dark:text-slate-400 hover:border-slate-500 hover:text-slate-800 dark:text-slate-200"
+                className="inline-flex size-5 items-center justify-center rounded-md border border-ps-border/80 bg-ps-elevated dark:bg-ps-elevated text-[11px] font-semibold text-ps-muted hover:border-ps-border hover:text-ps-ink"
                 title={TEMPERATURE_INFO}
                 aria-label={TEMPERATURE_INFO}
               >
                 i
               </button>
             </span>
-            <span className="font-mono text-slate-700 dark:text-slate-300">
+            <span className="font-mono text-ps-muted">
               {settings?.temperature?.toFixed(2) ?? "—"}
             </span>
           </div>
@@ -911,17 +911,17 @@ export function ProviderSettingsTab({
                 }
               })();
             }}
-            className="h-2 w-full cursor-pointer accent-indigo-500 disabled:opacity-50"
+            className="h-2 w-full cursor-pointer accent-ps-accent disabled:opacity-50"
           />
         </div>
-        <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="max-tokens-select">
+        <label className="block text-xs font-medium text-ps-muted" htmlFor="max-tokens-select">
           Max input tokens
         </label>
-        <p className="text-[11px] leading-relaxed text-slate-500">
+        <p className="text-[11px] leading-relaxed text-ps-faint">
           Presets match common context sizes. This caps how many tokens the model may produce in its
           reply (generation budget).{" "}
-          <span className="text-slate-600 dark:text-slate-400">
-            <strong className="font-medium text-slate-700 dark:text-slate-300">Use model default</strong> lets Persistent Sage use this
+          <span className="text-ps-muted">
+            <strong className="font-medium text-ps-muted">Use model default</strong> lets Persistent Sage use this
             model&apos;s context window from the provider, then apply a safe per-API limit. Explicit values
             are clamped if the active model cannot honor them.
           </span>
@@ -949,7 +949,7 @@ export function ProviderSettingsTab({
               }
             })();
           }}
-          className="w-full cursor-pointer rounded-lg border border-zinc-300 dark:border-zinc-600 bg-zinc-100 dark:bg-zinc-900 py-2.5 pl-3 pr-8 text-sm text-zinc-900 dark:text-zinc-100 outline-none [color-scheme:light] dark:[color-scheme:dark] focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+          className="w-full cursor-pointer rounded-lg border border-zinc-300 dark:border-zinc-600 bg-zinc-100 dark:bg-zinc-900 py-2.5 pl-3 pr-8 text-sm text-zinc-900 dark:text-zinc-100 outline-none [color-scheme:light] dark:[color-scheme:dark] focus:border-ps-accent/60 focus:ring-2 focus:ring-ps-accent/25 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
         >
           {MAX_TOKEN_SELECT_OPTIONS.map((o) => (
             <option

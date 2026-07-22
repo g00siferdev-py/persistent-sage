@@ -4,7 +4,6 @@ import {
   Braces,
   CheckCircle2,
   Minimize2,
-  Sparkles,
 } from "lucide-react";
 import { CodeEditor } from "@/components/ui/CodeEditor";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -94,16 +93,16 @@ export function JsonPlaygroundPanel() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-slate-900/80 px-3 py-1.5">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-ps-border bg-ps-elevated px-3 py-1.5">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={format}
             disabled={validation.state !== "valid"}
             title="Pretty-print with the selected indent"
-            className="flex items-center gap-1 rounded bg-violet-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-violet-600 disabled:opacity-50"
+            className="flex items-center gap-1 rounded bg-ps-accent px-2.5 py-1 text-xs font-medium text-white hover:bg-ps-accent-hover disabled:opacity-50"
           >
-            <Sparkles className="h-3 w-3" aria-hidden />
+            <Braces className="h-3 w-3" aria-hidden />
             Format
           </button>
           <button
@@ -111,7 +110,7 @@ export function JsonPlaygroundPanel() {
             onClick={minify}
             disabled={validation.state !== "valid"}
             title="Remove all whitespace"
-            className="flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+            className="flex items-center gap-1 rounded border border-ps-border bg-ps-surface px-2.5 py-1 text-xs text-ps-ink hover:bg-ps-surface disabled:opacity-50"
           >
             <Minimize2 className="h-3 w-3" aria-hidden />
             Minify
@@ -120,7 +119,7 @@ export function JsonPlaygroundPanel() {
             value={indent}
             onChange={(e) => setIndent(Number(e.target.value))}
             title="Indent width for Format"
-            className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200 outline-none focus:border-violet-500"
+            className="rounded border border-ps-border bg-ps-canvas px-2 py-1 text-xs text-ps-ink outline-none focus:border-ps-accent"
           >
             <option value={2}>2 spaces</option>
             <option value={4}>4 spaces</option>
@@ -141,12 +140,12 @@ export function JsonPlaygroundPanel() {
 
       <div
         className={`flex shrink-0 items-start gap-2 border-t px-3 py-2 text-xs ${
-          validation.state === "invalid"
-            ? "border-red-900/60 bg-red-950/30 text-red-300"
-            : validation.state === "valid"
-              ? "border-emerald-900/50 bg-emerald-950/20 text-emerald-300"
-              : "border-slate-800 bg-slate-900/60 text-slate-500"
-        }`}
+ validation.state === "invalid"
+ ? "border-red-900/60 bg-red-950/30 text-red-300"
+ : validation.state === "valid"
+ ? "border-emerald-900/50 bg-emerald-950/20 text-emerald-300"
+ : "border-ps-border bg-ps-elevated text-ps-faint"
+ }`}
         role="status"
       >
         {validation.state === "valid" ? (

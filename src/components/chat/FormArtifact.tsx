@@ -30,18 +30,18 @@ function FieldInput({
   const kind = field.kind ?? "text";
   const id = `artifact-field-${field.id}`;
   const base =
-    "w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950/50 px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 disabled:opacity-50";
+    "w-full rounded-md border border-ps-border bg-white dark:bg-ps-canvas px-2.5 py-1.5 text-sm text-ps-ink disabled:opacity-50";
 
   if (kind === "checkbox") {
     return (
-      <label className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+      <label className="flex items-center gap-2 text-sm text-ps-ink">
         <input
           id={id}
           type="checkbox"
           checked={Boolean(value)}
           disabled={disabled}
           onChange={(e) => onChange(e.target.checked)}
-          className="size-4 rounded border-slate-400"
+          className="size-4 rounded border-ps-border"
         />
         {field.label}
       </label>
@@ -51,7 +51,7 @@ function FieldInput({
   if (kind === "textarea") {
     return (
       <div className="space-y-1">
-        <label htmlFor={id} className="text-xs font-medium text-slate-600 dark:text-slate-300">
+        <label htmlFor={id} className="text-xs font-medium text-ps-muted">
           {field.label}
           {field.required ? <span className="text-rose-500"> *</span> : null}
         </label>
@@ -73,7 +73,7 @@ function FieldInput({
     if (kind === "radio") {
       return (
         <fieldset className="space-y-1.5">
-          <legend className="text-xs font-medium text-slate-600 dark:text-slate-300">
+          <legend className="text-xs font-medium text-ps-muted">
             {field.label}
             {field.required ? <span className="text-rose-500"> *</span> : null}
           </legend>
@@ -95,7 +95,7 @@ function FieldInput({
     }
     return (
       <div className="space-y-1">
-        <label htmlFor={id} className="text-xs font-medium text-slate-600 dark:text-slate-300">
+        <label htmlFor={id} className="text-xs font-medium text-ps-muted">
           {field.label}
           {field.required ? <span className="text-rose-500"> *</span> : null}
         </label>
@@ -119,7 +119,7 @@ function FieldInput({
 
   return (
     <div className="space-y-1">
-      <label htmlFor={id} className="text-xs font-medium text-slate-600 dark:text-slate-300">
+      <label htmlFor={id} className="text-xs font-medium text-ps-muted">
         {field.label}
         {field.required ? <span className="text-rose-500"> *</span> : null}
       </label>
@@ -183,11 +183,11 @@ export function FormArtifact({
   };
 
   return (
-    <div className="space-y-3 rounded-lg border border-indigo-500/25 bg-indigo-500/5 p-3">
+    <div className="space-y-3 rounded-lg border border-ps-accent/25 bg-ps-accent/5 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+        <p className="text-xs font-semibold text-ps-ink">{title}</p>
         {projectId ? (
-          <span className="rounded-full bg-slate-200/80 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-mono text-slate-600 dark:text-slate-400">
+          <span className="rounded-md bg-ps-elevated dark:bg-ps-surface px-2 py-0.5 text-[10px] font-mono text-ps-muted">
             project:{projectId}
           </span>
         ) : null}
@@ -207,7 +207,7 @@ export function FormArtifact({
         type="button"
         disabled={disabled}
         onClick={handleSubmit}
-        className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-lg bg-ps-accent px-3 py-2 text-xs font-semibold text-white hover:bg-ps-accent disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Send className="size-3.5" aria-hidden />
         {buttonLabel}

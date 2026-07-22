@@ -13,8 +13,8 @@ export function SplashScreen() {
     <div className="flex h-full min-h-screen flex-col items-center justify-center bg-[#050a14]">
       <div
         className={`flex max-w-[min(100%,28rem)] flex-col items-center px-4 transition-opacity duration-500 ${
-          visible ? "opacity-100" : "opacity-0"
-        }`}
+ visible ? "opacity-100" : "opacity-0"
+ }`}
       >
         <img
           src="/persistent-sage-splash.png"

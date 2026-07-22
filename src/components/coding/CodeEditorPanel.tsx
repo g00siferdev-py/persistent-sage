@@ -57,18 +57,18 @@ export function CodeEditorPanel({
 
   if (files.length === 0) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center border-b border-slate-800 bg-slate-950/40 px-6 text-center">
-        <p className="max-w-sm text-sm text-slate-500">
+      <div className="flex flex-1 flex-col items-center justify-center border-b border-ps-border bg-ps-canvas px-6 text-center">
+        <p className="max-w-sm text-sm text-ps-faint">
           Select a file in the tree to open it here. Edit and save with{" "}
-          <kbd className="rounded border border-slate-700 px-1 font-mono text-[10px]">Ctrl+S</kbd>.
+          <kbd className="rounded border border-ps-border px-1 font-mono text-[10px]">Ctrl+S</kbd>.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col border-b border-slate-800 bg-slate-950/60">
-      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-800 bg-slate-900/80 px-1 py-0.5">
+    <div className="flex min-h-0 flex-1 flex-col border-b border-ps-border bg-ps-canvas">
+      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-ps-border bg-ps-elevated px-1 py-0.5">
         {files.map((f) => {
           const dirty = f.content !== f.savedContent;
           const isActive = f.pathRel === activePath;
@@ -76,10 +76,10 @@ export function CodeEditorPanel({
             <div
               key={f.pathRel}
               className={`flex max-w-[12rem] shrink-0 items-center gap-1 rounded-t px-2 py-1 text-[11px] ${
-                isActive
-                  ? "bg-slate-950 text-slate-100"
-                  : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-200"
-              }`}
+ isActive
+ ? "bg-ps-canvas text-ps-ink"
+ : "text-ps-faint hover:bg-ps-surface hover:text-ps-ink"
+ }`}
             >
               <button
                 type="button"
@@ -92,7 +92,7 @@ export function CodeEditorPanel({
               </button>
               <button
                 type="button"
-                className="shrink-0 rounded p-0.5 hover:bg-slate-700"
+                className="shrink-0 rounded p-0.5 hover:bg-ps-surface"
                 onClick={() => onClose(f.pathRel)}
                 title="Close"
               >
@@ -106,7 +106,7 @@ export function CodeEditorPanel({
             type="button"
             disabled={!activeDirty || active?.loading}
             onClick={onRevert}
-            className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-40"
+            className="rounded p-1 text-ps-faint hover:bg-ps-surface hover:text-ps-ink disabled:opacity-40"
             title="Revert changes"
           >
             <RotateCcw className="h-3.5 w-3.5" aria-hidden />
@@ -115,7 +115,7 @@ export function CodeEditorPanel({
             type="button"
             disabled={!activeDirty || active?.loading}
             onClick={onSave}
-            className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-40"
+            className="rounded p-1 text-ps-faint hover:bg-ps-surface hover:text-ps-ink disabled:opacity-40"
             title="Save (Ctrl+S)"
           >
             <Save className="h-3.5 w-3.5" aria-hidden />
@@ -124,7 +124,7 @@ export function CodeEditorPanel({
             type="button"
             disabled={!active}
             onClick={() => void openExternal()}
-            className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-40"
+            className="rounded p-1 text-ps-faint hover:bg-ps-surface hover:text-ps-ink disabled:opacity-40"
             title="Open in external editor"
           >
             <ExternalLink className="h-3.5 w-3.5" aria-hidden />
@@ -133,7 +133,7 @@ export function CodeEditorPanel({
       </div>
 
       {active?.loading ? (
-        <div className="flex flex-1 items-center justify-center gap-2 text-xs text-slate-400">
+        <div className="flex flex-1 items-center justify-center gap-2 text-xs text-ps-faint">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
           Loading {active.pathRel}…
         </div>

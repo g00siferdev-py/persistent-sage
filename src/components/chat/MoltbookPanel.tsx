@@ -363,10 +363,10 @@ export function MoltbookPanel({ open, onClose }: Props) {
                   void loadFeed(s);
                 }}
                 className={`rounded-md px-2.5 py-1 text-[11px] font-semibold capitalize transition-colors ${
-                  !searchMode && sort === s
-                    ? "bg-[#e86d4a] text-[#1a100c]"
-                    : "text-[#a8d4d0] hover:bg-[#164f54]"
-                }`}
+ !searchMode && sort === s
+ ? "bg-[#e86d4a] text-[#1a100c]"
+ : "text-[#a8d4d0] hover:bg-[#164f54]"
+ }`}
               >
                 {s}
               </button>

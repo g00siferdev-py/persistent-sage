@@ -256,7 +256,7 @@ export function CompanionLayout({
   }, [loadBackendHint]);
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden">
+    <div className="ps-shell">
       {onboardingChecked && showOnboarding ? (
         <OnboardingWizard
           onComplete={() => {
@@ -272,13 +272,13 @@ export function CompanionLayout({
           onDismiss={() => void dismissWhatsNew()}
         />
       ) : null}
-      <div className="flex shrink-0 items-center border-b border-slate-800/80 bg-slate-900/50 px-3 py-1.5">
+      <header className="ps-topbar">
         <AppModeSwitcher mode="companion" onModeChange={handleModeChange} />
-        <div className="ml-auto flex items-center gap-2">
-          <AppHelpButton />
+        <div className="ml-auto flex items-center gap-3 self-center">
           <TokenContextCounter conversationId={activeConversationId} />
+          <AppHelpButton />
         </div>
-      </div>
+      </header>
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <ConversationSidebar
           conversations={conversations}
@@ -310,11 +310,11 @@ export function CompanionLayout({
           onExtractAnchors={() => void extractAnchorsFromChat()}
           companionName={activeCompanionLabel}
         />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-ps-canvas/40">
           {backendHint ? (
             <div
               role="status"
-              className="shrink-0 border-b border-sky-800/50 bg-sky-950/50 px-4 py-2 text-xs leading-relaxed text-sky-100/95"
+              className="shrink-0 border-b border-ps-warm/40 bg-ps-warm-soft px-5 py-2.5 text-xs leading-relaxed text-ps-ink"
             >
               {backendHint}
             </div>

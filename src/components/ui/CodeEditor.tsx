@@ -63,7 +63,7 @@ export function CodeEditor({
       {showLineNumbers ? (
         <div
           ref={gutterRef}
-          className="shrink-0 select-none overflow-hidden border-r border-slate-200 bg-slate-100/70 py-2 pl-2 pr-2 text-right font-mono text-[11px] leading-[1.45rem] text-slate-400 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-600"
+          className="shrink-0 select-none overflow-hidden border-r border-ps-border bg-ps-elevated py-2 pl-2 pr-2 text-right font-mono text-[11px] leading-[1.45rem] text-ps-faint dark:border-ps-border dark:bg-ps-elevated dark:text-ps-muted"
           aria-hidden
         >
           {lineNumbers.map((n) => (
@@ -93,7 +93,7 @@ export function CodeEditor({
           spellCheck={false}
           readOnly={readOnly}
           placeholder={placeholder}
-          className="absolute inset-0 h-full w-full resize-none overflow-auto whitespace-pre bg-transparent py-2 pl-2 pr-4 text-transparent caret-slate-900 outline-none selection:bg-indigo-500/25 placeholder:text-slate-400 dark:caret-slate-100 dark:placeholder:text-slate-600"
+          className="absolute inset-0 h-full w-full resize-none overflow-auto whitespace-pre bg-transparent py-2 pl-2 pr-4 text-transparent caret-ps-ink outline-none selection:bg-ps-accent-soft placeholder:text-ps-faint caret-ps-ink dark:placeholder:text-ps-muted"
           style={SHARED_TEXT_STYLE}
         />
       </div>

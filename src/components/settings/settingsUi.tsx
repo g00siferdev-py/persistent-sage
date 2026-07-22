@@ -22,9 +22,9 @@ export function SettingsSection({
     <section className={`${compact ? "space-y-1.5" : "space-y-3"} ${className}`.trim()}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">{title}</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-ps-muted">{title}</h3>
           {description && !info ? (
-            <p className={`mt-1 leading-relaxed text-slate-500 ${compact ? "text-[10px]" : "text-xs"}`}>
+            <p className={`mt-1 leading-relaxed text-ps-faint ${compact ? "text-[10px]" : "text-xs"}`}>
               {description}
             </p>
           ) : null}
@@ -120,7 +120,7 @@ export function SettingsInfoTip({
               left: position.left,
               width: position.width,
             }}
-            className="fixed z-[300] max-h-[min(16rem,50vh)] overflow-y-auto rounded-lg border border-slate-300 dark:border-slate-700/90 bg-slate-50 dark:bg-slate-950 px-3 py-2.5 text-[11px] leading-relaxed text-slate-700 dark:text-slate-300 shadow-xl ring-1 ring-slate-300/40 dark:ring-slate-600/40"
+            className="fixed z-[300] max-h-[min(16rem,50vh)] overflow-y-auto rounded-lg border border-ps-border/90 bg-ps-elevated dark:bg-ps-canvas px-3 py-2.5 text-[11px] leading-relaxed text-ps-muted shadow-xl ring-1 ring-ps-border dark:ring-ps-border"
           >
             {children}
           </div>,
@@ -133,7 +133,7 @@ export function SettingsInfoTip({
       <button
         ref={buttonRef}
         type="button"
-        className="inline-flex size-5 items-center justify-center rounded-full border border-slate-300 dark:border-slate-600/80 bg-white dark:bg-slate-900/90 text-slate-600 dark:text-slate-400 transition hover:border-indigo-500/50 hover:bg-slate-200 dark:bg-slate-800 hover:text-indigo-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-500"
+        className="inline-flex size-5 items-center justify-center rounded-md border border-ps-border/80 bg-ps-surface/90 text-ps-muted transition hover:border-ps-accent/50 hover:bg-ps-elevated dark:bg-ps-surface hover:text-ps-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ps-accent"
         aria-label={`More about ${label}`}
         aria-expanded={open}
         aria-controls={open ? tipId : undefined}
@@ -184,29 +184,29 @@ export function SettingsToggleCard({
   const nestDepth = nestDepthProp ?? (indent ? 1 : 0);
   const nestWrap =
     nestDepth === 1
-      ? "ml-3 border-l-2 border-indigo-500/35 pl-2.5 sm:ml-4"
+      ? "ml-3 border-l-2 border-ps-accent/40 pl-2.5 sm:ml-4"
       : nestDepth === 2
-        ? "ml-6 border-l-2 border-indigo-500/25 pl-2.5 sm:ml-8"
+        ? "ml-6 border-l-2 border-ps-accent/25 pl-2.5 sm:ml-8"
         : "";
 
   return (
     <label
       htmlFor={id}
-      className={`block cursor-pointer rounded-lg border border-slate-200 dark:border-slate-800/70 bg-slate-50 dark:bg-slate-950/40 transition hover:border-slate-300 dark:border-slate-700/80 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-55 ${nestWrap} ${
-        compact ? "px-2.5 py-1.5" : "px-3 py-3"
-      }`}
+      className={`block cursor-pointer rounded-lg border border-ps-border/70 bg-ps-elevated transition hover:border-ps-border has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-55 ${nestWrap} ${
+ compact ? "px-2.5 py-1.5" : "px-3 py-3"
+ }`}
     >
       <div className="flex items-start gap-2">
         <input
           id={id}
           type="checkbox"
-          className={`shrink-0 rounded border-slate-300 dark:border-slate-600 accent-indigo-500 ${compact ? "mt-0 size-3.5" : "mt-0.5 size-4"}`}
+          className={`shrink-0 rounded border-ps-border accent-ps-accent ${compact ? "mt-0 size-3.5" : "mt-0.5 size-4"}`}
           checked={checked}
           disabled={disabled}
           onChange={(e) => onChange(e.target.checked)}
         />
         <span
-          className={`min-w-0 flex-1 font-medium leading-snug text-slate-800 dark:text-slate-200 ${compact ? "text-xs" : "text-sm"}`}
+          className={`min-w-0 flex-1 font-medium leading-snug text-ps-ink ${compact ? "text-xs" : "text-sm"}`}
         >
           {title}
         </span>
@@ -220,7 +220,7 @@ export function SettingsToggleCard({
         </p>
       ) : null}
       {showInlineDescription ? (
-        <p className={`leading-relaxed text-slate-600 dark:text-slate-400 ${compact ? "mt-1 pl-5 text-[10px]" : "mt-2 pl-7 text-xs"}`}>
+        <p className={`leading-relaxed text-ps-muted ${compact ? "mt-1 pl-5 text-[10px]" : "mt-2 pl-7 text-xs"}`}>
           {description}
         </p>
       ) : null}

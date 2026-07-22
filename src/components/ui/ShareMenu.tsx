@@ -129,7 +129,7 @@ export function ShareMenu({
         title="Share this message"
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white/80 font-medium text-slate-600 transition hover:bg-slate-100 dark:border-slate-700/80 dark:bg-slate-950/30 dark:text-slate-300 dark:hover:bg-slate-900 ${pad}`}
+        className={`ps-btn ${pad}`}
       >
         <Share2 className="size-3" aria-hidden />
         Share
@@ -137,47 +137,47 @@ export function ShareMenu({
       {open ? (
         <div
           role="menu"
-          className="absolute bottom-full right-0 z-30 mb-1 min-w-[14rem] overflow-hidden rounded-lg border border-slate-300 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+          className="ps-menu absolute bottom-full right-0 z-30 mb-1 min-w-[14rem]"
         >
           <button
             type="button"
             role="menuitem"
             disabled={moltbookBusy}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-800 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="ps-menu-item"
             onClick={() => void askAgentMoltbook()}
             title="Your companion posts as the agent — humans never post on Moltbook"
           >
-            <Globe className="size-3.5 shrink-0 text-indigo-500" aria-hidden />
+            <Globe className="size-3.5 shrink-0 text-ps-accent" aria-hidden />
             {moltbookBusy
               ? "Asking companion…"
               : moltbookOk
                 ? "Agent is posting…"
                 : "Ask companion to post on Moltbook"}
           </button>
-          <div className="my-1 border-t border-slate-200 dark:border-slate-700" />
+          <div className="ps-menu-sep" />
           {SHARE_TARGETS.map((target) => (
             <button
               key={target.id}
               type="button"
               role="menuitem"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="ps-menu-item"
               onClick={() => void openTarget(target.buildUrl)}
             >
-              <Share2 className="size-3.5 shrink-0 text-slate-400" aria-hidden />
+              <Share2 className="size-3.5 shrink-0 text-ps-faint" aria-hidden />
               {target.label}
             </button>
           ))}
           <button
             type="button"
             role="menuitem"
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="ps-menu-item"
             onClick={() => void copyForEmail()}
             title="Copies the text so you can paste it into an email or anywhere else"
           >
             {copied ? (
               <Check className="size-3.5 shrink-0 text-emerald-500" aria-hidden />
             ) : (
-              <Mail className="size-3.5 shrink-0 text-slate-400" aria-hidden />
+              <Mail className="size-3.5 shrink-0 text-ps-faint" aria-hidden />
             )}
             {copied ? "Copied for email" : "Copy for email"}
           </button>

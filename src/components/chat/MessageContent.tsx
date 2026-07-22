@@ -22,21 +22,21 @@ export function MessageContent({ text }: Props) {
         b.type === "code" ? (
           <div
             key={i}
-            className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900"
+            className="overflow-hidden rounded-lg border border-ps-border bg-ps-elevated dark:border-ps-border dark:bg-ps-elevated"
           >
-            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100/80 px-3 py-1.5 dark:border-slate-700 dark:bg-slate-800/80">
+            <div className="flex items-center justify-between border-b border-ps-border bg-ps-elevated px-3 py-1.5 dark:border-ps-border dark:bg-ps-surface">
               {b.language ? (
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-ps-muted">
                   {b.language}
                 </span>
               ) : (
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
                   Code
                 </span>
               )}
               <CopyButton text={b.code} label="Copy code" />
             </div>
-            <pre className="overflow-x-auto whitespace-pre-wrap p-3 text-xs leading-relaxed text-slate-800 dark:text-slate-100">
+            <pre className="overflow-x-auto whitespace-pre-wrap p-3 text-xs leading-relaxed text-ps-ink dark:text-ps-ink">
               <HighlightedCode code={b.code} language={b.language} />
             </pre>
           </div>

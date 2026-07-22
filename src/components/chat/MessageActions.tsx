@@ -62,10 +62,10 @@ export function MessageActions({
           title={starred ? "Remove from Favorites" : "Add to Favorites"}
           aria-pressed={starred}
           className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition ${
-            starred
-              ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-300"
-              : "border-slate-200 bg-white/80 text-slate-600 hover:bg-slate-100 dark:border-slate-700/80 dark:bg-slate-950/30 dark:text-slate-300 dark:hover:bg-slate-900"
-          }`}
+ starred
+ ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-300"
+ : "border-ps-border bg-white/80 text-ps-muted hover:bg-ps-elevated dark:border-ps-border dark:bg-ps-canvas dark:text-ps-muted dark:hover:bg-ps-elevated"
+ }`}
         >
           <Star
             className={`size-3 ${starred ? "fill-amber-400 text-amber-400" : ""}`}

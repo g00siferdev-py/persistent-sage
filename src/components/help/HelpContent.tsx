@@ -14,7 +14,7 @@ function DocLink({ href, children }: { href: string; children: React.ReactNode }
     <button
       type="button"
       onClick={() => void open()}
-      className="inline-flex items-center gap-1 font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+      className="inline-flex items-center gap-1 font-medium text-ps-accent hover:underline dark:text-ps-accent"
     >
       {children}
       <ExternalLink className="size-3" aria-hidden />
@@ -33,11 +33,11 @@ function Section({
 }) {
   return (
     <section className="space-y-2">
-      <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-ps-ink">
         {icon}
         {title}
       </h3>
-      <div className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">{children}</div>
+      <div className="text-xs leading-relaxed text-ps-muted">{children}</div>
     </section>
   );
 }
@@ -61,16 +61,16 @@ export function HelpContent() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-white">
-          <BookOpen className="size-5 text-indigo-500" aria-hidden />
+        <h2 className="flex items-center gap-2 text-base font-semibold text-ps-ink">
+          <BookOpen className="size-5 text-ps-accent" aria-hidden />
           Persistent Sage — Help
         </h2>
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-xs text-ps-faint">
           Local-first AI companion: chat, memory, personality, and a coding workspace for your repos.
         </p>
       </div>
 
-      <Section icon={<MessageCircle className="size-4 text-indigo-400" aria-hidden />} title="Companion mode">
+      <Section icon={<MessageCircle className="size-4 text-ps-accent" aria-hidden />} title="Companion mode">
         <ul className="list-inside list-disc space-y-1">
           <li>
             <strong>New chat</strong> in the sidebar starts a thread for your active companion profile.
@@ -104,9 +104,9 @@ export function HelpContent() {
         </ul>
       </Section>
 
-      <Section icon={<Cpu className="size-4 text-slate-400" aria-hidden />} title="Data on your machine">
+      <Section icon={<Cpu className="size-4 text-ps-faint" aria-hidden />} title="Data on your machine">
         {dataDir ? (
-          <p className="mb-2 font-mono text-[10px] text-slate-500" title={dataDir}>
+          <p className="mb-2 font-mono text-[10px] text-ps-faint" title={dataDir}>
             Data folder: {dataDir.length > 56 ? `…${dataDir.slice(-52)}` : dataDir}
           </p>
         ) : null}
@@ -134,7 +134,7 @@ export function HelpContent() {
             <button
               type="button"
               onClick={() => void invoke("reveal_data_directory")}
-              className="inline-flex items-center gap-1 font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+              className="inline-flex items-center gap-1 font-medium text-ps-accent hover:underline dark:text-ps-accent"
             >
               <FolderOpen className="size-3" aria-hidden />
               Reveal data folder
@@ -143,8 +143,8 @@ export function HelpContent() {
         </ul>
       </Section>
 
-      <section className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Documentation</h3>
+      <section className="space-y-2 rounded-lg border border-ps-border bg-ps-elevated p-3 dark:border-ps-border dark:bg-ps-canvas">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-ps-faint">Documentation</h3>
         <ul className="space-y-1 text-xs">
           <li>
             <DocLink href={LEGAL_LINKS.userGuide}>User guide</DocLink> — day-to-day usage

@@ -255,7 +255,7 @@ export function EventStreamDebugger({ repoId: _repoId }: Props) {
       <button
         type="button"
         onClick={() => setCollapsed(false)}
-        className="flex h-full w-8 shrink-0 flex-col items-center justify-start gap-1 border-l border-slate-800 bg-slate-900/60 py-2 text-[10px] uppercase tracking-wide text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+        className="flex h-full w-8 shrink-0 flex-col items-center justify-start gap-1 border-l border-ps-border bg-ps-elevated py-2 text-[10px] uppercase tracking-wide text-ps-faint hover:bg-ps-surface hover:text-ps-ink"
         title="Open Event Stream Debugger"
       >
         <Bug className="h-4 w-4" />
@@ -285,8 +285,8 @@ export function EventStreamDebugger({ repoId: _repoId }: Props) {
       case "tool:start":
         return (
           <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] ${
-            toolKind === "synthetic" ? "bg-amber-900/40 text-amber-200" : "bg-violet-900/50 text-violet-200"
-          }`}>
+ toolKind === "synthetic" ? "bg-amber-900/40 text-amber-200" : "bg-ps-accent-soft text-ps-accent"
+ }`}>
             <Loader2 className="h-3 w-3 animate-spin" />
             {toolKind === "synthetic" ? "synthetic:start" : "tool:start"}
           </span>
@@ -294,15 +294,15 @@ export function EventStreamDebugger({ repoId: _repoId }: Props) {
       case "tool:end":
         return (
           <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] ${
-            toolKind === "synthetic" ? "bg-amber-900/40 text-amber-200" : "bg-violet-900/40 text-violet-200"
-          }`}>
+ toolKind === "synthetic" ? "bg-amber-900/40 text-amber-200" : "bg-ps-accent-soft text-ps-accent"
+ }`}>
             <CheckCircle2 className="h-3 w-3" />
             {toolKind === "synthetic" ? "synthetic:end" : "tool:end"}
           </span>
         );
       case "tool:status":
         return (
-          <span className="flex items-center gap-1 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">
+          <span className="flex items-center gap-1 rounded bg-ps-surface px-1.5 py-0.5 text-[10px] text-ps-muted">
             <Activity className="h-3 w-3" />
             status
           </span>
@@ -313,7 +313,7 @@ export function EventStreamDebugger({ repoId: _repoId }: Props) {
   };
 
   return (
-    <div className="flex h-full w-full flex-col gap-2 overflow-hidden bg-slate-900/60 p-3 text-xs">
+    <div className="flex h-full w-full flex-col gap-2 overflow-hidden bg-ps-elevated p-3 text-xs">
       <div className="flex items-center justify-between">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-amber-200/90">
           Event Stream Debugger
@@ -322,7 +322,7 @@ export function EventStreamDebugger({ repoId: _repoId }: Props) {
           <button
             type="button"
             onClick={() => void handleEmitSynthetic()}
-            className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-amber-400 hover:bg-slate-800 hover:text-amber-200"
+            className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-amber-400 hover:bg-ps-surface hover:text-amber-200"
             title="Emit a synthetic tool:start / tool:end pair"
           >
             <Play className="h-3 w-3" />
@@ -331,7 +331,7 @@ export function EventStreamDebugger({ repoId: _repoId }: Props) {
           <button
             type="button"
             onClick={() => void handleSaveSnapshot()}
-            className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-ps-faint hover:bg-ps-surface hover:text-ps-ink"
             title="Copy backend event log snapshot to clipboard"
           >
             <Copy className="h-3 w-3" />
@@ -340,7 +340,7 @@ export function EventStreamDebugger({ repoId: _repoId }: Props) {
           <button
             type="button"
             onClick={handleClear}
-            className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-800 hover:text-red-300"
+            className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-ps-faint hover:bg-ps-surface hover:text-red-300"
           >
             <Trash2 className="h-3 w-3" />
             Clear
@@ -348,7 +348,7 @@ export function EventStreamDebugger({ repoId: _repoId }: Props) {
           <button
             type="button"
             onClick={() => setCollapsed(true)}
-            className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            className="rounded p-1 text-ps-faint hover:bg-ps-surface hover:text-ps-ink"
             title="Collapse Event Stream Debugger"
           >
             <span className="sr-only">Collapse</span>
@@ -359,15 +359,15 @@ export function EventStreamDebugger({ repoId: _repoId }: Props) {
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center justify-between text-[10px] text-slate-500">
+      <div className="flex shrink-0 items-center justify-between text-[10px] text-ps-faint">
         <span>{events.length} event{events.length === 1 ? "" : "s"} captured</span>
         <span>{selected ? `Selected: ${shortId(selected.id)}` : "Click an event to inspect"}</span>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-slate-800 bg-slate-950 p-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-ps-border bg-ps-canvas p-2">
           {events.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-500">
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-ps-faint">
               <Bug className="h-5 w-5" />
               <p className="max-w-[180px] text-[11px]">
                 No events yet. Emit a synthetic event or run a tool.
@@ -380,17 +380,17 @@ export function EventStreamDebugger({ repoId: _repoId }: Props) {
                   <button
                     type="button"
                     onClick={() => setSelected(ev)}
-                    className={`flex w-full items-center gap-2 rounded border border-slate-800/50 px-2 py-1.5 text-left hover:bg-slate-900 ${
-                      selected?.id === ev.id && selected?.frontendTimestamp === ev.frontendTimestamp
-                        ? "bg-slate-900 ring-1 ring-amber-500/40"
-                        : "bg-slate-900/40"
-                    }`}
+                    className={`flex w-full items-center gap-2 rounded border border-ps-border px-2 py-1.5 text-left hover:bg-ps-elevated ${
+ selected?.id === ev.id && selected?.frontendTimestamp === ev.frontendTimestamp
+ ? "bg-ps-elevated ring-1 ring-amber-500/40"
+ : "bg-ps-elevated"
+ }`}
                   >
                     {kindBadge(ev.kind, ev.toolKind)}
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-slate-300">
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-ps-muted">
                       {ev.mission || ev.label || ev.status || ev.kind}
                     </span>
-                    <span className="shrink-0 text-[10px] text-slate-500">
+                    <span className="shrink-0 text-[10px] text-ps-faint">
                       {formatTime(ev.frontendTimestamp)}
                     </span>
                     {ev.success === false && <XCircle className="h-3.5 w-3.5 shrink-0 text-red-400" />}
@@ -403,24 +403,24 @@ export function EventStreamDebugger({ repoId: _repoId }: Props) {
         </div>
 
         {selected && (
-          <div className="flex min-h-[8rem] shrink-0 flex-col gap-1 rounded border border-slate-800 bg-slate-950/60 p-2">
+          <div className="flex min-h-[8rem] shrink-0 flex-col gap-1 rounded border border-ps-border bg-ps-canvas p-2">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-300/80">
                 Payload
               </span>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-slate-500">{selected.kind}</span>
+                <span className="text-[10px] text-ps-faint">{selected.kind}</span>
                 <button
                   type="button"
                   onClick={() => setSelected(null)}
-                  className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                  className="rounded p-1 text-ps-faint hover:bg-ps-surface hover:text-ps-ink"
                   title="Close payload details"
                 >
                   <XCircle className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
-            <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded border border-slate-800 bg-slate-950 p-1.5 text-[10px] text-slate-300">
+            <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded border border-ps-border bg-ps-canvas p-1.5 text-[10px] text-ps-muted">
               {JSON.stringify(selected.payload, null, 2)}
             </pre>
           </div>

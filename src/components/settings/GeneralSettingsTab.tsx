@@ -43,7 +43,7 @@ const MEMORY_LLM_INFO = (
 const MEMORY_SEMANTIC_INFO = (
   <>
     Embeds anchor text in the background (small batches). During chat, your companion can use{" "}
-    <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("memory_search")}</strong> for
+    <strong className="font-medium text-ps-muted">{toolDisplayName("memory_search")}</strong> for
     semantic lookup — not a blocking network call on every message. Requires OpenAI, <strong>local</strong> Ollama (
     <code className="font-mono text-[10px]">ollama pull nomic-embed-text</code>), or local Ollama when chat uses
     Anthropic or Ollama Cloud.
@@ -288,13 +288,13 @@ export function GeneralSettingsTab({
         <button
           type="button"
           onClick={() => onRequestOnboarding?.()}
-          className="w-full rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 py-2.5 text-sm font-medium text-indigo-800 transition hover:bg-indigo-500/20 dark:text-indigo-200"
+          className="w-full rounded-lg border border-ps-accent/40 bg-ps-accent-soft px-3 py-2.5 text-sm font-medium text-ps-accent transition hover:bg-ps-accent-soft dark:text-ps-accent"
         >
           Run setup wizard again
         </button>
-        <p className="text-[11px] text-slate-500">
+        <p className="text-[11px] text-ps-faint">
           Provider, API keys, and desktop vs USB storage tips. Windows installer guide:{" "}
-          <span className="font-mono text-slate-600 dark:text-slate-400">docs/INSTALL-WINDOWS.md</span>
+          <span className="font-mono text-ps-muted">docs/INSTALL-WINDOWS.md</span>
         </p>
       </SettingsSection>
 
@@ -306,13 +306,13 @@ export function GeneralSettingsTab({
             : "Checks GitHub Releases for signed update packages (NSIS installer, portable, or build from source)."
         }
       >
-        <div className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-800/70 bg-slate-50 dark:bg-slate-950/35 p-3">
+        <div className="space-y-2 rounded-lg border border-ps-border/70 bg-ps-elevated dark:bg-ps-canvas p-3">
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               disabled={updateBusy}
               onClick={() => void checkForUpdates()}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-3 py-2 text-xs font-semibold text-ps-ink hover:bg-ps-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
             >
               {updateBusy &&
               !pendingUpdate &&
@@ -332,7 +332,7 @@ export function GeneralSettingsTab({
                   : !pendingUpdate)
               }
               onClick={() => void installPendingUpdate()}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-ps-accent px-3 py-2 text-xs font-semibold text-white hover:bg-ps-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
               {updateBusy &&
               (pendingUpdate || storeUpdateAvailable) ? (
@@ -344,21 +344,21 @@ export function GeneralSettingsTab({
             </button>
           </div>
           {updateStatus ? (
-            <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">{updateStatus}</p>
+            <p className="text-[11px] leading-relaxed text-ps-muted">{updateStatus}</p>
           ) : (
-            <p className="text-[11px] leading-relaxed text-slate-500">
+            <p className="text-[11px] leading-relaxed text-ps-faint">
               {distributionInfo?.updatesViaMicrosoftStore
                 ? "Microsoft Store installs never download updates from GitHub."
                 : "GitHub installs are verified with Persistent Sage&apos;s Tauri updater key before installation."}
             </p>
           )}
           {pendingUpdate?.body ? (
-            <p className="max-h-24 overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-200 dark:border-slate-800/60 bg-white/70 dark:bg-slate-950/50 p-2 text-[10px] leading-relaxed text-slate-500">
+            <p className="max-h-24 overflow-y-auto whitespace-pre-wrap rounded-md border border-ps-border bg-white/70 dark:bg-ps-canvas p-2 text-[10px] leading-relaxed text-ps-faint">
               {pendingUpdate.body}
             </p>
           ) : null}
           {updateProgress ? (
-            <p className="text-[10px] text-slate-500">{updateProgress}</p>
+            <p className="text-[10px] text-ps-faint">{updateProgress}</p>
           ) : null}
         </div>
       </SettingsSection>
@@ -367,8 +367,8 @@ export function GeneralSettingsTab({
         title="Send feedback"
         description="Send public bug reports and ideas to the Persistent Sage GitHub issue tracker."
       >
-        <div className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-800/70 bg-slate-50 dark:bg-slate-950/35 p-3">
-          <p className="text-[11px] leading-relaxed text-slate-500">
+        <div className="space-y-2 rounded-lg border border-ps-border/70 bg-ps-elevated dark:bg-ps-canvas p-3">
+          <p className="text-[11px] leading-relaxed text-ps-faint">
             These buttons open your browser with a prefilled GitHub Issue. Persistent Sage does not attach chats,
             Memory Anchors, logs, or API keys automatically.
           </p>
@@ -384,7 +384,7 @@ export function GeneralSettingsTab({
             <button
               type="button"
               onClick={() => void openFeedback("idea")}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-indigo-300/70 dark:border-indigo-800/70 bg-indigo-50 dark:bg-indigo-950/25 px-3 py-2 text-xs font-semibold text-indigo-800 dark:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-950/40"
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-ps-accent/70 dark:border-ps-accent/50 bg-ps-accent-soft dark:bg-ps-accent-soft px-3 py-2 text-xs font-semibold text-ps-accent dark:text-ps-accent hover:bg-ps-accent-soft dark:hover:bg-ps-accent-soft"
             >
               <ExternalLink className="size-3.5" aria-hidden />
               Suggest an idea
@@ -406,7 +406,7 @@ export function GeneralSettingsTab({
           id="dark-mode"
           title={
             <span className="inline-flex items-center gap-2">
-              <Moon className="size-4 text-indigo-400 dark:text-indigo-300" aria-hidden />
+              <Moon className="size-4 text-ps-accent dark:text-ps-accent" aria-hidden />
               Dark mode
             </span>
           }
@@ -416,21 +416,21 @@ export function GeneralSettingsTab({
         />
       </SettingsSection>
 
-      <section className="space-y-3 rounded-lg border border-violet-900/35 bg-violet-950/12 p-3 ring-1 ring-violet-800/25">
+      <section className="space-y-3 rounded-lg border border-ps-accent/40 bg-ps-accent-soft p-3 ring-1 ring-ps-accent/25">
         <div className="flex items-center gap-2">
-          <Activity className="size-4 text-violet-300" aria-hidden />
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-violet-200/90">Pulse</h3>
+          <Activity className="size-4 text-ps-accent" aria-hidden />
+          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ps-accent/90">Pulse</h3>
         </div>
-        <p className="text-[11px] leading-relaxed text-slate-500">
-          On a timer, Persistent Sage runs a <strong className="font-medium text-slate-700 dark:text-slate-300">background check-in</strong> using
-          the chat thread you have open for context. Your Pulse instructions are <strong className="font-medium text-slate-700 dark:text-slate-300">not</strong> shown
-          in chat; the assistant reply appears there as <span className="font-mono text-slate-600 dark:text-slate-400">Pulse Response : [time] - …</span>.
-          A copy also appears below under <strong className="font-medium text-slate-700 dark:text-slate-300">Last result</strong>.
-          Keep that thread selected in the sidebar while Pulse is on. Enable tools under the <strong className="font-medium text-slate-700 dark:text-slate-300">Tools</strong> tab
-          (for example workspace writes to <span className="font-mono text-slate-600 dark:text-slate-400">Journal.md</span> or web fetch) if your Pulse instructions need them.
+        <p className="text-[11px] leading-relaxed text-ps-faint">
+          On a timer, Persistent Sage runs a <strong className="font-medium text-ps-muted">background check-in</strong> using
+          the chat thread you have open for context. Your Pulse instructions are <strong className="font-medium text-ps-muted">not</strong> shown
+          in chat; the assistant reply appears there as <span className="font-mono text-ps-muted">Pulse Response : [time] - …</span>.
+          A copy also appears below under <strong className="font-medium text-ps-muted">Last result</strong>.
+          Keep that thread selected in the sidebar while Pulse is on. Enable tools under the <strong className="font-medium text-ps-muted">Tools</strong> tab
+          (for example workspace writes to <span className="font-mono text-ps-muted">Journal.md</span> or web fetch) if your Pulse instructions need them.
         </p>
         {settings?.pulseConversationId ? (
-          <p className="font-mono text-[10px] text-slate-500" title={settings.pulseConversationId}>
+          <p className="font-mono text-[10px] text-ps-faint" title={settings.pulseConversationId}>
             Bound thread:{" "}
             {settings.pulseConversationId.length > 14
               ? `${settings.pulseConversationId.slice(0, 12)}…`
@@ -439,11 +439,11 @@ export function GeneralSettingsTab({
         ) : (
           <p className="text-[10px] text-amber-400/90">No thread bound — select a conversation in the sidebar.</p>
         )}
-        <div className="flex items-start gap-3 rounded-lg border border-slate-200 dark:border-slate-800/70 bg-slate-50 dark:bg-slate-950/35 px-3 py-2.5">
+        <div className="flex items-start gap-3 rounded-lg border border-ps-border/70 bg-ps-elevated dark:bg-ps-canvas px-3 py-2.5">
           <input
             id="pulse-enabled"
             type="checkbox"
-            className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-slate-300 dark:border-slate-600 accent-violet-500"
+            className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-ps-border accent-ps-accent"
             checked={settings?.pulseEnabled ?? false}
             disabled={!settings}
             onChange={(e) => {
@@ -463,17 +463,17 @@ export function GeneralSettingsTab({
             }}
           />
           <div className="min-w-0 space-y-1">
-            <label htmlFor="pulse-enabled" className="cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-300">
+            <label htmlFor="pulse-enabled" className="cursor-pointer text-xs font-medium text-ps-muted">
               Enable Pulse
             </label>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-ps-faint">
               Requires a real provider (not Placeholder). The first tick runs after one full interval from app
               startup.
             </p>
           </div>
         </div>
         <div className="space-y-1.5">
-          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="pulse-interval">
+          <label className="block text-xs font-medium text-ps-muted" htmlFor="pulse-interval">
             Interval (minutes)
           </label>
           <input
@@ -489,12 +489,12 @@ export function GeneralSettingsTab({
               setSettings((s) => (s ? { ...s, pulseIntervalMinutes } : s));
               schedulePatch({ pulseIntervalMinutes });
             }}
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-violet-500/50 disabled:opacity-50"
+            className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50 disabled:opacity-50"
           />
-          <p className="text-[10px] text-slate-600">1–1440. The background loop picks up changes on the next wait.</p>
+          <p className="text-[10px] text-ps-muted">1–1440. The background loop picks up changes on the next wait.</p>
         </div>
         <div className="space-y-1.5">
-          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="pulse-instructions">
+          <label className="block text-xs font-medium text-ps-muted" htmlFor="pulse-instructions">
             Instructions for each tick
           </label>
           <textarea
@@ -507,7 +507,7 @@ export function GeneralSettingsTab({
               setSettings((s) => (s ? { ...s, pulseInstructions } : s));
               schedulePatch({ pulseInstructions });
             }}
-            className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-violet-500/50 disabled:opacity-50"
+            className="w-full resize-y rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-ps-accent/50 disabled:opacity-50"
             placeholder="What should the model focus on when Pulse fires?"
           />
         </div>
@@ -532,47 +532,47 @@ export function GeneralSettingsTab({
               }
             })();
           }}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-700/50 bg-violet-900/30 px-3 py-2 text-xs font-semibold text-violet-100 hover:bg-violet-900/50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-ps-accent/50 bg-ps-accent-soft px-3 py-2 text-xs font-semibold text-ps-accent hover:bg-ps-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pulseNowLoading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
           Send Pulse now
         </button>
-        <p className="text-[10px] text-slate-600">
+        <p className="text-[10px] text-ps-muted">
           Runs one check-in immediately using the bound thread. Pulse does not need to be enabled. Result appears
           below.
         </p>
-        <div className="space-y-1.5 border-t border-slate-200 dark:border-slate-800/70 pt-3">
-          <p className="text-[11px] font-medium text-slate-600 dark:text-slate-400">Last result (this session)</p>
+        <div className="space-y-1.5 border-t border-ps-border/70 pt-3">
+          <p className="text-[11px] font-medium text-ps-muted">Last result (this session)</p>
           {lastPulse ? (
-            <div className="rounded-md border border-slate-200 dark:border-slate-800/80 bg-slate-100/90 dark:bg-slate-950/50 p-2">
+            <div className="rounded-md border border-ps-border bg-ps-elevated dark:bg-ps-canvas p-2">
               {lastPulse.conversationId ? (
-                <p className="mb-1 font-mono text-[10px] text-slate-500" title={lastPulse.conversationId}>
+                <p className="mb-1 font-mono text-[10px] text-ps-faint" title={lastPulse.conversationId}>
                   Thread:{" "}
                   {lastPulse.conversationId.length > 14
                     ? `${lastPulse.conversationId.slice(0, 12)}…`
                     : lastPulse.conversationId}
                 </p>
               ) : null}
-              <p className="font-mono text-[10px] text-slate-500">{lastPulse.at}</p>
+              <p className="font-mono text-[10px] text-ps-faint">{lastPulse.at}</p>
               {lastPulse.summary ? (
-                <p className="mt-2 whitespace-pre-wrap text-[11px] text-slate-800 dark:text-slate-200">{lastPulse.summary}</p>
+                <p className="mt-2 whitespace-pre-wrap text-[11px] text-ps-ink">{lastPulse.summary}</p>
               ) : null}
               {lastPulse.error ? (
                 <p className="mt-2 text-[11px] text-amber-200/90">{lastPulse.error}</p>
               ) : null}
               {!lastPulse.ok && !lastPulse.error && !lastPulse.summary ? (
-                <p className="mt-1 text-[11px] text-slate-500">Empty response.</p>
+                <p className="mt-1 text-[11px] text-ps-faint">Empty response.</p>
               ) : null}
             </div>
           ) : (
-            <p className="text-[11px] text-slate-600">No tick yet — use Send Pulse now or enable the timer.</p>
+            <p className="text-[11px] text-ps-muted">No tick yet — use Send Pulse now or enable the timer.</p>
           )}
         </div>
       </section>
 
       <SettingsSection
         title="Memory"
-        className="rounded-lg border border-indigo-900/35 bg-indigo-950/12 p-3 ring-1 ring-indigo-800/25"
+        className="rounded-lg border border-ps-accent/40 bg-ps-accent-soft p-3 ring-1 ring-ps-accent/25"
         info={
           <>
             Long-term Memory Anchor recall: LLM extraction stores facts after each message; semantic search
@@ -630,7 +630,7 @@ export function GeneralSettingsTab({
           </p>
         ) : null}
         <div className="space-y-1.5">
-          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="embedding-model">
+          <label className="block text-xs font-medium text-ps-muted" htmlFor="embedding-model">
             Embedding model (optional)
           </label>
           <input
@@ -644,7 +644,7 @@ export function GeneralSettingsTab({
               setSettings((s) => (s ? { ...s, embeddingModel } : s));
               schedulePatch({ embeddingModel });
             }}
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50 disabled:opacity-50"
+            className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50 disabled:opacity-50"
           />
         </div>
         <button
@@ -665,12 +665,12 @@ export function GeneralSettingsTab({
               }
             })();
           }}
-          className="w-full rounded-lg border border-indigo-800/60 bg-indigo-950/30 px-3 py-2 text-sm font-medium text-indigo-100 hover:bg-indigo-900/40 disabled:opacity-50"
+          className="w-full rounded-lg border border-ps-accent/50 bg-ps-accent-soft px-3 py-2 text-sm font-medium text-ps-accent hover:bg-ps-accent-soft disabled:opacity-50"
         >
           {memoryReindexing ? "Re-indexing…" : "Re-index memory embeddings"}
         </button>
         {memoryReindexResult ? (
-          <p className="text-[11px] text-slate-500">{memoryReindexResult}</p>
+          <p className="text-[11px] text-ps-faint">{memoryReindexResult}</p>
         ) : null}
       </SettingsSection>
 
@@ -704,33 +704,33 @@ export function GeneralSettingsTab({
         </button>
       </section>
 
-      <section className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+      <section className="space-y-2 rounded-lg border border-ps-border bg-ps-elevated p-3">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">
           Cache
         </h3>
-        <p className="text-xs leading-relaxed text-slate-500">
+        <p className="text-xs leading-relaxed text-ps-faint">
           Temporary files from tools and runtime features are stored in the app data directory,
           not in the git repo. Clear this folder anytime to reclaim disk space.
         </p>
         {cacheInfo ? (
-          <ul className="space-y-1.5 font-mono text-[10px] leading-relaxed text-slate-600 dark:text-slate-400 break-all">
+          <ul className="space-y-1.5 font-mono text-[10px] leading-relaxed text-ps-muted break-all">
             <li>
-              <span className="text-slate-600">Directory · </span>
+              <span className="text-ps-muted">Directory · </span>
               {cacheInfo.path}
             </li>
             <li>
-              <span className="text-slate-600">Files · </span>
+              <span className="text-ps-muted">Files · </span>
               {cacheInfo.itemCount.toLocaleString()}
             </li>
             <li>
-              <span className="text-slate-600">Size · </span>
+              <span className="text-ps-muted">Size · </span>
               {cacheInfo.sizeBytes > 1024 * 1024
                 ? `${(cacheInfo.sizeBytes / (1024 * 1024)).toFixed(2)} MB`
                 : `${(cacheInfo.sizeBytes / 1024).toFixed(2)} KB`}
             </li>
           </ul>
         ) : (
-          <p className="text-[11px] text-slate-600">Loading cache info…</p>
+          <p className="text-[11px] text-ps-muted">Loading cache info…</p>
         )}
         {cacheError ? (
           <p className="text-[11px] text-amber-200/90">{cacheError}</p>
@@ -740,9 +740,9 @@ export function GeneralSettingsTab({
             type="button"
             disabled={!cacheInfo || cacheLoading}
             onClick={() => void revealCacheDirectory()}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700/90 bg-slate-100 dark:bg-slate-900/70 px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 transition hover:border-slate-300 dark:border-slate-600 hover:bg-slate-200 dark:bg-slate-800/80 disabled:pointer-events-none disabled:opacity-40"
+            className="inline-flex items-center gap-2 rounded-lg border border-ps-border/90 bg-ps-elevated px-3 py-2 text-xs font-medium text-ps-ink transition hover:border-ps-border hover:bg-ps-elevated dark:bg-ps-surface disabled:pointer-events-none disabled:opacity-40"
           >
-            <FolderOpen className="size-3.5 text-slate-600 dark:text-slate-400" aria-hidden />
+            <FolderOpen className="size-3.5 text-ps-muted" aria-hidden />
             Open cache folder
           </button>
           <button
@@ -765,35 +765,35 @@ export function GeneralSettingsTab({
         </div>
       </section>
 
-      <section className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+      <section className="space-y-2 rounded-lg border border-ps-border bg-ps-elevated p-3">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">
           Local data paths
         </h3>
-        <p className="text-xs leading-relaxed text-slate-500">
-          Chats, settings, and <code className="text-slate-600 dark:text-slate-400">personality.json</code> live here — not in your git
+        <p className="text-xs leading-relaxed text-ps-faint">
+          Chats, settings, and <code className="text-ps-muted">personality.json</code> live here — not in your git
           checkout. On Linux the default is under{" "}
-          <code className="text-slate-600 dark:text-slate-400">~/.local/share/</code> (XDG data home). Set{" "}
-          <code className="text-slate-600 dark:text-slate-400">PERSISTENT_SAGE_DATA_DIR</code> to pin a visible folder (e.g. inside your project or a
+          <code className="text-ps-muted">~/.local/share/</code> (XDG data home). Set{" "}
+          <code className="text-ps-muted">PERSISTENT_SAGE_DATA_DIR</code> to pin a visible folder (e.g. inside your project or a
           synced drive) so every machine uses the same files.
         </p>
         {dataPaths ? (
-          <ul className="space-y-1.5 font-mono text-[10px] leading-relaxed text-slate-600 dark:text-slate-400 break-all">
+          <ul className="space-y-1.5 font-mono text-[10px] leading-relaxed text-ps-muted break-all">
             <li>
-              <span className="text-slate-600">Data directory · </span>
+              <span className="text-ps-muted">Data directory · </span>
               {dataPaths.dataDirectory}
             </li>
             <li>
-              <span className="text-slate-600">SQLite file · </span>
+              <span className="text-ps-muted">SQLite file · </span>
               {dataPaths.databaseFile}
             </li>
-            <li className="text-slate-500">
+            <li className="text-ps-faint">
               Profile: {dataPaths.sqliteProfile}
               {dataPaths.novaDataDirEnv ? " · custom data dir set" : ""}
               {dataPaths.novaPortableEnv ? " · portable mode set" : ""}
             </li>
           </ul>
         ) : (
-          <p className="text-[11px] text-slate-600">Unavailable outside the Tauri desktop shell.</p>
+          <p className="text-[11px] text-ps-muted">Unavailable outside the Tauri desktop shell.</p>
         )}
         {revealPathError ? (
           <p className="text-[11px] text-amber-200/90">{revealPathError}</p>
@@ -811,30 +811,30 @@ export function GeneralSettingsTab({
               }
             })();
           }}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700/90 bg-slate-100 dark:bg-slate-900/70 px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 transition hover:border-slate-300 dark:border-slate-600 hover:bg-slate-200 dark:bg-slate-800/80 disabled:pointer-events-none disabled:opacity-40"
+          className="inline-flex items-center gap-2 rounded-lg border border-ps-border/90 bg-ps-elevated px-3 py-2 text-xs font-medium text-ps-ink transition hover:border-ps-border hover:bg-ps-elevated dark:bg-ps-surface disabled:pointer-events-none disabled:opacity-40"
         >
-          <FolderOpen className="size-3.5 text-slate-600 dark:text-slate-400" aria-hidden />
+          <FolderOpen className="size-3.5 text-ps-muted" aria-hidden />
           Open data folder in file manager
         </button>
       </section>
 
-      <section className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/40 p-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+      <section className="space-y-2 rounded-lg border border-ps-border bg-ps-elevated p-3">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">
           About
         </h3>
-        <p className="text-xs leading-relaxed text-slate-500">
+        <p className="text-xs leading-relaxed text-ps-faint">
           Settings and API keys are stored under your Persistent Sage data directory; keys are encrypted
           (AES-GCM) with material from the OS keychain when available.
         </p>
         <button
           type="button"
           onClick={() => void loadVersion()}
-          className="mt-1 text-xs font-medium text-indigo-400 hover:text-indigo-300"
+          className="mt-1 text-xs font-medium text-ps-accent hover:text-ps-accent"
         >
           Read backend version
         </button>
         {backend ? (
-          <p className="font-mono text-[11px] text-slate-600 dark:text-slate-400">{backend}</p>
+          <p className="font-mono text-[11px] text-ps-muted">{backend}</p>
         ) : null}
       </section>
       {destructiveModal ? (
@@ -844,10 +844,10 @@ export function GeneralSettingsTab({
         aria-modal="true"
         aria-labelledby="destructive-modal-warning"
       >
-        <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-red-900/60 bg-slate-50 dark:bg-slate-950 p-4 shadow-2xl">
+        <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-red-900/60 bg-ps-elevated dark:bg-ps-canvas p-4 shadow-2xl">
           <p
             id="destructive-modal-warning"
-            className="whitespace-pre-line text-xs leading-relaxed text-slate-800 dark:text-slate-200"
+            className="whitespace-pre-line text-xs leading-relaxed text-ps-ink"
           >
             {destructiveModal === "memory" ? MEMORY_WIPE_COPY : FACTORY_RESET_COPY}
           </p>
@@ -859,7 +859,7 @@ export function GeneralSettingsTab({
             onChange={(e) => setWipeConfirmInput(e.target.value)}
             placeholder="Type CONFIRM"
             aria-label="Confirmation: type CONFIRM"
-            className="mt-4 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 font-mono text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-red-500/60"
+            className="mt-4 w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-red-500/60"
           />
           <div className="mt-4 flex gap-2">
             <button
@@ -868,7 +868,7 @@ export function GeneralSettingsTab({
                 setDestructiveModal(null);
                 setWipeConfirmInput("");
               }}
-              className="flex-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-sm font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800"
+              className="flex-1 rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-3 py-2 text-sm font-medium text-ps-ink hover:bg-ps-elevated dark:bg-ps-surface"
             >
               Cancel
             </button>
@@ -896,7 +896,7 @@ export function GeneralSettingsTab({
                   }
                 })();
               }}
-              className="flex-1 rounded-lg border border-red-700 bg-red-900/70 px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex-1 rounded-lg border border-red-700 bg-red-900/70 px-3 py-2 text-sm font-semibold text-ps-ink hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {wiping
                 ? destructiveModal === "memory"

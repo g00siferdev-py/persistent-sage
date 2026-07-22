@@ -54,7 +54,7 @@ export function FavoritesPanel({ open, onClose, onOpenConversation }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ps-canvas p-4 backdrop-blur-[2px]"
       role="dialog"
       aria-modal="true"
       aria-label="Favorites"
@@ -62,14 +62,14 @@ export function FavoritesPanel({ open, onClose, onOpenConversation }: Props) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-950">
-        <header className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-ps-border bg-white shadow-2xl dark:border-ps-border dark:bg-ps-canvas">
+        <header className="flex shrink-0 items-center justify-between border-b border-ps-border px-4 py-3 dark:border-ps-border">
           <div className="flex items-center gap-2">
             <Star className="size-4 fill-amber-400 text-amber-400" aria-hidden />
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+            <h2 className="text-sm font-semibold text-ps-ink">
               Favorites
             </h2>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            <span className="rounded-md bg-ps-elevated px-2 py-0.5 text-[10px] font-semibold text-ps-faint dark:bg-ps-surface dark:text-ps-faint">
               {favorites.length}
             </span>
           </div>
@@ -77,7 +77,7 @@ export function FavoritesPanel({ open, onClose, onOpenConversation }: Props) {
             type="button"
             onClick={onClose}
             aria-label="Close favorites"
-            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            className="rounded-lg p-1.5 text-ps-faint hover:bg-ps-elevated hover:text-ps-ink dark:hover:bg-ps-surface dark:hover:text-ps-ink"
           >
             <X className="size-4" aria-hidden />
           </button>
@@ -90,12 +90,12 @@ export function FavoritesPanel({ open, onClose, onOpenConversation }: Props) {
             </p>
           ) : null}
           {loading ? (
-            <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
-              <Loader2 className="size-4 animate-spin text-indigo-400" aria-hidden />
+            <div className="flex items-center justify-center gap-2 py-10 text-sm text-ps-faint">
+              <Loader2 className="size-4 animate-spin text-ps-accent" aria-hidden />
               Loading favorites…
             </div>
           ) : favorites.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-700">
+            <p className="rounded-xl border border-dashed border-ps-border px-4 py-10 text-center text-sm text-ps-faint dark:border-ps-border">
               No favorites yet. Hover a message and click the{" "}
               <Star className="inline size-3.5 text-amber-400" aria-hidden /> star to
               save it here.
@@ -105,16 +105,16 @@ export function FavoritesPanel({ open, onClose, onOpenConversation }: Props) {
               {favorites.map((m) => (
                 <li
                   key={m.id}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/60"
+                  className="rounded-xl border border-ps-border bg-ps-elevated px-3 py-2.5 dark:border-ps-border dark:bg-ps-elevated"
                 >
                   <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
                       {formatChatHeader(
                         m.role === "user" ? "You" : "Companion",
                         m.createdAt,
                       )}
                       {m.conversationTitle ? (
-                        <span className="ml-2 normal-case tracking-normal text-slate-400">
+                        <span className="ml-2 normal-case tracking-normal text-ps-faint">
                           in “{m.conversationTitle}”
                         </span>
                       ) : null}
@@ -127,7 +127,7 @@ export function FavoritesPanel({ open, onClose, onOpenConversation }: Props) {
                             onOpenConversation(m.conversationId!);
                             onClose();
                           }}
-                          className="rounded-md border border-slate-200 bg-white/80 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700/80 dark:bg-slate-950/30 dark:text-slate-300 dark:hover:bg-slate-900"
+                          className="rounded-md border border-ps-border bg-white/80 px-1.5 py-0.5 text-[10px] font-medium text-ps-muted hover:bg-ps-elevated dark:border-ps-border dark:bg-ps-canvas dark:text-ps-muted dark:hover:bg-ps-elevated"
                         >
                           Open chat
                         </button>
@@ -137,14 +137,14 @@ export function FavoritesPanel({ open, onClose, onOpenConversation }: Props) {
                         type="button"
                         onClick={() => void unfavorite(m.id)}
                         title="Remove from Favorites"
-                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white/80 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700/80 dark:bg-slate-950/30 dark:text-slate-300 dark:hover:bg-slate-900"
+                        className="inline-flex items-center gap-1 rounded-md border border-ps-border bg-white/80 px-1.5 py-0.5 text-[10px] font-medium text-ps-muted hover:bg-ps-elevated dark:border-ps-border dark:bg-ps-canvas dark:text-ps-muted dark:hover:bg-ps-elevated"
                       >
                         <StarOff className="size-3" aria-hidden />
                         Remove
                       </button>
                     </div>
                   </div>
-                  <div className="text-sm leading-relaxed text-slate-800 dark:text-slate-200">
+                  <div className="text-sm leading-relaxed text-ps-ink">
                     <MessageContent text={m.content} />
                   </div>
                 </li>

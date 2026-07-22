@@ -204,7 +204,7 @@ export function AgentActionStream({ repoId: _repoId }: Props) {
       <button
         type="button"
         onClick={() => setCollapsed(false)}
-        className="flex h-full w-8 shrink-0 flex-col items-center justify-start gap-1 border-l border-slate-800 bg-slate-900/60 py-2 text-[10px] uppercase tracking-wide text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+        className="flex h-full w-8 shrink-0 flex-col items-center justify-start gap-1 border-l border-ps-border bg-ps-elevated py-2 text-[10px] uppercase tracking-wide text-ps-faint hover:bg-ps-surface hover:text-ps-ink"
         title="Open Agent Action Stream"
       >
         <Activity className="h-4 w-4" />
@@ -216,7 +216,7 @@ export function AgentActionStream({ repoId: _repoId }: Props) {
   }
 
   return (
-    <div className="flex h-full w-full flex-col gap-2 overflow-hidden bg-slate-900/60 p-3 text-xs">
+    <div className="flex h-full w-full flex-col gap-2 overflow-hidden bg-ps-elevated p-3 text-xs">
       <div className="flex items-center justify-between">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-emerald-200/90">
           Agent Action Stream
@@ -225,14 +225,14 @@ export function AgentActionStream({ repoId: _repoId }: Props) {
           <button
             type="button"
             onClick={handleClear}
-            className="rounded px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            className="rounded px-2 py-1 text-[10px] text-ps-faint hover:bg-ps-surface hover:text-ps-ink"
           >
             Clear
           </button>
           <button
             type="button"
             onClick={() => setCollapsed(true)}
-            className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            className="rounded p-1 text-ps-faint hover:bg-ps-surface hover:text-ps-ink"
             title="Collapse Agent Action Stream"
           >
             <span className="sr-only">Collapse</span>
@@ -243,9 +243,9 @@ export function AgentActionStream({ repoId: _repoId }: Props) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto rounded border border-slate-800 bg-slate-950 p-2">
+      <div className="flex-1 overflow-y-auto rounded border border-ps-border bg-ps-canvas p-2">
         {events.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-500">
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-ps-faint">
             <Activity className="h-5 w-5" />
             <p className="max-w-[180px] text-[11px]">
               Agent activity will appear here when generation steps and tools run.
@@ -254,36 +254,36 @@ export function AgentActionStream({ repoId: _repoId }: Props) {
         ) : (
           <ul className="flex flex-col gap-2">
             {events.map((ev) => (
-              <li key={ev.id} className="rounded border border-slate-800 bg-slate-900/40 p-2">
+              <li key={ev.id} className="rounded border border-ps-border bg-ps-elevated p-2">
                 <div className="flex items-start gap-2">
                   <div className="mt-0.5 shrink-0">
                     {ev.kind === "generation_step:start" && <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />}
                     {ev.kind === "generation_step:end" && (ev.success ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> : <XCircle className="h-3.5 w-3.5 text-red-400" />)}
-                    {ev.kind === "tool:start" && <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400" />}
-                    {ev.kind === "tool:end" && (ev.success ? <CheckCircle2 className="h-3.5 w-3.5 text-violet-400" /> : <XCircle className="h-3.5 w-3.5 text-red-400" />)}
-                    {ev.kind === "tool:status" && <Activity className="h-3.5 w-3.5 text-slate-400" />}
+                    {ev.kind === "tool:start" && <Loader2 className="h-3.5 w-3.5 animate-spin text-ps-accent" />}
+                    {ev.kind === "tool:end" && (ev.success ? <CheckCircle2 className="h-3.5 w-3.5 text-ps-accent" /> : <XCircle className="h-3.5 w-3.5 text-red-400" />)}
+                    {ev.kind === "tool:status" && <Activity className="h-3.5 w-3.5 text-ps-faint" />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate font-medium text-slate-200">
+                      <span className="truncate font-medium text-ps-ink">
                         {ev.kind === "generation_step:start" && "Generation step started"}
                         {ev.kind === "generation_step:end" && "Generation step ended"}
                         {ev.kind === "tool:start" && ev.label}
                         {ev.kind === "tool:end" && (ev.toolName || ev.label || "Tool ended")}
                         {ev.kind === "tool:status" && ev.status}
                       </span>
-                      <span className="shrink-0 text-[10px] text-slate-500">{formatTime(ev.timestamp)}</span>
+                      <span className="shrink-0 text-[10px] text-ps-faint">{formatTime(ev.timestamp)}</span>
                     </div>
-                    {ev.mission && <p className="mt-0.5 truncate text-[10px] text-slate-400">{ev.mission}</p>}
-                    {ev.summary && <p className="mt-0.5 text-[10px] text-slate-400">{ev.summary}</p>}
+                    {ev.mission && <p className="mt-0.5 truncate text-[10px] text-ps-faint">{ev.mission}</p>}
+                    {ev.summary && <p className="mt-0.5 text-[10px] text-ps-faint">{ev.summary}</p>}
                     {ev.output && (
-                      <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-slate-950 p-1.5 text-[10px] text-slate-300">
+                      <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-ps-canvas p-1.5 text-[10px] text-ps-muted">
                         {ev.output}
                       </pre>
                     )}
-                    {ev.detail && <p className="mt-0.5 text-[10px] text-slate-400">{ev.detail}</p>}
+                    {ev.detail && <p className="mt-0.5 text-[10px] text-ps-faint">{ev.detail}</p>}
                     {ev.input !== undefined && ev.input !== null && ev.kind === "tool:start" && (
-                      <pre className="mt-1 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-slate-950 p-1.5 text-[10px] text-slate-400">
+                      <pre className="mt-1 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-ps-canvas p-1.5 text-[10px] text-ps-faint">
                         {JSON.stringify(ev.input, null, 2)}
                       </pre>
                     )}

@@ -205,32 +205,32 @@ export function WebcamCaptureModal({ open, onClose, onCapture }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[180] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[180] flex items-center justify-center bg-ps-canvas p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="webcam-capture-title"
       onClick={onClose}
     >
       <div
-        className="flex w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-white shadow-2xl dark:bg-slate-900"
+        className="flex w-full max-w-md flex-col overflow-hidden rounded-2xl border border-ps-border bg-white shadow-2xl dark:bg-ps-elevated"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
-            <Camera className="size-4 text-indigo-500" aria-hidden />
+        <div className="flex shrink-0 items-center justify-between border-b border-ps-border px-4 py-3 dark:border-ps-border">
+          <div className="flex items-center gap-2 text-sm font-semibold text-ps-ink">
+            <Camera className="size-4 text-ps-accent" aria-hidden />
             <span id="webcam-capture-title">Take a photo</span>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            className="rounded-md p-1 text-ps-faint hover:bg-ps-elevated hover:text-ps-ink dark:hover:bg-ps-surface dark:hover:text-ps-ink"
             aria-label="Close camera"
           >
             <X className="size-4" aria-hidden />
           </button>
         </div>
         <div className="space-y-3 p-4">
-          <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-slate-950">
+          <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-ps-canvas">
             {showNativePreview ? (
               <canvas
                 ref={canvasRef}
@@ -248,9 +248,9 @@ export function WebcamCaptureModal({ open, onClose, onCapture }: Props) {
               />
             )}
             {!ready && !error ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-950/80 px-4 text-center">
-                <Loader2 className="size-8 animate-spin text-indigo-400" aria-hidden />
-                <p className="text-xs text-slate-300">Opening system camera…</p>
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ps-canvas px-4 text-center">
+                <Loader2 className="size-8 animate-spin text-ps-accent" aria-hidden />
+                <p className="text-xs text-ps-muted">Opening system camera…</p>
               </div>
             ) : null}
           </div>
@@ -259,7 +259,7 @@ export function WebcamCaptureModal({ open, onClose, onCapture }: Props) {
               {error}
             </p>
           ) : null}
-          <p className="text-[10px] text-slate-500">
+          <p className="text-[10px] text-ps-faint">
             {showNativePreview
               ? "Uses your system camera directly (not the browser). In Windows, enable Settings → Privacy → Camera → “Let desktop apps access your camera”. Persistent Sage may not appear in the per-app list — that toggle applies to all desktop apps."
               : "Browser camera preview (dev fallback)."}
@@ -268,7 +268,7 @@ export function WebcamCaptureModal({ open, onClose, onCapture }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="rounded-lg border border-ps-border px-3 py-1.5 text-xs font-medium text-ps-muted hover:bg-ps-elevated dark:border-ps-border dark:text-ps-ink dark:hover:bg-ps-surface"
             >
               Cancel
             </button>
@@ -276,7 +276,7 @@ export function WebcamCaptureModal({ open, onClose, onCapture }: Props) {
               type="button"
               disabled={!ready || capturing}
               onClick={() => void handleCapture()}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-ps-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-ps-accent disabled:opacity-40"
             >
               {capturing ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
               Capture photo

@@ -129,11 +129,11 @@ export function CodingNotepad({ open, onToggle }: Props) {
   const preview = draft.trim().slice(0, 120);
 
   return (
-    <div className="shrink-0 overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900/60 dark:shadow-none">
+    <div className="shrink-0 overflow-hidden rounded-lg border border-ps-border bg-white shadow-sm dark:border-ps-border dark:bg-ps-elevated dark:shadow-none">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between border-b border-slate-200 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+        className="flex w-full items-center justify-between border-b border-ps-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-ps-muted hover:bg-ps-elevated dark:border-ps-border dark:text-ps-faint dark:hover:bg-ps-surface dark:hover:text-ps-muted"
         aria-expanded={open}
       >
         <span className="flex items-center gap-1.5">
@@ -149,7 +149,7 @@ export function CodingNotepad({ open, onToggle }: Props) {
             <select
               value={activeName}
               onChange={(e) => setActiveName(e.target.value)}
-              className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-1.5 py-1 text-[11px] text-slate-800 outline-none focus:border-violet-500 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-200"
+              className="min-w-0 flex-1 rounded-md border border-ps-border bg-white px-1.5 py-1 text-[11px] text-ps-ink outline-none focus:border-ps-accent dark:border-ps-border dark:bg-ps-canvas dark:text-ps-ink"
             >
               {notes.map((n) => (
                 <option key={n.name} value={n.name}>
@@ -162,7 +162,7 @@ export function CodingNotepad({ open, onToggle }: Props) {
                 type="button"
                 onClick={() => void handleDelete()}
                 title="Delete note"
-                className="rounded-md border border-slate-300 p-1 text-red-600 hover:bg-red-50 dark:border-slate-700 dark:text-red-400 dark:hover:bg-red-950/30"
+                className="rounded-md border border-ps-border p-1 text-red-600 hover:bg-red-50 dark:border-ps-border dark:text-red-400 dark:hover:bg-red-950/30"
               >
                 <Trash2 className="h-3 w-3" aria-hidden />
               </button>
@@ -175,20 +175,20 @@ export function CodingNotepad({ open, onToggle }: Props) {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="New note name"
-              className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-800 outline-none placeholder:text-slate-400 focus:border-violet-500 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-200"
+              className="min-w-0 flex-1 rounded-md border border-ps-border bg-white px-2 py-1 text-[11px] text-ps-ink outline-none placeholder:text-ps-faint focus:border-ps-accent dark:border-ps-border dark:bg-ps-canvas dark:text-ps-ink"
             />
             <button
               type="button"
               onClick={() => void handleCreate()}
               disabled={!newName.trim()}
-              className="rounded-md border border-slate-300 bg-slate-50 px-1.5 py-1 text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              className="rounded-md border border-ps-border bg-ps-elevated px-1.5 py-1 text-ps-muted hover:bg-ps-elevated disabled:opacity-50 dark:border-ps-border dark:bg-ps-elevated dark:text-ps-ink"
             >
               <Plus className="h-3.5 w-3.5" aria-hidden />
             </button>
           </div>
 
           {loading ? (
-            <div className="flex items-center gap-2 py-2 text-[11px] text-slate-500">
+            <div className="flex items-center gap-2 py-2 text-[11px] text-ps-faint">
               <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
               Loading…
             </div>
@@ -201,7 +201,7 @@ export function CodingNotepad({ open, onToggle }: Props) {
               }}
               placeholder="Jot down ideas, todos, or reminders… Saved to a local .txt file the agent can read."
               rows={6}
-              className="w-full resize-y rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none placeholder:text-slate-400 focus:border-violet-500 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-200 dark:placeholder:text-slate-500"
+              className="w-full resize-y rounded-md border border-ps-border bg-white px-2 py-1.5 text-xs text-ps-ink outline-none placeholder:text-ps-faint focus:border-ps-accent dark:border-ps-border dark:bg-ps-canvas dark:text-ps-ink dark:placeholder:text-ps-faint"
             />
           )}
 
@@ -210,7 +210,7 @@ export function CodingNotepad({ open, onToggle }: Props) {
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+              className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-ps-border bg-white px-2 py-1 text-[11px] font-medium text-ps-muted hover:bg-ps-elevated disabled:opacity-50 dark:border-ps-border dark:bg-ps-elevated dark:text-ps-ink"
             >
               {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
               Save
@@ -219,19 +219,19 @@ export function CodingNotepad({ open, onToggle }: Props) {
               type="button"
               onClick={handleSubmit}
               disabled={saving}
-              className="inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-violet-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+              className="inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-ps-accent-hover px-2 py-1 text-[11px] font-medium text-white hover:bg-ps-accent disabled:opacity-50"
             >
               <Send className="h-3 w-3" />
               Submit
             </button>
           </div>
-          <p className="text-[10px] leading-relaxed text-slate-500">
+          <p className="text-[10px] leading-relaxed text-ps-faint">
             Auto-saves to <span className="font-mono">{activeName}</span>. Ask the agent to read your coding notes.
           </p>
           {error ? <p className="text-[10px] text-red-600 dark:text-red-400">{error}</p> : null}
         </div>
       ) : preview ? (
-        <div className="mx-2 mb-2 max-h-24 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400">
+        <div className="mx-2 mb-2 max-h-24 overflow-y-auto rounded-md border border-ps-border bg-ps-elevated px-2 py-1.5 text-[11px] text-ps-muted dark:border-ps-border dark:bg-ps-canvas dark:text-ps-faint">
           {preview}
           {draft.trim().length > 120 ? "…" : ""}
         </div>

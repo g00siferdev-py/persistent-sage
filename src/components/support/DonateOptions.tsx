@@ -32,11 +32,11 @@ function DonateQrColumn({
 }) {
   return (
     <div className="flex min-w-0 flex-col items-center gap-2.5">
-      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{label}</p>
+      <p className="text-xs font-semibold text-ps-ink">{label}</p>
       <img
         src={qrSrc}
         alt={qrAlt}
-        className={`${qrSizeClass} max-w-full rounded-lg border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-600`}
+        className={`${qrSizeClass} max-w-full rounded-lg border border-ps-border bg-white p-2 shadow-sm dark:border-ps-border`}
       />
       <a
         href={linkUrl}
@@ -105,13 +105,13 @@ export function DonateOptions({ showQr = false, qrProminent = false, className =
 
       {showQr ? (
         <p
-          className={`text-[10px] leading-relaxed text-slate-500 ${qrProminent ? "mt-4 text-center" : "mt-3"}`}
+          className={`text-[10px] leading-relaxed text-ps-faint ${qrProminent ? "mt-4 text-center" : "mt-3"}`}
         >
           Scan one code at a time with PayPal or Cash App. Voluntary tips only — no features unlocked.
           Microsoft is not affiliated with contributions.
         </p>
       ) : (
-        <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
+        <p className="mt-2 text-[10px] leading-relaxed text-ps-faint">
           Voluntary tips only — no features unlocked. Microsoft is not affiliated with contributions.
         </p>
       )}

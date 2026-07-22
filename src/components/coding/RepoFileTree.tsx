@@ -57,18 +57,18 @@ function TreeNode({
             onOpenFile?.(node.pathRel);
           }
         }}
-        className={`flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] hover:bg-slate-800/80 ${
-          isSelected ? "bg-violet-900/40 text-violet-100" : "text-slate-300"
-        }`}
+        className={`flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] hover:bg-ps-surface ${
+ isSelected ? "bg-ps-accent-soft text-ps-accent" : "text-ps-muted"
+ }`}
         style={{ paddingLeft: `${depth * 10 + 4}px` }}
         title={node.pathRel}
       >
         {isDir ? (
           hasChildren ? (
             open ? (
-              <ChevronDown className="h-3 w-3 shrink-0 text-slate-500" aria-hidden />
+              <ChevronDown className="h-3 w-3 shrink-0 text-ps-faint" aria-hidden />
             ) : (
-              <ChevronRight className="h-3 w-3 shrink-0 text-slate-500" aria-hidden />
+              <ChevronRight className="h-3 w-3 shrink-0 text-ps-faint" aria-hidden />
             )
           ) : (
             <span className="inline-block w-3 shrink-0" />
@@ -79,7 +79,7 @@ function TreeNode({
         {isDir ? (
           <Folder className="h-3 w-3 shrink-0 text-amber-500/80" aria-hidden />
         ) : (
-          <File className="h-3 w-3 shrink-0 text-slate-500" aria-hidden />
+          <File className="h-3 w-3 shrink-0 text-ps-faint" aria-hidden />
         )}
         <span className="truncate">{node.name}</span>
       </button>
@@ -109,10 +109,10 @@ export function RepoFileTree({
   onOpenFile,
 }: Props) {
   if (loading) {
-    return <p className="px-3 py-2 text-xs text-slate-500">Loading tree…</p>;
+    return <p className="px-3 py-2 text-xs text-ps-faint">Loading tree…</p>;
   }
   if (nodes.length === 0) {
-    return <p className="px-3 py-2 text-xs text-slate-500">No files to show.</p>;
+    return <p className="px-3 py-2 text-xs text-ps-faint">No files to show.</p>;
   }
   return (
     <ul className="py-1">

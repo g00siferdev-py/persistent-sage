@@ -337,25 +337,25 @@ export function CodingLayout({
   }, [rightPanelWidth]);
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-slate-200/55 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-4 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none">
-        <div className="flex min-w-0 items-center gap-3">
+    <div className="ps-shell">
+      <header className="ps-topbar">
+        <div className="flex min-w-0 flex-1 items-end gap-4">
           <AppModeSwitcher mode="coding" onModeChange={handleModeChange} />
-          <TokenContextCounter conversationId={activeConversationId} />
-          <div className="min-w-0">
-            <h1 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">Coding workspace</h1>
-            <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">{appModeDescription("coding")}</p>
+          <div className="hidden min-w-0 border-l border-ps-border pl-4 pb-1 lg:block">
+            <p className="ps-label">Coding</p>
+            <p className="truncate text-xs text-ps-muted">{appModeDescription("coding")}</p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2 self-center">
+          <TokenContextCounter conversationId={activeConversationId} />
           <AppHelpButton />
           <button
             type="button"
             onClick={() => void cycleSettingsLayout()}
             aria-expanded={settingsLayoutMode !== "hidden"}
             aria-controls="nova-settings-panel"
-            title={`Settings: ${settingsLayoutMode === "hidden" ? "Hidden" : settingsLayoutMode === "compact" ? "Compact" : "Full"} ? click to cycle`}
-            className="flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-700"
+            title={`Settings: ${settingsLayoutMode === "hidden" ? "Hidden" : settingsLayoutMode === "compact" ? "Compact" : "Full"} — click to cycle`}
+            className="ps-btn"
           >
             <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
             Settings
@@ -363,7 +363,7 @@ export function CodingLayout({
           <button
             type="button"
             onClick={() => void loadRepos()}
-            className="flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-700"
+            className="ps-btn"
             title="Rescan workspace/repos for new folders"
           >
             <RefreshCw className="h-3.5 w-3.5" aria-hidden />
@@ -372,7 +372,7 @@ export function CodingLayout({
           <button
             type="button"
             onClick={() => void revealReposFolder()}
-            className="flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-700"
+            className="ps-btn"
             title="Open workspace/repos in file explorer"
           >
             <FolderOpen className="h-3.5 w-3.5" aria-hidden />
@@ -381,19 +381,19 @@ export function CodingLayout({
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 gap-2 overflow-hidden bg-slate-200/55 p-2 dark:bg-slate-950 dark:p-0">
-        <aside className="flex w-56 shrink-0 flex-col gap-2 overflow-y-auto dark:bg-slate-900/40">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900/60 dark:shadow-none">
-            <div className="border-b border-slate-200 px-3 py-2 dark:border-slate-800">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+      <div className="flex min-h-0 flex-1 gap-0 overflow-hidden">
+        <aside className="ps-aside w-60 gap-0 overflow-y-auto border-r">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-r border-ps-border bg-ps-elevated">
+            <div className="border-b border-ps-border px-3 py-2 dark:border-ps-border">
+              <h2 className="ps-label">
                 Repositories
               </h2>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
             {loading ? (
-              <div className="flex items-center gap-2 px-2 py-3 text-xs text-slate-600 dark:text-slate-400">
+              <div className="flex items-center gap-2 px-2 py-3 text-xs text-ps-muted">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                Loading?
+                Loading…
               </div>
             ) : error ? (
               <p className="px-2 py-3 text-xs text-red-600 dark:text-red-300">{error}</p>
@@ -404,10 +404,10 @@ export function CodingLayout({
                     <button
                       type="button"
                       onClick={() => void selectRepo(repo.id)}
-                      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs ${
+                      className={`flex w-full items-center gap-2 border-l-2 px-2 py-1.5 text-left text-xs ${
                         repoView.activeRepoId === repo.id
-                          ? "bg-violet-100 text-violet-900 dark:bg-violet-900/50 dark:text-violet-100"
-                          : "text-slate-700 hover:bg-slate-200/80 dark:text-slate-300 dark:hover:bg-slate-800"
+                          ? "border-ps-accent bg-ps-accent-soft text-ps-accent"
+                          : "border-transparent text-ps-muted hover:bg-ps-surface"
                       }`}
                     >
                       <FolderGit2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -417,16 +417,16 @@ export function CodingLayout({
                 ))}
               </ul>
             ) : (
-              <p className="px-2 py-3 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+              <p className="px-2 py-3 text-xs leading-relaxed text-ps-muted">
                 No git repos yet. Create a new project below, clone one, or copy a repository into{" "}
-                <span className="font-mono text-slate-700 dark:text-slate-300">workspace/repos/</span>, then click Refresh.
+                <span className="font-mono text-ps-muted">workspace/repos/</span>, then click Refresh.
               </p>
             )}
           </div>
           </div>
           <CodingNotepad open={notesOpen} onToggle={() => setNotesOpen((v) => !v)} />
-          <div className="shrink-0 space-y-0 rounded-lg border border-slate-300 bg-white p-2 shadow-sm dark:border-slate-700 dark:bg-slate-900/60 dark:shadow-none">
-            <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-500">
+          <div className="shrink-0 space-y-0 border-t border-ps-border bg-ps-elevated p-3">
+            <p className="ps-label mb-2 px-1">
               New project
             </p>
             <div className="space-y-2">
@@ -436,13 +436,13 @@ export function CodingLayout({
                 value={newProjectName}
                 onChange={(e) => setNewProjectName(e.target.value)}
                 disabled={creating}
-                className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none placeholder:text-slate-400 focus:border-violet-500 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:border-violet-600"
+                className="ps-input px-2 py-1.5 text-xs"
               />
               <select
                 value={newProjectTemplate}
                 onChange={(e) => setNewProjectTemplate(e.target.value)}
                 disabled={creating}
-                className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none focus:border-violet-500 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-200 dark:focus:border-violet-600"
+                className="ps-input px-2 py-1.5 text-xs"
               >
                 <option value="empty">Empty (README + .gitignore)</option>
                 <option value="rust">Rust (cargo init)</option>
@@ -451,7 +451,7 @@ export function CodingLayout({
                 <option value="tauri">Tauri (React + Rust ? requires npm)</option>
                 <option value="csharp">C# (.NET console ? requires SDK)</option>
               </select>
-              <p className="px-1 text-[10px] leading-relaxed text-slate-500">
+              <p className="px-1 text-[10px] leading-relaxed text-ps-faint">
                 Tauri and C# templates need npm or the .NET SDK installed on this machine.
               </p>
               {createError ? <p className="px-1 text-[10px] text-red-300">{createError}</p> : null}
@@ -459,19 +459,19 @@ export function CodingLayout({
                 type="button"
                 onClick={() => void createProject()}
                 disabled={creating || !newProjectName.trim()}
-                className="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-800 px-2 py-1.5 text-xs font-medium text-emerald-50 hover:bg-emerald-700 disabled:opacity-50"
+                className="ps-btn-primary w-full disabled:opacity-50"
               >
                 {creating ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                 ) : (
                   <FolderPlus className="h-3.5 w-3.5" aria-hidden />
                 )}
-                {creating ? "Creating?" : "Create project"}
+                {creating ? "Creating…" : "Create project"}
               </button>
             </div>
           </div>
-          <div className="shrink-0 space-y-0 rounded-lg border border-slate-300 bg-white p-2 shadow-sm dark:border-slate-700 dark:bg-slate-900/60 dark:shadow-none">
-            <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-500">
+          <div className="shrink-0 space-y-0 border-t border-ps-border bg-ps-elevated p-3">
+            <p className="ps-label mb-2 px-1">
               Clone repository
             </p>
             <div className="space-y-2">
@@ -481,7 +481,7 @@ export function CodingLayout({
                 value={cloneUrl}
                 onChange={(e) => setCloneUrl(e.target.value)}
                 disabled={cloning}
-                className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none placeholder:text-slate-400 focus:border-violet-500 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:border-violet-600"
+                className="ps-input px-2 py-1.5 text-xs"
               />
               <input
                 type="text"
@@ -489,30 +489,30 @@ export function CodingLayout({
                 value={cloneName}
                 onChange={(e) => setCloneName(e.target.value)}
                 disabled={cloning}
-                className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none placeholder:text-slate-400 focus:border-violet-500 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:border-violet-600"
+                className="ps-input px-2 py-1.5 text-xs"
               />
               {cloneError ? <p className="px-1 text-[10px] text-red-600 dark:text-red-300">{cloneError}</p> : null}
               <button
                 type="button"
                 onClick={() => void cloneRepo()}
                 disabled={cloning || !cloneUrl.trim()}
-                className="flex w-full items-center justify-center gap-1.5 rounded-md bg-violet-700 px-2 py-1.5 text-xs font-medium text-violet-50 hover:bg-violet-600 disabled:opacity-50"
+                className="ps-btn-primary w-full disabled:opacity-50"
               >
                 {cloning ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                 ) : (
                   <Plus className="h-3.5 w-3.5" aria-hidden />
                 )}
-                {cloning ? "Cloning?" : "Clone"}
+                {cloning ? "Cloning…" : "Clone"}
               </button>
-              <p className="px-1 text-[10px] leading-relaxed text-slate-500">
+              <p className="px-1 text-[10px] leading-relaxed text-ps-faint">
                 Requires a GitHub PAT in Settings ? Tools ? GitHub.
               </p>
             </div>
           </div>
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:shadow-none">
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden border-r border-ps-border bg-ps-surface/80">
           {activeRepo ? (
             <>
               <CodingViewToolbar
@@ -576,7 +576,7 @@ export function CodingLayout({
             </>
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-              <p className="max-w-md text-sm text-slate-400">
+              <p className="max-w-md text-sm text-ps-faint">
                 Select a repository from the sidebar to start a coding session.
               </p>
             </div>
@@ -585,25 +585,25 @@ export function CodingLayout({
 
         {/* Resizable right-side panel stack with independent toggles */}
         <aside
-          className="relative flex h-full shrink-0 flex-col border-l border-slate-200 bg-slate-100/80 dark:border-slate-800 dark:bg-slate-900/40"
+          className="relative flex h-full shrink-0 flex-col border-l border-ps-border bg-ps-elevated dark:border-ps-border dark:bg-ps-elevated"
           style={{ width: rightPanelWidth }}
         >
           {/* Resize handle */}
           <div
-            className="absolute left-0 top-0 z-10 flex h-full w-3 -translate-x-1/2 cursor-col-resize items-center justify-center hover:bg-violet-500/10 active:bg-violet-500/20"
+            className="absolute left-0 top-0 z-10 flex h-full w-3 -translate-x-1/2 cursor-col-resize items-center justify-center hover:bg-ps-accent-soft active:bg-ps-accent-soft"
             onMouseDown={startResize}
             title="Drag to resize side panel"
           >
-            <GripVertical className="size-3 text-slate-600" aria-hidden />
+            <GripVertical className="size-3 text-ps-muted" aria-hidden />
           </div>
 
           {/* Panel toggle header */}
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-2 py-1.5 pl-4 dark:border-slate-800">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-ps-border px-2 py-1.5 pl-4 dark:border-ps-border">
             <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => setStreamPanelOpen((v) => !v)}
-                className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${streamPanelOpen ? "bg-violet-100 text-violet-800 dark:bg-violet-700/40 dark:text-violet-200" : "text-slate-500 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300"}`}
+                className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${streamPanelOpen ? "bg-ps-accent-soft text-ps-accent dark:bg-ps-accent-soft dark:text-ps-accent" : "text-ps-faint hover:bg-ps-elevated hover:text-ps-muted dark:hover:bg-ps-surface dark:hover:text-ps-muted"}`}
                 title="Toggle stream panel"
               >
                 Stream
@@ -611,7 +611,7 @@ export function CodingLayout({
               <button
                 type="button"
                 onClick={() => setDebuggerPanelOpen((v) => !v)}
-                className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${debuggerPanelOpen ? "bg-violet-100 text-violet-800 dark:bg-violet-700/40 dark:text-violet-200" : "text-slate-500 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300"}`}
+                className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${debuggerPanelOpen ? "bg-ps-accent-soft text-ps-accent dark:bg-ps-accent-soft dark:text-ps-accent" : "text-ps-faint hover:bg-ps-elevated hover:text-ps-muted dark:hover:bg-ps-surface dark:hover:text-ps-muted"}`}
                 title="Toggle debugger panel"
               >
                 Debugger
@@ -624,7 +624,7 @@ export function CodingLayout({
                   setStreamPanelOpen(false);
                   setDebuggerPanelOpen(false);
                 }}
-                className="rounded p-0.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                className="rounded p-0.5 text-ps-faint hover:bg-ps-surface hover:text-ps-ink"
                 title="Hide all side panels"
               >
                 <PanelLeftClose className="size-3.5" aria-hidden />
@@ -636,7 +636,7 @@ export function CodingLayout({
                   setStreamPanelOpen(true);
                   setDebuggerPanelOpen(true);
                 }}
-                className="rounded p-0.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                className="rounded p-0.5 text-ps-faint hover:bg-ps-surface hover:text-ps-ink"
                 title="Show all side panels"
               >
                 <PanelLeftOpen className="size-3.5" aria-hidden />
@@ -650,20 +650,20 @@ export function CodingLayout({
             </div>
           ) : null}
           {debuggerPanelOpen ? (
-            <div className={`flex min-h-0 flex-1 flex-col border-t border-slate-800 ${!streamPanelOpen ? "flex-[2]" : ""}`}>
+            <div className={`flex min-h-0 flex-1 flex-col border-t border-ps-border ${!streamPanelOpen ? "flex-[2]" : ""}`}>
               <EventStreamDebugger repoId={activeRepo?.id} />
             </div>
           ) : null}
         </aside>
-        <aside className="flex w-56 shrink-0 flex-col rounded-lg border border-slate-300 bg-slate-100 shadow-sm dark:border-slate-700 dark:bg-slate-900/40 dark:shadow-none lg:w-64">
-          <div className="flex items-center justify-between gap-2 border-b border-slate-300 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/60">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">Files</h2>
+        <aside className="ps-aside flex w-56 shrink-0 flex-col lg:w-64">
+          <div className="flex items-center justify-between gap-2 border-b border-ps-border bg-ps-elevated px-3 py-2 dark:border-ps-border dark:bg-ps-elevated">
+            <h2 className="ps-label">Files</h2>
             {activeRepo ? (
               <div className="flex shrink-0 items-center gap-1">
                 <button
                   type="button"
                   onClick={collapseTree}
-                  className="rounded px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                  className="rounded px-1.5 py-0.5 text-[10px] text-ps-muted hover:bg-ps-elevated hover:text-ps-ink dark:text-ps-faint dark:hover:bg-ps-surface dark:hover:text-ps-ink"
                   title="Collapse all folders"
                 >
                   Collapse all
@@ -671,7 +671,7 @@ export function CodingLayout({
                 <button
                   type="button"
                   onClick={expandTree}
-                  className="rounded px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                  className="rounded px-1.5 py-0.5 text-[10px] text-ps-muted hover:bg-ps-elevated hover:text-ps-ink dark:text-ps-faint dark:hover:bg-ps-surface dark:hover:text-ps-ink"
                   title="Expand all folders"
                 >
                   Expand all
@@ -679,7 +679,7 @@ export function CodingLayout({
               </div>
             ) : null}
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950/30">
+          <div className="min-h-0 flex-1 overflow-y-auto bg-ps-elevated">
             {activeRepo ? (
               <RepoFileTree
                 nodes={treeNodes}
@@ -689,7 +689,7 @@ export function CodingLayout({
                 onOpenFile={(path) => void codingIde.openFile(path)}
               />
             ) : (
-              <p className="px-3 py-4 text-xs leading-relaxed text-slate-500">
+              <p className="px-3 py-4 text-xs leading-relaxed text-ps-faint">
                 Select a repo to browse its file tree.
               </p>
             )}

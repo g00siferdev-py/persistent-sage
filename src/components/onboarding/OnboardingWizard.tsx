@@ -185,15 +185,15 @@ export function OnboardingWizard({ onComplete }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-ps-canvas p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="onboarding-title"
     >
-      <div className="flex max-h-[min(32rem,90vh)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-100 shadow-2xl dark:bg-slate-900">
-        <div className="h-1 shrink-0 bg-slate-200 dark:bg-slate-800">
+      <div className="flex max-h-[min(32rem,90vh)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-ps-border bg-ps-elevated shadow-2xl dark:bg-ps-elevated">
+        <div className="h-1 shrink-0 bg-ps-elevated dark:bg-ps-surface">
           <div
-            className="h-full bg-indigo-500 transition-all duration-300"
+            className="h-full bg-ps-accent transition-all duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -207,10 +207,10 @@ export function OnboardingWizard({ onComplete }: Props) {
 
           {step === "welcome" ? (
             <>
-              <h2 id="onboarding-title" className="text-center text-xl font-semibold text-slate-900 dark:text-white">
+              <h2 id="onboarding-title" className="text-center text-xl font-semibold text-ps-ink">
                 Welcome to Persistent Sage
               </h2>
-              <p className="mt-2 text-center text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+              <p className="mt-2 text-center text-sm leading-relaxed text-ps-muted">
                 Local-first AI companion. Chats and memory stay on your machine. This short setup
                 helps you choose where data lives and connect your AI provider.
               </p>
@@ -219,8 +219,8 @@ export function OnboardingWizard({ onComplete }: Props) {
 
           {step === "storage" ? (
             <>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Where should data live?</h2>
-              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+              <h2 className="text-lg font-semibold text-ps-ink">Where should data live?</h2>
+              <p className="mt-1 text-sm text-ps-muted">
                 Pick the option that matches how you installed Persistent Sage.
               </p>
               <ul className="mt-4 space-y-2">
@@ -251,22 +251,22 @@ export function OnboardingWizard({ onComplete }: Props) {
                       type="button"
                       onClick={() => setStorageChoice(id)}
                       className={`flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition ${
-                        storageChoice === id
-                          ? "border-indigo-500/60 bg-indigo-500/10 ring-1 ring-indigo-500/40"
-                          : "border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600"
-                      }`}
+ storageChoice === id
+ ? "border-ps-accent/60 bg-ps-accent-soft ring-1 ring-ps-accent/40"
+ : "border-ps-border hover:border-ps-border dark:hover:border-ps-border"
+ }`}
                     >
-                      <Icon className="mt-0.5 size-4 shrink-0 text-indigo-400" aria-hidden />
+                      <Icon className="mt-0.5 size-4 shrink-0 text-ps-accent" aria-hidden />
                       <span>
-                        <span className="block text-sm font-medium text-slate-900 dark:text-white">{title}</span>
-                        <span className="mt-0.5 block text-xs text-slate-600 dark:text-slate-400">{body}</span>
+                        <span className="block text-sm font-medium text-ps-ink">{title}</span>
+                        <span className="mt-0.5 block text-xs text-ps-muted">{body}</span>
                       </span>
                     </button>
                   </li>
                 ))}
               </ul>
               {dataDirHint ? (
-                <p className="mt-3 font-mono text-[10px] text-slate-500" title={dataDirHint}>
+                <p className="mt-3 font-mono text-[10px] text-ps-faint" title={dataDirHint}>
                   Current data path: {dataDirHint.length > 48 ? `…${dataDirHint.slice(-44)}` : dataDirHint}
                 </p>
               ) : null}
@@ -275,11 +275,11 @@ export function OnboardingWizard({ onComplete }: Props) {
 
           {step === "provider" ? (
             <>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Choose your AI provider</h2>
-              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+              <h2 className="text-lg font-semibold text-ps-ink">Choose your AI provider</h2>
+              <p className="mt-1 text-sm text-ps-muted">
                 You can change this anytime in Settings → Provider.
               </p>
-              <label className="mt-4 block text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="onb-provider">
+              <label className="mt-4 block text-xs font-medium text-ps-muted" htmlFor="onb-provider">
                 Active backend
               </label>
               <select
@@ -287,7 +287,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                 value={providerId}
                 disabled={busy}
                 onChange={(e) => void applyProvider(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                className="mt-1 w-full rounded-lg border border-ps-border bg-white dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-ps-accent"
               >
                 {providers.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -297,18 +297,18 @@ export function OnboardingWizard({ onComplete }: Props) {
                 ))}
               </select>
               {providerId === "placeholder" ? (
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-ps-faint">
                   Offline placeholder — explore the UI without calling a live API.
                 </p>
               ) : null}
               {providerId === "ollama" ? (
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-ps-faint">
                   Requires Ollama running locally (default http://127.0.0.1:11434).
                 </p>
               ) : null}
               {selectedProviderRequiresKey ? (
-                <div className="mt-4 rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-3">
-                  <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                <div className="mt-4 rounded-lg border border-ps-accent/30 bg-ps-accent/5 p-3">
+                  <p className="text-xs leading-relaxed text-ps-muted">
                     {selectedProviderHasKey
                       ? "An API key is already saved for this provider on this device."
                       : "This provider needs an API key before chat can work. Keys are encrypted and stored only on this device."}
@@ -332,13 +332,13 @@ export function OnboardingWizard({ onComplete }: Props) {
                         value={apiKeyInput}
                         disabled={busy}
                         onChange={(e) => setApiKeyInput(e.target.value)}
-                        className="mt-3 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 font-mono text-sm outline-none focus:border-indigo-500"
+                        className="mt-3 w-full rounded-lg border border-ps-border bg-white dark:bg-ps-canvas px-3 py-2 font-mono text-sm outline-none focus:border-ps-accent"
                       />
                       <button
                         type="button"
                         disabled={busy}
                         onClick={() => void saveApiKey()}
-                        className="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                        className="mt-2 w-full rounded-lg bg-ps-accent px-3 py-2 text-sm font-medium text-white hover:bg-ps-accent disabled:opacity-50"
                       >
                         Save API key
                       </button>
@@ -353,8 +353,8 @@ export function OnboardingWizard({ onComplete }: Props) {
 
           {step === "apikey" ? (
             <>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">API key</h2>
-              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+              <h2 className="text-lg font-semibold text-ps-ink">API key</h2>
+              <p className="mt-1 text-sm text-ps-muted">
                 Keys are encrypted and stored only on this device.
               </p>
               <input
@@ -374,13 +374,13 @@ export function OnboardingWizard({ onComplete }: Props) {
                 value={apiKeyInput}
                 disabled={busy}
                 onChange={(e) => setApiKeyInput(e.target.value)}
-                className="mt-4 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 font-mono text-sm outline-none focus:border-indigo-500"
+                className="mt-4 w-full rounded-lg border border-ps-border bg-white dark:bg-ps-canvas px-3 py-2 font-mono text-sm outline-none focus:border-ps-accent"
               />
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => void saveApiKey()}
-                className="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                className="mt-2 w-full rounded-lg bg-ps-accent px-3 py-2 text-sm font-medium text-white hover:bg-ps-accent disabled:opacity-50"
               >
                 Save API key
               </button>
@@ -392,30 +392,30 @@ export function OnboardingWizard({ onComplete }: Props) {
 
           {step === "done" ? (
             <>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">You&apos;re ready</h2>
-              <ul className="mt-3 list-inside list-disc space-y-1 text-sm text-slate-600 dark:text-slate-400">
-                <li>Click <strong className="text-slate-800 dark:text-slate-200">New chat</strong> in the sidebar.</li>
-                <li>Open <strong className="text-slate-800 dark:text-slate-200">Settings</strong> for tools, memory, and Pulse.</li>
+              <h2 className="text-lg font-semibold text-ps-ink">You&apos;re ready</h2>
+              <ul className="mt-3 list-inside list-disc space-y-1 text-sm text-ps-muted">
+                <li>Click <strong className="text-ps-ink">New chat</strong> in the sidebar.</li>
+                <li>Open <strong className="text-ps-ink">Settings</strong> for tools, memory, and Pulse.</li>
                 {storageChoice === "portable" ? (
-                  <li>Use <strong className="text-slate-800 dark:text-slate-200">Start Persistent Sage (Portable).bat</strong> on USB installs.</li>
+                  <li>Use <strong className="text-ps-ink">Start Persistent Sage (Portable).bat</strong> on USB installs.</li>
                 ) : null}
               </ul>
               <button
                 type="button"
                 onClick={() => void revealDataFolder()}
-                className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-indigo-600 dark:text-indigo-300 hover:underline"
+                className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-ps-accent dark:text-ps-accent hover:underline"
               >
                 <FolderOpen className="size-3.5" aria-hidden />
                 Reveal data folder
               </button>
-              <div className="mt-5 rounded-lg border border-slate-300/80 bg-slate-50 px-3 py-3 dark:border-slate-700/80 dark:bg-slate-950/40">
+              <div className="mt-5 rounded-lg border border-ps-border bg-ps-elevated px-3 py-3 dark:border-ps-border dark:bg-ps-canvas">
                 <div className="flex items-start gap-2.5">
                   <Heart className="mt-0.5 size-4 shrink-0 text-rose-400" aria-hidden />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-slate-900 dark:text-white">
+                    <p className="text-sm font-medium text-ps-ink">
                       Support development (optional)
                     </p>
-                    <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                    <p className="mt-1 text-xs leading-relaxed text-ps-muted">
                       Persistent Sage is free and open source. If it helps you, Daniel Greene accepts
                       voluntary tips via PayPal or Cash App. Donations do not unlock features.
                     </p>
@@ -433,12 +433,12 @@ export function OnboardingWizard({ onComplete }: Props) {
           ) : null}
         </div>
 
-        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-slate-200 dark:border-slate-800 px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-ps-border px-4 py-3">
           <button
             type="button"
             disabled={step === "welcome" || busy}
             onClick={goBack}
-            className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-ps-muted hover:bg-ps-accent-soft disabled:opacity-40"
           >
             <ChevronLeft className="size-4" aria-hidden />
             Back
@@ -448,7 +448,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               type="button"
               disabled={busy}
               onClick={goNext}
-              className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-lg bg-ps-accent px-4 py-2 text-sm font-medium text-white hover:bg-ps-accent disabled:opacity-50"
             >
               Continue
               <ChevronRight className="size-4" aria-hidden />
@@ -458,7 +458,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               type="button"
               disabled={busy}
               onClick={() => void finish()}
-              className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-lg bg-ps-accent px-4 py-2 text-sm font-medium text-white hover:bg-ps-accent disabled:opacity-50"
             >
               Open Persistent Sage
             </button>

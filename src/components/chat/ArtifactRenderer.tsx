@@ -107,7 +107,7 @@ function ChartArtifact({
         <div className="flex justify-end">
           <CopyButton text={rawJson || chartHtml} label="Copy chart data" />
         </div>
-        <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-950/30">
+        <div className="overflow-hidden rounded-lg border border-ps-border bg-ps-surface">
           <iframe
             title={title}
             sandbox=""
@@ -151,7 +151,7 @@ function ArtifactCitations({ citations }: { citations: ArtifactCitationsModel[] 
             onClick={() => {
               void invoke("open_path", { path: c.path });
             }}
-            className="rounded-full border border-slate-200 dark:border-slate-800/80 bg-white/70 dark:bg-slate-950/30 px-2.5 py-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900"
+            className="rounded-md border border-ps-border bg-ps-surface px-2.5 py-1 text-[11px] font-semibold text-ps-ink hover:bg-ps-elevated"
             title={c.path}
           >
             {text}
@@ -197,11 +197,11 @@ export function ArtifactRenderer({
     return (
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+          <p className="text-xs font-semibold text-ps-muted">
             {artifact.title}
           </p>
           {artifact.caption ? (
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-ps-faint">
               {truncateArtifactCaption(artifact.caption, 80)}
             </p>
           ) : null}
@@ -217,12 +217,12 @@ export function ArtifactRenderer({
     return (
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+          <p className="text-xs font-semibold text-ps-muted">
             Artifact: {artifact.title}
           </p>
           <CopyButton text={rawBody} label={`Copy ${artifact.title}`} />
         </div>
-        <pre className="whitespace-pre-wrap rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30 p-2 text-xs text-slate-800 dark:text-slate-200">
+        <pre className="whitespace-pre-wrap rounded-lg border border-ps-border bg-ps-elevated p-2 text-xs text-ps-ink">
           {rawBody}
         </pre>
         {artifact.citations?.length ? <ArtifactCitations citations={artifact.citations} /> : null}
@@ -237,19 +237,19 @@ export function ArtifactRenderer({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+        <p className="text-xs font-semibold text-ps-muted">
           {artifact.title}
         </p>
         <div className="flex items-center gap-2">
           <CopyButton text={html} label={`Copy ${artifact.title}`} />
           {artifact.caption ? (
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-ps-faint">
               {truncateArtifactCaption(artifact.caption, 80)}
             </p>
           ) : null}
         </div>
       </div>
-      <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/30">
+      <div className="overflow-hidden rounded-lg border border-ps-border bg-white dark:bg-ps-canvas">
         <iframe
           title={artifact.title}
           sandbox=""

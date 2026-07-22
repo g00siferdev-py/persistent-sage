@@ -143,19 +143,19 @@ export function CodingPlaygroundPanel() {
   }, [currentLang]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-950/40">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-ps-canvas">
       {/* Tool tabs: run code / markdown editor / json validator */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-slate-800 bg-slate-900/90 px-3 py-1.5">
+      <div className="flex shrink-0 items-center gap-1 border-b border-ps-border bg-ps-elevated px-3 py-1.5">
         {TOOLS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             type="button"
             onClick={() => setTool(id)}
             className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium ${
-              tool === id
-                ? "bg-violet-700 text-white"
-                : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-            }`}
+ tool === id
+ ? "bg-ps-accent text-white"
+ : "text-ps-faint hover:bg-ps-surface hover:text-ps-ink"
+ }`}
           >
             <Icon className="h-3.5 w-3.5" aria-hidden />
             {label}
@@ -169,13 +169,13 @@ export function CodingPlaygroundPanel() {
       {tool === "code" ? (
         <>
       {/* Toolbar */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-800 bg-slate-900/80 px-3 py-1.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-ps-border bg-ps-elevated px-3 py-1.5">
         <div className="flex items-center gap-2">
           <select
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value as PlaygroundLanguage)}
             disabled={loading}
-            className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200 outline-none focus:border-violet-500"
+            className="rounded border border-ps-border bg-ps-canvas px-2 py-1 text-xs text-ps-ink outline-none focus:border-ps-accent"
           >
             {LANGUAGES.map((l) => (
               <option key={l.id} value={l.id}>
@@ -186,7 +186,7 @@ export function CodingPlaygroundPanel() {
           <button
             type="button"
             onClick={() => setShowOptions((v) => !v)}
-            className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            className="rounded border border-ps-border px-2 py-1 text-xs text-ps-faint hover:bg-ps-surface hover:text-ps-ink"
           >
             {showOptions ? "Hide options" : "Options"}
           </button>
@@ -196,7 +196,7 @@ export function CodingPlaygroundPanel() {
             type="button"
             onClick={() => void run()}
             disabled={loading || !code.trim()}
-            className="flex items-center gap-1 rounded bg-violet-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-violet-600 disabled:opacity-50"
+            className="flex items-center gap-1 rounded bg-ps-accent px-2.5 py-1 text-xs font-medium text-white hover:bg-ps-accent-hover disabled:opacity-50"
           >
             <Play className="h-3 w-3" />
             {loading ? "Running…" : "Run"}
@@ -205,7 +205,7 @@ export function CodingPlaygroundPanel() {
             type="button"
             onClick={clear}
             disabled={loading}
-            className="flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+            className="flex items-center gap-1 rounded border border-ps-border bg-ps-surface px-2.5 py-1 text-xs text-ps-ink hover:bg-ps-surface disabled:opacity-50"
           >
             <RotateCcw className="h-3 w-3" />
             Clear
@@ -215,31 +215,31 @@ export function CodingPlaygroundPanel() {
 
       {/* Collapsible options */}
       {showOptions && (
-        <div className="flex shrink-0 gap-3 border-b border-slate-800 bg-slate-900/60 px-3 py-2">
+        <div className="flex shrink-0 gap-3 border-b border-ps-border bg-ps-elevated px-3 py-2">
           <div className="flex flex-1 flex-col gap-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
               Arguments (one per line)
             </label>
             <textarea
               value={args}
               onChange={(e) => setArgs(e.target.value)}
-              className="h-16 resize-none rounded border border-slate-700 bg-slate-950 p-1.5 font-mono text-[11px] text-slate-200 outline-none focus:border-violet-500"
+              className="h-16 resize-none rounded border border-ps-border bg-ps-canvas p-1.5 font-mono text-[11px] text-ps-ink outline-none focus:border-ps-accent"
               spellCheck={false}
             />
           </div>
           <div className="flex flex-1 flex-col gap-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
               Stdin
             </label>
             <textarea
               value={stdin}
               onChange={(e) => setStdin(e.target.value)}
-              className="h-16 resize-none rounded border border-slate-700 bg-slate-950 p-1.5 font-mono text-[11px] text-slate-200 outline-none focus:border-violet-500"
+              className="h-16 resize-none rounded border border-ps-border bg-ps-canvas p-1.5 font-mono text-[11px] text-ps-ink outline-none focus:border-ps-accent"
               spellCheck={false}
             />
           </div>
           <div className="flex w-28 flex-col gap-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
               Timeout (s)
             </label>
             <input
@@ -248,17 +248,17 @@ export function CodingPlaygroundPanel() {
               max={300}
               value={timeout}
               onChange={(e) => setTimeout(Number(e.target.value))}
-              className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200 outline-none focus:border-violet-500"
+              className="rounded border border-ps-border bg-ps-canvas px-2 py-1 text-xs text-ps-ink outline-none focus:border-ps-accent"
             />
           </div>
           <div className="flex w-40 flex-col gap-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
               Network
             </label>
             <select
               value={allowNetwork ? "allow" : "block"}
               onChange={(e) => setAllowNetwork(e.target.value === "allow")}
-              className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200 outline-none focus:border-violet-500"
+              className="rounded border border-ps-border bg-ps-canvas px-2 py-1 text-xs text-ps-ink outline-none focus:border-ps-accent"
             >
               <option value="block">Blocked (sandbox)</option>
               <option value="allow">Allowed</option>
@@ -276,11 +276,11 @@ export function CodingPlaygroundPanel() {
       />
 
       {/* Output */}
-      <div className="flex min-h-[8rem] shrink-0 flex-col border-t border-slate-800 bg-slate-950/60">
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/80 px-3 py-1">
+      <div className="flex min-h-[8rem] shrink-0 flex-col border-t border-ps-border bg-ps-canvas">
+        <div className="flex shrink-0 items-center justify-between border-b border-ps-border bg-ps-elevated px-3 py-1">
           <div className="flex items-center gap-2">
-            <Terminal className="h-3.5 w-3.5 text-slate-500" />
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <Terminal className="h-3.5 w-3.5 text-ps-faint" />
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-ps-faint">
               Output
             </span>
           </div>
@@ -304,7 +304,7 @@ export function CodingPlaygroundPanel() {
           {result ? (
             <div className="space-y-2">
               {result.stdout && (
-                <pre className="whitespace-pre-wrap rounded border border-slate-800 bg-slate-950 p-2 font-mono text-[11px] text-slate-200">
+                <pre className="whitespace-pre-wrap rounded border border-ps-border bg-ps-canvas p-2 font-mono text-[11px] text-ps-ink">
                   {result.stdout}
                 </pre>
               )}
@@ -314,11 +314,11 @@ export function CodingPlaygroundPanel() {
                 </pre>
               )}
               {!result.stdout && !result.stderr && !result.error && (
-                <p className="text-xs italic text-slate-500">No output.</p>
+                <p className="text-xs italic text-ps-faint">No output.</p>
               )}
             </div>
           ) : (
-            <p className="text-xs italic text-slate-500">
+            <p className="text-xs italic text-ps-faint">
               Click Run to execute the snippet in a sandboxed temp directory outside your repo.
             </p>
           )}

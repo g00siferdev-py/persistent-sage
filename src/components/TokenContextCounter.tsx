@@ -90,7 +90,7 @@ export function TokenContextCounter({
       <Gauge className={`w-3.5 h-3.5 ${getColor(contextInfo.percentUsed)}`} />
       <div className="flex flex-col min-w-0">
         <span className="font-medium truncate">{contextInfo.displayString}</span>
-        <div className="w-full h-1 bg-muted rounded-full overflow-hidden mt-0.5">
+        <div className="w-full h-1 bg-muted rounded-md overflow-hidden mt-0.5">
           <div
             className={`h-full ${getBgColor(contextInfo.percentUsed)} transition-all duration-300`}
             style={{ width: `${contextInfo.percentUsed}%` }}

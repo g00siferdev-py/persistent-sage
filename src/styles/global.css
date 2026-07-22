@@ -2,6 +2,88 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ---------------------------------------------------------------------------
+   Persistent Sage — design tokens
+   Steel ink + warm honey accents on cool stone. No purple, no sage-green brand.
+--------------------------------------------------------------------------- */
+
+:root {
+  --ps-canvas: #e6e4df;
+  --ps-elevated: #f1efeb;
+  --ps-surface: #faf9f7;
+  --ps-ink: #161513;
+  --ps-muted: #5f5c56;
+  --ps-faint: #8f8a81;
+  --ps-border: #c5c0b6;
+  --ps-border-strong: #a8a297;
+  --ps-accent: #2a4f6e;
+  --ps-accent-hover: #1f3d56;
+  --ps-accent-soft: #d5e2ec;
+  --ps-accent-fg: #f7fafc;
+  --ps-warm: #b5792c;
+  --ps-warm-soft: #f3e4cc;
+  --ps-danger: #9e3a3a;
+  --ps-danger-soft: #f3dcdc;
+  --ps-success: #2d5f48;
+  --ps-success-soft: #d7ebe1;
+  --ps-shadow: 0 1px 0 rgba(22, 21, 19, 0.06);
+  --ps-overlay: rgba(22, 21, 19, 0.45);
+  --ps-grain: rgba(22, 21, 19, 0.035);
+  --ps-radius: 0.375rem;
+  --ps-radius-lg: 0.625rem;
+  --ps-font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --ps-font-body: "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+  --ps-font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", monospace;
+}
+
+.dark {
+  --ps-canvas: #11100e;
+  --ps-elevated: #191714;
+  --ps-surface: #211f1b;
+  --ps-ink: #eceae5;
+  --ps-muted: #a7a29a;
+  --ps-faint: #7a756c;
+  --ps-border: #3a3630;
+  --ps-border-strong: #524e46;
+  --ps-accent: #7fa9c8;
+  --ps-accent-hover: #9bbdd6;
+  --ps-accent-soft: #243445;
+  --ps-accent-fg: #0f1418;
+  --ps-warm: #d4a054;
+  --ps-warm-soft: #3a2e1c;
+  --ps-danger: #e07a7a;
+  --ps-danger-soft: #3a2222;
+  --ps-success: #7dba9a;
+  --ps-success-soft: #1e3228;
+  --ps-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  --ps-overlay: rgba(0, 0, 0, 0.55);
+  --ps-grain: rgba(255, 255, 255, 0.02);
+}
+
+@theme {
+  --font-sans: var(--ps-font-body);
+  --font-display: var(--ps-font-display);
+  --font-mono: var(--ps-font-mono);
+  --color-ps-canvas: var(--ps-canvas);
+  --color-ps-elevated: var(--ps-elevated);
+  --color-ps-surface: var(--ps-surface);
+  --color-ps-ink: var(--ps-ink);
+  --color-ps-muted: var(--ps-muted);
+  --color-ps-faint: var(--ps-faint);
+  --color-ps-border: var(--ps-border);
+  --color-ps-border-strong: var(--ps-border-strong);
+  --color-ps-accent: var(--ps-accent);
+  --color-ps-accent-hover: var(--ps-accent-hover);
+  --color-ps-accent-soft: var(--ps-accent-soft);
+  --color-ps-accent-fg: var(--ps-accent-fg);
+  --color-ps-warm: var(--ps-warm);
+  --color-ps-warm-soft: var(--ps-warm-soft);
+  --color-ps-danger: var(--ps-danger);
+  --color-ps-danger-soft: var(--ps-danger-soft);
+  --color-ps-success: var(--ps-success);
+  --color-ps-success-soft: var(--ps-success-soft);
+}
+
 @layer base {
   html,
   body,
@@ -15,76 +97,255 @@
   }
 
   body {
-    @apply overflow-hidden bg-slate-100 text-slate-900;
-  }
-
-  html.dark body {
-    @apply bg-slate-950 text-slate-100;
+    font-family: var(--ps-font-body);
+    color: var(--ps-ink);
+    background-color: var(--ps-canvas);
+    background-image:
+      radial-gradient(ellipse 120% 80% at 0% 0%, var(--ps-accent-soft) 0%, transparent 55%),
+      radial-gradient(ellipse 90% 60% at 100% 100%, var(--ps-warm-soft) 0%, transparent 50%),
+      repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        var(--ps-grain) 2px,
+        var(--ps-grain) 3px
+      );
+    background-attachment: fixed;
+    overflow: hidden;
   }
 
   #root {
     @apply min-h-0;
   }
+
+  ::selection {
+    background: var(--ps-accent-soft);
+    color: var(--ps-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ps-accent);
+    outline-offset: 2px;
+  }
 }
 
-/* --- Syntax highlighting (highlight.js token colors, light + dark) ----------- */
-
 @layer components {
+  .font-display {
+    font-family: var(--ps-font-display);
+  }
+
+  .ps-shell {
+    @apply relative flex h-full w-full flex-col overflow-hidden text-ps-ink;
+  }
+
+  .ps-topbar {
+    @apply flex shrink-0 items-stretch gap-4 border-b border-ps-border px-4 py-3 sm:px-6;
+    background: color-mix(in srgb, var(--ps-elevated) 88%, transparent);
+    backdrop-filter: blur(10px);
+  }
+
+  .ps-panel {
+    @apply border border-ps-border bg-ps-surface;
+    border-radius: var(--ps-radius-lg);
+    box-shadow: var(--ps-shadow);
+  }
+
+  .ps-panel-flush {
+    @apply border-ps-border bg-ps-elevated;
+  }
+
+  .ps-btn {
+    @apply inline-flex items-center justify-center gap-1.5 border border-ps-border bg-ps-surface px-3 py-1.5 text-xs font-medium text-ps-ink transition-colors;
+    border-radius: var(--ps-radius);
+  }
+
+  .ps-btn:hover:not(:disabled) {
+    background: var(--ps-elevated);
+    border-color: var(--ps-border-strong);
+  }
+
+  .ps-btn:disabled {
+    @apply pointer-events-none opacity-40;
+  }
+
+  .ps-btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 border border-transparent px-3 py-1.5 text-xs font-semibold transition-colors;
+    border-radius: var(--ps-radius);
+    background: var(--ps-accent);
+    color: var(--ps-accent-fg);
+  }
+
+  .ps-btn-primary:hover:not(:disabled) {
+    background: var(--ps-accent-hover);
+  }
+
+  .ps-btn-primary:disabled {
+    @apply pointer-events-none opacity-40;
+  }
+
+  .ps-btn-ghost {
+    @apply inline-flex items-center justify-center gap-1.5 border border-transparent bg-transparent px-2.5 py-1.5 text-xs font-medium text-ps-muted transition-colors;
+    border-radius: var(--ps-radius);
+  }
+
+  .ps-btn-ghost:hover:not(:disabled) {
+    background: var(--ps-accent-soft);
+    color: var(--ps-ink);
+  }
+
+  .ps-btn-danger {
+    @apply inline-flex items-center justify-center gap-1.5 border px-3 py-1.5 text-xs font-medium transition-colors;
+    border-radius: var(--ps-radius);
+    border-color: color-mix(in srgb, var(--ps-danger) 45%, var(--ps-border));
+    background: var(--ps-danger-soft);
+    color: var(--ps-danger);
+  }
+
+  .ps-btn-danger:hover:not(:disabled) {
+    filter: brightness(0.97);
+  }
+
+  .ps-btn-danger:disabled {
+    @apply pointer-events-none opacity-30;
+  }
+
+  .ps-input {
+    @apply w-full border border-ps-border bg-ps-surface px-3 py-2 text-sm text-ps-ink outline-none transition placeholder:text-ps-faint;
+    border-radius: var(--ps-radius);
+  }
+
+  .ps-input:focus {
+    border-color: var(--ps-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ps-accent) 22%, transparent);
+  }
+
+  .ps-menu {
+    @apply z-30 min-w-[12rem] overflow-hidden border border-ps-border bg-ps-surface py-1;
+    border-radius: var(--ps-radius-lg);
+    box-shadow: var(--ps-shadow), 0 12px 28px rgba(22, 21, 19, 0.12);
+  }
+
+  .dark .ps-menu {
+    box-shadow: var(--ps-shadow), 0 16px 36px rgba(0, 0, 0, 0.45);
+  }
+
+  .ps-menu-item {
+    @apply flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ps-ink transition-colors;
+  }
+
+  .ps-menu-item:hover:not(:disabled) {
+    background: var(--ps-accent-soft);
+  }
+
+  .ps-menu-item:disabled {
+    @apply opacity-50;
+  }
+
+  .ps-menu-sep {
+    @apply my-1 border-t border-ps-border;
+  }
+
+  .ps-chip {
+    @apply inline-flex items-center gap-1 border border-ps-border bg-ps-elevated px-2.5 py-1 text-[11px] font-medium text-ps-muted transition-colors;
+    border-radius: var(--ps-radius);
+  }
+
+  .ps-chip:hover:not(:disabled) {
+    border-color: var(--ps-border-strong);
+    color: var(--ps-ink);
+  }
+
+  .ps-chip-active {
+    border-color: color-mix(in srgb, var(--ps-accent) 55%, var(--ps-border));
+    background: var(--ps-accent-soft);
+    color: var(--ps-accent);
+  }
+
+  .ps-label {
+    @apply text-[10px] font-semibold uppercase tracking-[0.14em] text-ps-faint;
+  }
+
+  .ps-title {
+    font-family: var(--ps-font-display);
+    @apply text-sm font-semibold tracking-tight text-ps-ink;
+  }
+
+  .ps-msg-user {
+    @apply ml-[12%] border border-ps-border bg-ps-elevated px-4 py-3 text-sm leading-relaxed text-ps-ink;
+    border-radius: var(--ps-radius-lg) var(--ps-radius-lg) 0.2rem var(--ps-radius-lg);
+  }
+
+  .ps-msg-assistant {
+    @apply mr-[8%] border-l-[3px] border-l-ps-accent border-y border-r border-ps-border bg-ps-surface px-4 py-3 text-sm leading-relaxed text-ps-ink;
+    border-radius: 0.2rem var(--ps-radius-lg) var(--ps-radius-lg) var(--ps-radius-lg);
+  }
+
+  .ps-composer {
+    @apply flex flex-col gap-3 border-t border-ps-border px-4 py-4 sm:px-8;
+    background: color-mix(in srgb, var(--ps-elevated) 92%, transparent);
+  }
+
+  .ps-aside {
+    @apply flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-ps-border bg-ps-elevated;
+  }
+
+  /* --- Syntax highlighting ------------------------------------------------ */
+
   .hljs {
-    color: #1f2937;
+    color: #2a2824;
   }
   .hljs-comment,
   .hljs-quote {
-    color: #6b7280;
+    color: #7a756c;
     font-style: italic;
   }
   .hljs-keyword,
   .hljs-selector-tag,
   .hljs-doctag,
   .hljs-meta .hljs-keyword {
-    color: #7c3aed;
+    color: #2a4f6e;
   }
   .hljs-string,
   .hljs-regexp,
   .hljs-addition {
-    color: #15803d;
+    color: #2d5f48;
   }
   .hljs-number,
   .hljs-literal,
   .hljs-symbol,
   .hljs-bullet {
-    color: #b45309;
+    color: #b5792c;
   }
   .hljs-title,
   .hljs-title.function_,
   .hljs-section {
-    color: #1d4ed8;
+    color: #1f3d56;
   }
   .hljs-title.class_,
   .hljs-type,
   .hljs-built_in {
-    color: #0e7490;
+    color: #3d6a7a;
   }
   .hljs-attr,
   .hljs-attribute,
   .hljs-variable,
   .hljs-template-variable,
   .hljs-property {
-    color: #9d174d;
+    color: #8a4b2e;
   }
   .hljs-name,
   .hljs-selector-id,
   .hljs-selector-class,
   .hljs-tag {
-    color: #b91c1c;
+    color: #9e3a3a;
   }
   .hljs-meta,
   .hljs-link {
-    color: #0369a1;
+    color: #2a4f6e;
   }
   .hljs-deletion {
-    color: #b91c1c;
-    background: rgba(185, 28, 28, 0.08);
+    color: #9e3a3a;
+    background: rgba(158, 58, 58, 0.08);
   }
   .hljs-emphasis {
     font-style: italic;
@@ -94,84 +355,87 @@
   }
 
   .dark .hljs {
-    color: #e2e8f0;
+    color: #eceae5;
   }
   .dark .hljs-comment,
   .dark .hljs-quote {
-    color: #94a3b8;
+    color: #8f8a81;
   }
   .dark .hljs-keyword,
   .dark .hljs-selector-tag,
   .dark .hljs-doctag,
   .dark .hljs-meta .hljs-keyword {
-    color: #c4b5fd;
+    color: #9bbdd6;
   }
   .dark .hljs-string,
   .dark .hljs-regexp,
   .dark .hljs-addition {
-    color: #86efac;
+    color: #7dba9a;
   }
   .dark .hljs-number,
   .dark .hljs-literal,
   .dark .hljs-symbol,
   .dark .hljs-bullet {
-    color: #fcd34d;
+    color: #d4a054;
   }
   .dark .hljs-title,
   .dark .hljs-title.function_,
   .dark .hljs-section {
-    color: #93c5fd;
+    color: #b5d0e3;
   }
   .dark .hljs-title.class_,
   .dark .hljs-type,
   .dark .hljs-built_in {
-    color: #67e8f9;
+    color: #8fc0c8;
   }
   .dark .hljs-attr,
   .dark .hljs-attribute,
   .dark .hljs-variable,
   .dark .hljs-template-variable,
   .dark .hljs-property {
-    color: #f9a8d4;
+    color: #e0b090;
   }
   .dark .hljs-name,
   .dark .hljs-selector-id,
   .dark .hljs-selector-class,
   .dark .hljs-tag {
-    color: #fca5a5;
+    color: #e07a7a;
   }
   .dark .hljs-meta,
   .dark .hljs-link {
-    color: #7dd3fc;
+    color: #7fa9c8;
   }
   .dark .hljs-deletion {
-    color: #fca5a5;
-    background: rgba(252, 165, 165, 0.1);
+    color: #e07a7a;
+    background: rgba(224, 122, 122, 0.12);
   }
 
-  /* Rendered markdown preview (Coding Playground + Markdown viewer) */
   .ps-markdown {
-    @apply text-sm leading-relaxed text-slate-800 dark:text-slate-200;
+    @apply text-sm leading-relaxed text-ps-ink;
   }
   .ps-markdown h1 {
-    @apply mb-3 mt-5 border-b border-slate-200 pb-1.5 text-2xl font-bold text-slate-900 first:mt-0 dark:border-slate-700 dark:text-white;
+    font-family: var(--ps-font-display);
+    @apply mb-3 mt-5 border-b border-ps-border pb-1.5 text-2xl font-semibold text-ps-ink first:mt-0;
   }
   .ps-markdown h2 {
-    @apply mb-2.5 mt-5 border-b border-slate-200 pb-1 text-xl font-bold text-slate-900 first:mt-0 dark:border-slate-700 dark:text-white;
+    font-family: var(--ps-font-display);
+    @apply mb-2.5 mt-5 border-b border-ps-border pb-1 text-xl font-semibold text-ps-ink first:mt-0;
   }
   .ps-markdown h3 {
-    @apply mb-2 mt-4 text-lg font-semibold text-slate-900 first:mt-0 dark:text-white;
+    font-family: var(--ps-font-display);
+    @apply mb-2 mt-4 text-lg font-semibold text-ps-ink first:mt-0;
   }
   .ps-markdown h4,
   .ps-markdown h5,
   .ps-markdown h6 {
-    @apply mb-1.5 mt-3 text-sm font-semibold text-slate-900 dark:text-white;
+    @apply mb-1.5 mt-3 text-sm font-semibold text-ps-ink;
   }
   .ps-markdown p {
     @apply my-2;
   }
   .ps-markdown a {
-    @apply text-indigo-600 underline underline-offset-2 dark:text-indigo-400;
+    color: var(--ps-accent);
+    @apply underline underline-offset-2;
   }
   .ps-markdown ul {
     @apply my-2 list-disc space-y-1 pl-6;
@@ -180,30 +444,37 @@
     @apply my-2 list-decimal space-y-1 pl-6;
   }
   .ps-markdown blockquote {
-    @apply my-3 border-l-4 border-indigo-300 bg-indigo-50/60 px-3 py-1.5 text-slate-600 dark:border-indigo-700 dark:bg-indigo-950/30 dark:text-slate-300;
+    @apply my-3 border-l-4 px-3 py-1.5 text-ps-muted;
+    border-color: var(--ps-accent);
+    background: var(--ps-accent-soft);
   }
   .ps-markdown code {
-    @apply rounded bg-slate-200/80 px-1 py-0.5 font-mono text-[0.85em] text-rose-700 dark:bg-slate-800 dark:text-rose-300;
+    @apply px-1 py-0.5 font-mono text-[0.85em];
+    border-radius: 0.25rem;
+    background: var(--ps-elevated);
+    color: var(--ps-warm);
   }
   .ps-markdown pre {
-    @apply my-3 overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900;
+    @apply my-3 overflow-x-auto border border-ps-border bg-ps-elevated p-3;
+    border-radius: var(--ps-radius);
   }
   .ps-markdown pre code {
-    @apply bg-transparent p-0 text-[12px] text-slate-800 dark:text-slate-100;
+    @apply bg-transparent p-0 text-[12px] text-ps-ink;
   }
   .ps-markdown table {
     @apply my-3 w-full border-collapse text-xs;
   }
   .ps-markdown th {
-    @apply border border-slate-300 bg-slate-100 px-2 py-1 text-left font-semibold dark:border-slate-700 dark:bg-slate-800;
+    @apply border border-ps-border bg-ps-elevated px-2 py-1 text-left font-semibold;
   }
   .ps-markdown td {
-    @apply border border-slate-300 px-2 py-1 dark:border-slate-700;
+    @apply border border-ps-border px-2 py-1;
   }
   .ps-markdown hr {
-    @apply my-4 border-slate-200 dark:border-slate-700;
+    @apply my-4 border-ps-border;
   }
   .ps-markdown img {
-    @apply my-2 max-w-full rounded-lg;
+    @apply my-2 max-w-full;
+    border-radius: var(--ps-radius);
   }
 }

@@ -19,7 +19,7 @@ const TOOLS_SECTION_INFO = (
 );
 
 const WEB_TOOLS_WHEN_ENABLED = (
-  <ul className="mt-2 list-inside list-disc space-y-0.5 text-[10px] leading-relaxed text-slate-500">
+  <ul className="mt-2 list-inside list-disc space-y-0.5 text-[10px] leading-relaxed text-ps-faint">
     <li>{toolDisplayName("web_search")}</li>
     <li>{toolDisplayName("fetch_url")}</li>
     <li>{toolDisplayName("http_request")}</li>
@@ -29,12 +29,12 @@ const WEB_TOOLS_WHEN_ENABLED = (
 const WEB_TOOLS_INFO = (
   <>
     When enabled, your companion may use:{" "}
-    <strong className="font-medium text-slate-700 dark:text-slate-300">
+    <strong className="font-medium text-ps-muted">
       {toolLabelList(["web_search", "fetch_url", "http_request"])}
     </strong>
     . Web Search uses DuckDuckGo; Fetch URL loads public pages as plain text. For JS-heavy news homepages (CNN, BBC),
     also turn on{" "}
-    <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("fetch_browser")}</strong> below.
+    <strong className="font-medium text-ps-muted">{toolDisplayName("fetch_browser")}</strong> below.
     Requests leave this device; local and private URLs are blocked. Requires a tool-capable model. Off by default.
   </>
 );
@@ -42,10 +42,10 @@ const WEB_TOOLS_INFO = (
 const PERSONALITY_EDIT_INFO = (
   <>
     When enabled, your companion may use{" "}
-    <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("personality_get")}</strong> and{" "}
-    <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("personality_update")}</strong> to
+    <strong className="font-medium text-ps-muted">{toolDisplayName("personality_get")}</strong> and{" "}
+    <strong className="font-medium text-ps-muted">{toolDisplayName("personality_update")}</strong> to
     read or change the active profile in{" "}
-    <span className="font-mono text-slate-600 dark:text-slate-400">personality.json</span>. Saves to disk and updates
+    <span className="font-mono text-ps-muted">personality.json</span>. Saves to disk and updates
     this chat&apos;s persona immediately. Off by default.
   </>
 );
@@ -54,11 +54,11 @@ const BROWSER_FETCH_INFO = (
   <>
     Uses system Chrome, Chromium, or Edge to load pages with JavaScript, a normal browser user-agent, and a persistent
     cookie profile. Better for news sites and bot-protected pages. Requires{" "}
-    <strong className="font-medium text-slate-700 dark:text-slate-300">Allow web tools</strong> to be on as well. Needs a
+    <strong className="font-medium text-ps-muted">Allow web tools</strong> to be on as well. Needs a
     browser install or{" "}
-    <span className="font-mono text-slate-600 dark:text-slate-400">PERSISTENT_SAGE_CHROME_PATH</span>. In Docker, install{" "}
-    <span className="font-mono text-slate-600 dark:text-slate-400">ca-certificates</span> and set{" "}
-    <span className="font-mono text-slate-600 dark:text-slate-400">PERSISTENT_SAGE_CHROME_NO_SANDBOX=1</span> if needed.
+    <span className="font-mono text-ps-muted">PERSISTENT_SAGE_CHROME_PATH</span>. In Docker, install{" "}
+    <span className="font-mono text-ps-muted">ca-certificates</span> and set{" "}
+    <span className="font-mono text-ps-muted">PERSISTENT_SAGE_CHROME_NO_SANDBOX=1</span> if needed.
     Off by default.
   </>
 );
@@ -66,7 +66,7 @@ const BROWSER_FETCH_INFO = (
 const BROWSER_ROBOTS_INFO = (
   <>
     When enabled,{" "}
-    <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("fetch_browser")}</strong> does not
+    <strong className="font-medium text-ps-muted">{toolDisplayName("fetch_browser")}</strong> does not
     block URLs based on robots.txt. For personal automation on your machine; many news sites disallow bots in
     robots.txt. Off by default.
   </>
@@ -75,14 +75,14 @@ const BROWSER_ROBOTS_INFO = (
 const WORKSPACE_TOOLS_INFO = (
   <>
     When enabled, your companion may use{" "}
-    <strong className="font-medium text-slate-700 dark:text-slate-300">
+    <strong className="font-medium text-ps-muted">
       {toolLabelList(["workspace_list_directory", "workspace_read_file", "workspace_write_file"])}
     </strong>{" "}
     in the Persistent Sage workspace, and{" "}
-    <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("database_query")}</strong> on{" "}
-    <span className="font-mono text-slate-600 dark:text-slate-400">.db</span> /{" "}
-    <span className="font-mono text-slate-600 dark:text-slate-400">.sqlite</span> files there (workspace location). Paths
-    are relative; <span className="font-mono text-slate-600 dark:text-slate-400">..</span> is rejected. Off by default.
+    <strong className="font-medium text-ps-muted">{toolDisplayName("database_query")}</strong> on{" "}
+    <span className="font-mono text-ps-muted">.db</span> /{" "}
+    <span className="font-mono text-ps-muted">.sqlite</span> files there (workspace location). Paths
+    are relative; <span className="font-mono text-ps-muted">..</span> is rejected. Off by default.
     For the live app database folder, enable App data directory databases below instead.
   </>
 );
@@ -90,12 +90,12 @@ const WORKSPACE_TOOLS_INFO = (
 const APP_DATA_DB_INFO = (
   <>
     When enabled, your companion may use{" "}
-    <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("database_query")}</strong> on SQLite
+    <strong className="font-medium text-ps-muted">{toolDisplayName("database_query")}</strong> on SQLite
     files in Persistent Sage&apos;s data directory — the same resolved path as the live memory database (for example{" "}
-    <span className="font-mono text-slate-600 dark:text-slate-400">~/.local/share/persistent-sage/data</span> on Linux, or
-    the portable <span className="font-mono text-slate-600 dark:text-slate-400">data/</span> folder next to the
+    <span className="font-mono text-ps-muted">~/.local/share/persistent-sage/data</span> on Linux, or
+    the portable <span className="font-mono text-ps-muted">data/</span> folder next to the
     executable). Use a filename only (e.g.{" "}
-    <span className="font-mono text-slate-600 dark:text-slate-400">nova_memory.sqlite</span>), no subdirectories. Off by
+    <span className="font-mono text-ps-muted">nova_memory.sqlite</span>), no subdirectories. Off by
     default.
   </>
 );
@@ -103,19 +103,19 @@ const APP_DATA_DB_INFO = (
 const DB_WRITE_INFO = (
   <>
     When off (default),{" "}
-    <strong className="font-medium text-slate-700 dark:text-slate-300">{toolDisplayName("database_query")}</strong> is
+    <strong className="font-medium text-ps-muted">{toolDisplayName("database_query")}</strong> is
     read-only (SELECT and introspection). When on, INSERT/UPDATE/DELETE/REPLACE are allowed. Requires{" "}
-    <strong className="font-medium text-slate-700 dark:text-slate-300">Workspace file tools</strong> and/or{" "}
-    <strong className="font-medium text-slate-700 dark:text-slate-300">Database Query on app data</strong> enabled above.
+    <strong className="font-medium text-ps-muted">Workspace file tools</strong> and/or{" "}
+    <strong className="font-medium text-ps-muted">Database Query on app data</strong> enabled above.
     DROP/ALTER/CREATE/PRAGMA/VACUUM remain blocked.
   </>
 );
 
 const CODING_TOOLS_INFO = (
   <>
-    For <strong className="font-medium text-slate-700 dark:text-slate-300">Coding mode</strong> only. Enables{" "}
+    For <strong className="font-medium text-ps-muted">Coding mode</strong> only. Enables{" "}
     {toolLabelList(["coding_grep", "coding_apply_patch"])} scoped to the active repo under{" "}
-    <span className="font-mono text-slate-600 dark:text-slate-400">workspace/repos/</span>. Also enables workspace file
+    <span className="font-mono text-ps-muted">workspace/repos/</span>. Also enables workspace file
     tools for that session. Off by default.
   </>
 );
@@ -145,7 +145,7 @@ const CODING_GIT_REMOTE_INFO = (
 const CODING_COMPANION_LINKED_INFO = (
   <>
     When on, coding mode uses your{" "}
-    <strong className="font-medium text-slate-700 dark:text-slate-300">active companion</strong> (persona + memory).
+    <strong className="font-medium text-ps-muted">active companion</strong> (persona + memory).
     Project decisions from coding can be saved to that companion&apos;s memory; code snippets and command output are
     filtered out. Uses the same provider and model as Companion mode.
   </>
@@ -362,16 +362,16 @@ export function ToolsSettingsTab({
         compact
       >
         <div className={`${panelDense ? "space-y-1" : "space-y-1.5"}`}>
-        <div className="space-y-1.5 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-2.5 py-2 text-[10px] leading-relaxed text-slate-500">
+        <div className="space-y-1.5 rounded-md border border-ps-border bg-ps-elevated px-2.5 py-2 text-[10px] leading-relaxed text-ps-faint">
           <p>
-            <span className="font-medium text-slate-600 dark:text-slate-400">Built-in tools</span> — grouped below by what enables them.
+            <span className="font-medium text-ps-muted">Built-in tools</span> — grouped below by what enables them.
           </p>
           <p>
-            <span className="text-slate-600">Web:</span>{" "}
+            <span className="text-ps-muted">Web:</span>{" "}
             {toolLabelList(["web_search", "fetch_url", "http_request", "fetch_browser"])}
           </p>
           <p>
-            <span className="text-slate-600">Files:</span>{" "}
+            <span className="text-ps-muted">Files:</span>{" "}
             {toolLabelList([
               "workspace_list_directory",
               "workspace_read_file",
@@ -379,7 +379,7 @@ export function ToolsSettingsTab({
             ])}
           </p>
           <p>
-            <span className="text-slate-600">Other:</span>{" "}
+            <span className="text-ps-muted">Other:</span>{" "}
             {toolLabelList([
               "database_query",
               "personality_get",
@@ -544,13 +544,13 @@ export function ToolsSettingsTab({
           }}
         >
           {dataPaths?.workspaceDirectory ? (
-            <p className="break-all font-mono text-[10px] text-slate-500" title={dataPaths.workspaceDirectory}>
+            <p className="break-all font-mono text-[10px] text-ps-faint" title={dataPaths.workspaceDirectory}>
               {dataPaths.workspaceDirectory}
             </p>
           ) : null}
         </SettingsToggleCard>
 
-        <p className="pt-2 text-[11px] font-semibold uppercase tracking-wide text-violet-400/90">
+        <p className="pt-2 text-[11px] font-semibold uppercase tracking-wide text-ps-accent">
           Coding mode
         </p>
         <SettingsToggleCard
@@ -674,13 +674,13 @@ export function ToolsSettingsTab({
             })();
           }}
         />
-        <div className="ml-3 space-y-2 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-3 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">GitHub (coding mode)</p>
-          <p className="text-[11px] leading-relaxed text-slate-500">
+        <div className="ml-3 space-y-2 rounded-md border border-ps-border bg-ps-elevated px-3 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">GitHub (coding mode)</p>
+          <p className="text-[11px] leading-relaxed text-ps-faint">
             Personal Access Token for HTTPS clone, push, and pull. Stored encrypted locally — same as API keys. You
             can also paste a token in chat and ask the agent to save it.
           </p>
-          <div className="flex items-center gap-2 text-xs text-slate-500">
+          <div className="flex items-center gap-2 text-xs text-ps-faint">
             <KeyRound className="size-3.5 shrink-0" aria-hidden />
             <span>
               GitHub PAT:{" "}
@@ -697,12 +697,12 @@ export function ToolsSettingsTab({
             placeholder="ghp_… or github_pat_…"
             value={githubPatInput}
             onChange={(e) => setGithubPatInput(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500/50"
+            className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
           />
           <button
             type="button"
             onClick={() => void saveGithubPat()}
-            className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white hover:bg-indigo-500"
+            className="w-full rounded-lg bg-ps-accent px-3 py-2 text-xs font-semibold text-ps-accent-fg hover:bg-ps-accent"
           >
             Save GitHub PAT
           </button>
@@ -731,7 +731,7 @@ export function ToolsSettingsTab({
           }}
         >
           {dataPaths?.dataDirectory ? (
-            <p className="break-all font-mono text-[10px] text-slate-500" title={dataPaths.dataDirectory}>
+            <p className="break-all font-mono text-[10px] text-ps-faint" title={dataPaths.dataDirectory}>
               {dataPaths.dataDirectory}
             </p>
           ) : null}
@@ -768,7 +768,7 @@ export function ToolsSettingsTab({
 
       <SettingsSection
         title="Moltbook"
-        className="rounded-xl border border-[#2a6b6e]/35 bg-gradient-to-br from-[#0d383c]/90 via-[#0f3d42]/70 to-[#123a3e]/80 p-3 dark:from-[#0d383c]/50 dark:via-[#0f3d42]/40 dark:to-[#0c282c]/50"
+        className="rounded-lg border border-ps-border bg-ps-elevated p-3"
         description={
           <span className="text-[#5a8f8c] dark:text-[#8ebdb9]">
             The social network for AI agents. Humans configure and browse; only the registered agent posts,
@@ -809,7 +809,7 @@ export function ToolsSettingsTab({
               <p className="text-[11px] font-semibold uppercase tracking-wider text-[#7ec8c4]">
                 Agent identity
               </p>
-              <div className="flex items-center gap-2 text-xs text-slate-500">
+              <div className="flex items-center gap-2 text-xs text-ps-faint">
                 <KeyRound className="size-3.5 shrink-0" aria-hidden />
                 <span>
                   Moltbook API key:{" "}
@@ -822,7 +822,7 @@ export function ToolsSettingsTab({
               </div>
               {!settings?.hasMoltbookApiKey ? (
                 <div className="space-y-2">
-                  <p className="text-[11px] leading-relaxed text-slate-500">
+                  <p className="text-[11px] leading-relaxed text-ps-faint">
                     New to Moltbook? Register your companion as an agent — the API key is
                     stored encrypted automatically. That agent (not you) will post on Moltbook.
                   </p>
@@ -832,7 +832,7 @@ export function ToolsSettingsTab({
                       value={moltbookAgentName}
                       onChange={(e) => setMoltbookAgentName(e.target.value)}
                       placeholder="Agent name (e.g. SageBot)"
-                      className="min-w-0 flex-1 rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-[#e86d4a]/60"
+                      className="min-w-0 flex-1 rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-[#e86d4a]/60"
                     />
                     <button
                       type="button"
@@ -845,7 +845,7 @@ export function ToolsSettingsTab({
                   </div>
                 </div>
               ) : null}
-              <p className="text-[11px] leading-relaxed text-slate-500">
+              <p className="text-[11px] leading-relaxed text-ps-faint">
                 Already have a key (moltbook_sk_…)? Paste it here.
               </p>
               <div className="flex gap-2">
@@ -855,7 +855,7 @@ export function ToolsSettingsTab({
                   placeholder="moltbook_sk_…"
                   value={moltbookKeyInput}
                   onChange={(e) => setMoltbookKeyInput(e.target.value)}
-                  className="min-w-0 flex-1 rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 font-mono text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-[#e86d4a]/60"
+                  className="min-w-0 flex-1 rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-[#e86d4a]/60"
                 />
                 <button
                   type="button"
@@ -869,7 +869,7 @@ export function ToolsSettingsTab({
                 type="button"
                 disabled={moltbookBusy || !settings?.hasMoltbookApiKey}
                 onClick={() => void testMoltbookConnection()}
-                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 disabled:opacity-50"
+                className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-3 py-2 text-xs font-semibold text-ps-ink hover:bg-ps-accent-soft disabled:opacity-50"
               >
                 {moltbookBusy ? "Checking…" : "Test connection"}
               </button>
@@ -888,7 +888,7 @@ export function ToolsSettingsTab({
                 <input
                   id="moltbook-prefer-submolt"
                   type="checkbox"
-                  className="mt-0.5 size-3.5 rounded border-slate-300 accent-[#e86d4a]"
+                  className="mt-0.5 size-3.5 rounded border-ps-border accent-[#e86d4a]"
                   checked={preferSubmolt}
                   onChange={(e) => {
                     const on = e.target.checked;
@@ -969,12 +969,12 @@ export function ToolsSettingsTab({
               ) : null}
             </div>
 
-            <div className="ml-3 space-y-3 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-3 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <div className="ml-3 space-y-3 rounded-md border border-ps-border bg-ps-elevated px-3 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">
                 Agent voice on Moltbook
               </p>
               <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                <span className="text-xs font-medium text-ps-muted">
                   Extra guidelines for the agent
                 </span>
                 <textarea
@@ -986,7 +986,7 @@ export function ToolsSettingsTab({
                     schedulePatch({ moltbookAgentPrompt });
                   }}
                   placeholder="Tone, topics to favor, how the agent should engage…"
-                  className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-[#e86d4a]/60"
+                  className="w-full resize-y rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-[#e86d4a]/60"
                 />
               </label>
               <SettingsToggleCard
@@ -1011,7 +1011,7 @@ export function ToolsSettingsTab({
                 }}
               />
               <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                <span className="text-xs font-medium text-ps-muted">
                   Blocked topics
                 </span>
                 <textarea
@@ -1023,7 +1023,7 @@ export function ToolsSettingsTab({
                     schedulePatch({ moltbookBlockedTopics });
                   }}
                   placeholder="Comma- or newline-separated topics the agent must avoid"
-                  className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-[#e86d4a]/60"
+                  className="w-full resize-y rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-[#e86d4a]/60"
                 />
               </label>
             </div>
@@ -1080,9 +1080,9 @@ export function ToolsSettingsTab({
               }}
             />
             {settings?.moltbookSchedulerEnabled ? (
-              <div className="ml-3 space-y-3 rounded-md border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 px-3 py-3">
+              <div className="ml-3 space-y-3 rounded-md border border-ps-border bg-ps-elevated px-3 py-3">
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">
                     Engage every (minutes)
                   </span>
                   <input
@@ -1100,17 +1100,17 @@ export function ToolsSettingsTab({
                       );
                       schedulePatch({ moltbookInteractIntervalMinutes });
                     }}
-                    className="w-32 rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-[#e86d4a]/60"
+                    className="w-32 rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-[#e86d4a]/60"
                   />
-                  <span className="text-[11px] leading-relaxed text-slate-500">
+                  <span className="text-[11px] leading-relaxed text-ps-faint">
                     How often the agent reads the feed, votes, and comments (default 120).
                   </span>
                 </label>
                 <div className="space-y-1.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">
                     Engage actions
                   </p>
-                  <p className="text-[11px] leading-relaxed text-slate-500">
+                  <p className="text-[11px] leading-relaxed text-ps-faint">
                     What the agent may do during an engage tick.
                   </p>
                   {(
@@ -1162,12 +1162,12 @@ export function ToolsSettingsTab({
                     <label
                       key={key}
                       htmlFor={id}
-                      className="flex cursor-pointer items-center gap-2 text-xs text-slate-700 dark:text-slate-300"
+                      className="flex cursor-pointer items-center gap-2 text-xs text-ps-muted"
                     >
                       <input
                         id={id}
                         type="checkbox"
-                        className="size-3.5 rounded border-slate-300 dark:border-slate-600 accent-[#e86d4a]"
+                        className="size-3.5 rounded border-ps-border accent-[#e86d4a]"
                         checked={settings?.[key] ?? defaultOn}
                         onChange={(e) => {
                           const value = e.target.checked;
@@ -1190,7 +1190,7 @@ export function ToolsSettingsTab({
                   ))}
                 </div>
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">
                     Post every (minutes)
                   </span>
                   <input
@@ -1208,9 +1208,9 @@ export function ToolsSettingsTab({
                       );
                       schedulePatch({ moltbookPostIntervalMinutes });
                     }}
-                    className="w-32 rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-[#e86d4a]/60"
+                    className="w-32 rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-[#e86d4a]/60"
                   />
-                  <span className="text-[11px] leading-relaxed text-slate-500">
+                  <span className="text-[11px] leading-relaxed text-ps-faint">
                     How often the agent publishes an original post. Moltbook caps posting at
                     1 per 30 min (default 720 = every 12 hours). Humans never post.
                   </span>
@@ -1222,7 +1222,7 @@ export function ToolsSettingsTab({
                     onClick={() =>
                       void runMoltbookScheduler("moltbook_scheduler_run_interact")
                     }
-                    className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 disabled:opacity-50"
+                    className="flex-1 rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-3 py-2 text-xs font-semibold text-ps-ink hover:bg-ps-accent-soft disabled:opacity-50"
                   >
                     {moltbookSchedBusy ? "Working…" : "Engage now (agent)"}
                   </button>
@@ -1232,7 +1232,7 @@ export function ToolsSettingsTab({
                     onClick={() =>
                       void runMoltbookScheduler("moltbook_scheduler_run_post")
                     }
-                    className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 disabled:opacity-50"
+                    className="flex-1 rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-3 py-2 text-xs font-semibold text-ps-ink hover:bg-ps-accent-soft disabled:opacity-50"
                   >
                     {moltbookSchedBusy ? "Working…" : "Post now (agent)"}
                   </button>
@@ -1274,7 +1274,7 @@ export function ToolsSettingsTab({
             />
             {settings?.moltbookReplyWatcherEnabled ? (
               <label className="ml-3 flex flex-col gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">
                   Reply poll interval (minutes)
                 </span>
                 <input
@@ -1290,9 +1290,9 @@ export function ToolsSettingsTab({
                     setSettings((s) => (s ? { ...s, moltbookReplyPollMinutes } : s));
                     schedulePatch({ moltbookReplyPollMinutes });
                   }}
-                  className="w-32 rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-[#e86d4a]/60"
+                  className="w-32 rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-[#e86d4a]/60"
                 />
-                <span className="text-[11px] leading-relaxed text-slate-500">
+                <span className="text-[11px] leading-relaxed text-ps-faint">
                   How often to check for replies on the agent&apos;s posts (1–30, default 2).
                 </span>
               </label>

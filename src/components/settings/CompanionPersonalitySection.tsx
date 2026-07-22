@@ -11,7 +11,7 @@ import {
   Pencil,
   Plus,
   Save,
-  Sparkles,
+  Wand2,
   Trash2,
   UserCircle2,
   Zap,
@@ -403,7 +403,7 @@ export function CompanionPersonalitySection({
         setImportMsg(null);
         setLoadErr(null);
       }}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-2.5 py-1.5 text-xs font-medium text-ps-ink hover:bg-ps-accent-soft"
     >
       <ArrowLeft className="size-3.5 shrink-0" aria-hidden />
       Back to companion
@@ -413,7 +413,7 @@ export function CompanionPersonalitySection({
   const saveFooter =
     file && view === "edit" ? (
       <div
-        className="-mx-4 shrink-0 border-t border-slate-200 dark:border-slate-800/90 bg-slate-50 dark:bg-slate-950/92 px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md"
+        className="-mx-4 shrink-0 border-t border-ps-border bg-ps-elevated dark:bg-ps-canvas px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md"
         role="region"
         aria-label="Save personality profile"
       >
@@ -422,7 +422,7 @@ export function CompanionPersonalitySection({
             type="button"
             disabled={saving}
             onClick={() => void saveChanges()}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-slate-900 dark:text-white shadow-lg shadow-indigo-900/30 transition hover:bg-indigo-500 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-ps-accent px-3 py-2.5 text-sm font-semibold text-ps-accent-fg shadow-lg transition hover:bg-ps-accent disabled:opacity-50"
           >
             {saving && saveMode === "changes" ? (
               "Saving…"
@@ -437,7 +437,7 @@ export function CompanionPersonalitySection({
             type="button"
             disabled={saving}
             onClick={() => void saveAsNewProfile()}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-600/90 px-3 py-2.5 text-sm font-semibold text-slate-900 dark:text-white shadow-md shadow-emerald-950/40 transition hover:bg-emerald-500 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-600/90 px-3 py-2.5 text-sm font-semibold text-ps-ink shadow-md shadow-emerald-950/40 transition hover:bg-emerald-500 disabled:opacity-50"
           >
             {saving && saveMode === "new" ? (
               "Saving…"
@@ -449,8 +449,8 @@ export function CompanionPersonalitySection({
             )}
           </button>
         </div>
-        <p className="mt-2 text-[10px] leading-snug text-slate-500">
-          <span className="text-indigo-300/90">Save changes</span> updates the profile you&apos;re editing.{" "}
+        <p className="mt-2 text-[10px] leading-snug text-ps-faint">
+          <span className="text-ps-accent/90">Save changes</span> updates the profile you&apos;re editing.{" "}
           <span className="text-emerald-300/90">Save as new</span> copies the form to a new profile without
           overwriting others.
         </p>
@@ -459,7 +459,7 @@ export function CompanionPersonalitySection({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <section className="min-h-0 flex-1 space-y-4 overflow-y-auto rounded-xl border border-indigo-500/25 bg-gradient-to-b from-indigo-950/40 to-slate-950/40 p-4 shadow-inner">
+      <section className="min-h-0 flex-1 space-y-4 overflow-y-auto rounded-xl border border-ps-accent/25 bg-ps-elevated p-4 shadow-inner">
         {loadErr ? (
           <p className="rounded border border-amber-900/50 bg-amber-950/30 px-2 py-1.5 text-xs text-amber-200">
             {loadErr}
@@ -467,7 +467,7 @@ export function CompanionPersonalitySection({
         ) : null}
 
         {!file ? (
-          <p className="text-xs text-slate-500">Loading personality…</p>
+          <p className="text-xs text-ps-faint">Loading personality…</p>
         ) : view === "overview" ? (
           <OverviewView
             file={file}
@@ -554,36 +554,36 @@ function OverviewView({
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl border border-indigo-400/35 bg-gradient-to-br from-indigo-600/25 via-indigo-950/50 to-slate-950/80 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+      <div className="overflow-hidden rounded-xl border border-ps-accent/35 bg-ps-accent-soft px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
         <div className="flex flex-wrap items-center gap-2">
-          <UserCircle2 className="size-5 shrink-0 text-indigo-300" aria-hidden />
-          <p className="min-w-0 text-base font-semibold tracking-tight text-slate-900 dark:text-white">
-            <span className="font-medium text-indigo-200/90">Current profile: </span>
+          <UserCircle2 className="size-5 shrink-0 text-ps-accent" aria-hidden />
+          <p className="min-w-0 text-base font-semibold tracking-tight text-ps-ink">
+            <span className="font-medium text-ps-accent/90">Current profile: </span>
             <span className="truncate">{current.profileName || "Unnamed profile"}</span>
           </p>
           {current.id === chatActiveProfileId ? (
-            <span className="inline-flex items-center rounded-full border border-emerald-500/45 bg-emerald-600/20 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-100">
+            <span className="inline-flex items-center rounded-md border border-emerald-500/45 bg-emerald-600/20 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-100">
               Live in chat
             </span>
           ) : (
-            <span className="inline-flex items-center rounded-full border border-indigo-400/40 bg-indigo-500/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-100">
+            <span className="inline-flex items-center rounded-md border border-ps-accent/40 bg-ps-accent-soft px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ps-accent">
               Editing
             </span>
           )}
         </div>
-        <p className="mt-2 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+        <p className="mt-2 text-[11px] leading-relaxed text-ps-muted">
           Companion in chat:{" "}
-          <span className="font-medium text-slate-800 dark:text-slate-200">
+          <span className="font-medium text-ps-ink">
             {(current.companionName || "Sage").trim() || "Sage"}
           </span>
         </p>
       </div>
 
       <div className="flex items-start gap-2">
-        <Heart className="mt-0.5 size-5 shrink-0 text-indigo-400" aria-hidden />
+        <Heart className="mt-0.5 size-5 shrink-0 text-ps-accent" aria-hidden />
         <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Companion personality</h3>
-          <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+          <h3 className="text-sm font-semibold text-ps-ink">Companion personality</h3>
+          <p className="text-[11px] leading-relaxed text-ps-muted">
             Saved as <span className="font-mono">personality.json</span>. Edit the form, or import from OpenClaw
             / JSON — changes show up here.
           </p>
@@ -596,31 +596,31 @@ function OverviewView({
         </p>
       ) : null}
 
-      <div className="rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/50 p-3">
+      <div className="rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas p-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <label
-              className="text-[10px] font-semibold uppercase tracking-wide text-slate-500"
+              className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint"
               htmlFor="companion-profile-select"
             >
               Switch profile
             </label>
-            <p className="mt-0.5 text-xs leading-snug text-slate-500">
+            <p className="mt-0.5 text-xs leading-snug text-ps-faint">
               Pick a saved profile to review or edit.
             </p>
           </div>
-          <span className="hidden text-[10px] text-slate-600 sm:block">{file.profiles.length} saved</span>
+          <span className="hidden text-[10px] text-ps-muted sm:block">{file.profiles.length} saved</span>
         </div>
         <div className="relative mt-2">
           <ChevronDown
-            className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-slate-500"
+            className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-ps-faint"
             aria-hidden
           />
           <select
             id="companion-profile-select"
             value={file.activeProfileId}
             onChange={(e) => onSetActiveId(e.target.value)}
-            className="w-full appearance-none rounded-lg border border-slate-300 dark:border-slate-700/90 bg-slate-100 dark:bg-slate-900/80 py-2.5 pl-3 pr-10 text-sm font-medium text-slate-900 dark:text-slate-100 outline-none ring-indigo-500/0 transition focus:border-indigo-500/55 focus:ring-2 focus:ring-indigo-500/25"
+            className="w-full appearance-none rounded-lg border border-ps-border/90 bg-ps-elevated dark:bg-ps-elevated py-2.5 pl-3 pr-10 text-sm font-medium text-ps-ink outline-none ring-ps-accent/0 transition focus:border-ps-accent/55 focus:ring-2 focus:ring-ps-accent/25"
           >
             {file.profiles.map((p) => (
               <option key={p.id} value={p.id}>
@@ -634,7 +634,7 @@ function OverviewView({
           <button
             type="button"
             onClick={onAddProfile}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-800"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-3 py-2 text-xs font-medium text-ps-ink hover:bg-ps-elevated dark:bg-ps-surface"
           >
             <Plus className="size-3.5" aria-hidden />
             New blank profile
@@ -651,11 +651,11 @@ function OverviewView({
         </div>
       </div>
 
-      <div className="rounded-lg border border-emerald-500/35 bg-gradient-to-br from-emerald-950/40 to-slate-950/50 p-3 shadow-inner">
+      <div className="rounded-lg border border-emerald-500/35 bg-ps-elevated p-3 shadow-inner">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-300/95">
           Load / activate for chat
         </p>
-        <p className="mt-1 text-[11px] leading-snug text-slate-600 dark:text-slate-400">
+        <p className="mt-1 text-[11px] leading-snug text-ps-muted">
           The companion marked <span className="font-medium text-emerald-200/90">Live in chat</span> is who
           you&apos;re talking to and whose memory is used for new conversations.
         </p>
@@ -666,15 +666,15 @@ function OverviewView({
             return (
               <li
                 key={p.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/60 px-2.5 py-2"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-2.5 py-2"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{cname}</p>
-                  <p className="truncate text-[10px] text-slate-500">{p.profileName || p.id}</p>
+                  <p className="truncate text-sm font-semibold text-ps-ink">{cname}</p>
+                  <p className="truncate text-[10px] text-ps-faint">{p.profileName || p.id}</p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
                   {isLiveChat ? (
-                    <span className="whitespace-nowrap rounded-full border border-emerald-500/45 bg-emerald-600/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-100">
+                    <span className="whitespace-nowrap rounded-md border border-emerald-500/45 bg-emerald-600/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-100">
                       Live in chat
                     </span>
                   ) : null}
@@ -682,7 +682,7 @@ function OverviewView({
                     type="button"
                     disabled={isLiveChat}
                     onClick={() => onActivateChat(p.id)}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white shadow-md shadow-emerald-950/40 transition hover:bg-emerald-500 disabled:cursor-default disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-500 disabled:shadow-none"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-ps-ink shadow-md shadow-emerald-950/40 transition hover:bg-emerald-500 disabled:cursor-default disabled:bg-ps-elevated dark:disabled:bg-ps-surface disabled:text-ps-faint disabled:shadow-none"
                   >
                     <Zap className="size-3.5 shrink-0" aria-hidden />
                     {isLiveChat ? "Active for chat" : "Load / Activate for chat"}
@@ -694,8 +694,8 @@ function OverviewView({
         </ul>
       </div>
 
-      <div className="rounded-lg border border-slate-200 dark:border-slate-800/90 bg-slate-100/90 dark:bg-slate-950/50 p-3">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+      <div className="rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas p-3">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
           Current personality
         </p>
         <dl className="mt-3 grid gap-2.5 text-[11px]">
@@ -703,30 +703,30 @@ function OverviewView({
             const value = String(current[key] ?? "");
             return (
               <div key={key} className="grid grid-cols-[7.5rem_1fr] gap-2">
-                <dt className="text-slate-500">{label}</dt>
-                <dd className="text-slate-700 dark:text-slate-300">{previewFieldSummary(value)}</dd>
+                <dt className="text-ps-faint">{label}</dt>
+                <dd className="text-ps-muted">{previewFieldSummary(value)}</dd>
               </div>
             );
           })}
           {current.avatarDescription?.trim() ? (
             <div className="grid grid-cols-[7.5rem_1fr] gap-2">
-              <dt className="text-slate-500">Avatar</dt>
-              <dd className="text-slate-700 dark:text-slate-300">
+              <dt className="text-ps-faint">Avatar</dt>
+              <dd className="text-ps-muted">
                 {previewFieldSummary(current.avatarDescription)}
               </dd>
             </div>
           ) : null}
           {extras.map((s, i) => (
             <div key={`extra-${i}-${s.title}`} className="grid grid-cols-[7.5rem_1fr] gap-2">
-              <dt className="text-slate-500">{s.title.trim() || "Custom"}</dt>
-              <dd className="text-slate-700 dark:text-slate-300">{previewFieldSummary(s.content)}</dd>
+              <dt className="text-ps-faint">{s.title.trim() || "Custom"}</dt>
+              <dd className="text-ps-muted">{previewFieldSummary(s.content)}</dd>
             </div>
           ))}
         </dl>
       </div>
 
       <div className="space-y-2">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Manage</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">Manage</p>
         <nav className="grid gap-2" aria-label="Companion submenus">
           <SubmenuNavCard
             icon={Pencil}
@@ -753,9 +753,9 @@ function OverviewView({
         <button
           type="button"
           onClick={onTogglePrompt}
-          className="flex w-full items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+          className="flex w-full items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-ps-faint hover:text-ps-muted dark:hover:text-ps-muted"
         >
-          <Sparkles className="size-3.5 text-indigo-400" aria-hidden />
+          <Wand2 className="size-3.5 text-ps-accent" aria-hidden />
           Live system prompt preview
           <ChevronRight
             className={`ml-auto size-3.5 transition ${showPromptPreview ? "rotate-90" : ""}`}
@@ -763,7 +763,7 @@ function OverviewView({
           />
         </button>
         {showPromptPreview ? (
-          <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/80 p-3 font-mono text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
+          <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas p-3 font-mono text-[11px] leading-relaxed text-ps-muted">
             {preview}
           </pre>
         ) : null}
@@ -787,16 +787,16 @@ function SubmenuNavCard({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-start gap-3 rounded-lg border border-indigo-500/30 bg-indigo-950/20 px-3 py-3 text-left transition hover:border-indigo-400/50 hover:bg-indigo-950/35"
+      className="flex w-full items-start gap-3 rounded-lg border border-ps-accent/30 bg-ps-accent-soft px-3 py-3 text-left transition hover:border-ps-accent/50 hover:bg-ps-accent-soft"
     >
-      <Icon className="mt-0.5 size-4 shrink-0 text-indigo-300" aria-hidden />
+      <Icon className="mt-0.5 size-4 shrink-0 text-ps-accent" aria-hidden />
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-slate-900 dark:text-white">{title}</span>
-        <span className="mt-0.5 block text-[11px] leading-snug text-slate-600 dark:text-slate-400">
+        <span className="block text-sm font-semibold text-ps-ink">{title}</span>
+        <span className="mt-0.5 block text-[11px] leading-snug text-ps-muted">
           {description}
         </span>
       </span>
-      <ChevronRight className="mt-1 size-4 shrink-0 text-slate-500" aria-hidden />
+      <ChevronRight className="mt-1 size-4 shrink-0 text-ps-faint" aria-hidden />
     </button>
   );
 }
@@ -838,40 +838,40 @@ function EditView({
     <>
       {backButton}
       <div className="flex items-start gap-2">
-        <Pencil className="mt-0.5 size-5 shrink-0 text-indigo-400" aria-hidden />
+        <Pencil className="mt-0.5 size-5 shrink-0 text-ps-accent" aria-hidden />
         <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Edit companion</h3>
-          <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+          <h3 className="text-sm font-semibold text-ps-ink">Edit companion</h3>
+          <p className="text-[11px] leading-relaxed text-ps-muted">
             Core fields stay simple. Add custom sections below when you need more depth.
           </p>
         </div>
       </div>
 
       <div className="space-y-1">
-        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
           Profile name (preset label)
         </label>
         <input
           value={current.profileName}
           onChange={(e) => onUpdate({ profileName: e.target.value })}
-          className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
+          className="w-full rounded-lg border border-ps-border bg-white/80 dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-ps-accent/50"
         />
       </div>
 
       <div className="space-y-1">
-        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
           Companion name
         </label>
         <input
           value={current.companionName}
           onChange={(e) => onUpdate({ companionName: e.target.value })}
           placeholder="Sage"
-          className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
+          className="w-full rounded-lg border border-ps-border bg-white/80 dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-ps-accent/50"
         />
       </div>
 
       <div className="space-y-1">
-        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
           Core personality
         </label>
         <textarea
@@ -879,24 +879,24 @@ function EditView({
           value={current.corePersonality}
           onChange={(e) => onUpdate({ corePersonality: e.target.value })}
           placeholder="e.g. warm, witty, patient, curious…"
-          className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+          className="w-full resize-y rounded-lg border border-ps-border bg-white/80 dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink placeholder:text-ps-faint dark:placeholder:text-ps-muted outline-none focus:border-ps-accent/50"
         />
       </div>
 
       <div className="space-y-1">
-        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
           Tone of voice
         </label>
         <input
           value={current.toneOfVoice}
           onChange={(e) => onUpdate({ toneOfVoice: e.target.value })}
           placeholder="e.g. concise, gentle, playful…"
-          className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
+          className="w-full rounded-lg border border-ps-border bg-white/80 dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-ps-accent/50"
         />
       </div>
 
       <div className="space-y-1">
-        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
           Background story / role
         </label>
         <textarea
@@ -904,12 +904,12 @@ function EditView({
           value={current.backgroundStory}
           onChange={(e) => onUpdate({ backgroundStory: e.target.value })}
           placeholder="Who you are in the user’s world…"
-          className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+          className="w-full resize-y rounded-lg border border-ps-border bg-white/80 dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink placeholder:text-ps-faint dark:placeholder:text-ps-muted outline-none focus:border-ps-accent/50"
         />
       </div>
 
       <div className="space-y-1">
-        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
           Core values / principles
         </label>
         <textarea
@@ -917,24 +917,24 @@ function EditView({
           value={current.coreValues}
           onChange={(e) => onUpdate({ coreValues: e.target.value })}
           placeholder="What you always stand for…"
-          className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+          className="w-full resize-y rounded-lg border border-ps-border bg-white/80 dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink placeholder:text-ps-faint dark:placeholder:text-ps-muted outline-none focus:border-ps-accent/50"
         />
       </div>
 
       <div className="space-y-1">
-        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
           Relationship style
         </label>
         <input
           value={current.relationshipStyle}
           onChange={(e) => onUpdate({ relationshipStyle: e.target.value })}
           placeholder="e.g. friend, mentor, creative partner…"
-          className="w-full rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
+          className="w-full rounded-lg border border-ps-border bg-white/80 dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-ps-accent/50"
         />
       </div>
 
       <div className="space-y-1">
-        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
           Special instructions / quirks
         </label>
         <textarea
@@ -942,12 +942,12 @@ function EditView({
           value={current.specialInstructions}
           onChange={(e) => onUpdate({ specialInstructions: e.target.value })}
           placeholder="Habits, boundaries, in-jokes…"
-          className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+          className="w-full resize-y rounded-lg border border-ps-border bg-white/80 dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink placeholder:text-ps-faint dark:placeholder:text-ps-muted outline-none focus:border-ps-accent/50"
         />
       </div>
 
       <div className="space-y-1">
-        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        <label className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
           Avatar description (optional)
         </label>
         <textarea
@@ -959,17 +959,17 @@ function EditView({
             })
           }
           placeholder="For a future AI-generated avatar…"
-          className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+          className="w-full resize-y rounded-lg border border-ps-border bg-white/80 dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink placeholder:text-ps-faint dark:placeholder:text-ps-muted outline-none focus:border-ps-accent/50"
         />
       </div>
 
-      <div className="space-y-3 rounded-lg border border-violet-500/30 bg-violet-950/20 p-3">
+      <div className="space-y-3 rounded-lg border border-ps-accent/30 bg-ps-accent-soft p-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-200/90">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-ps-accent/90">
               Custom sections
             </p>
-            <p className="mt-0.5 text-[11px] leading-snug text-slate-600 dark:text-slate-400">
+            <p className="mt-0.5 text-[11px] leading-snug text-ps-muted">
               Optional. Each section becomes a heading in the system prompt — useful for complex personas or
               imports from an external personality editor.
             </p>
@@ -977,33 +977,33 @@ function EditView({
           <button
             type="button"
             onClick={() => onSetExtraSections([...extraSections, { title: "", content: "" }])}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/40 bg-violet-600/30 px-2.5 py-1.5 text-xs font-medium text-violet-100 hover:bg-violet-600/45"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-ps-accent/40 bg-ps-accent-hover/30 px-2.5 py-1.5 text-xs font-medium text-ps-accent hover:bg-ps-accent-hover/45"
           >
             <Plus className="size-3.5" aria-hidden />
             Add section
           </button>
         </div>
         {extraSections.length === 0 ? (
-          <p className="text-[11px] text-slate-500">No custom sections yet.</p>
+          <p className="text-[11px] text-ps-faint">No custom sections yet.</p>
         ) : (
           <ul className="space-y-3">
             {extraSections.map((s, i) => (
               <li
                 key={`extra-edit-${i}`}
-                className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50/80 dark:bg-slate-950/60 p-2.5"
+                className="space-y-2 rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas p-2.5"
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <input
                     value={s.title}
                     onChange={(e) => updateExtra(i, { title: e.target.value })}
                     placeholder="Section title"
-                    className="min-w-0 flex-1 rounded-md border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500/50"
+                    className="min-w-0 flex-1 rounded-md border border-ps-border bg-white/80 dark:bg-ps-canvas px-2.5 py-1.5 text-sm text-ps-ink outline-none focus:border-ps-accent/50"
                   />
                   <button
                     type="button"
                     disabled={i === 0}
                     onClick={() => moveExtra(i, -1)}
-                    className="rounded border border-slate-300 dark:border-slate-700 px-2 py-1 text-[10px] text-slate-600 dark:text-slate-300 disabled:opacity-40"
+                    className="rounded border border-ps-border px-2 py-1 text-[10px] text-ps-muted disabled:opacity-40"
                     aria-label="Move section up"
                   >
                     Up
@@ -1012,7 +1012,7 @@ function EditView({
                     type="button"
                     disabled={i >= extraSections.length - 1}
                     onClick={() => moveExtra(i, 1)}
-                    className="rounded border border-slate-300 dark:border-slate-700 px-2 py-1 text-[10px] text-slate-600 dark:text-slate-300 disabled:opacity-40"
+                    className="rounded border border-ps-border px-2 py-1 text-[10px] text-ps-muted disabled:opacity-40"
                     aria-label="Move section down"
                   >
                     Down
@@ -1031,7 +1031,7 @@ function EditView({
                   value={s.content}
                   onChange={(e) => updateExtra(i, { content: e.target.value })}
                   placeholder="Section content…"
-                  className="w-full resize-y rounded-md border border-slate-200 dark:border-slate-800/90 bg-white/80 dark:bg-slate-950/70 px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+                  className="w-full resize-y rounded-md border border-ps-border bg-white/80 dark:bg-ps-canvas px-2.5 py-1.5 text-sm text-ps-ink placeholder:text-ps-faint dark:placeholder:text-ps-muted outline-none focus:border-ps-accent/50"
                 />
               </li>
             ))}
@@ -1040,11 +1040,11 @@ function EditView({
       </div>
 
       <div className="space-y-2">
-        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-          <Sparkles className="size-3.5 text-indigo-400" aria-hidden />
+        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
+          <Wand2 className="size-3.5 text-ps-accent" aria-hidden />
           Live system prompt preview
         </div>
-        <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/80 p-3 font-mono text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
+        <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas p-3 font-mono text-[11px] leading-relaxed text-ps-muted">
           {preview}
         </pre>
       </div>
@@ -1081,8 +1081,8 @@ function OpenclawView({
       <div className="flex items-start gap-2">
         <FileText className="mt-0.5 size-5 shrink-0 text-amber-300" aria-hidden />
         <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Import from OpenClaw</h3>
-          <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+          <h3 className="text-sm font-semibold text-ps-ink">Import from OpenClaw</h3>
+          <p className="text-[11px] leading-relaxed text-ps-muted">
             Select <span className="font-mono">SOUL.md</span>, <span className="font-mono">IDENTITY.md</span>,{" "}
             <span className="font-mono">USER.md</span>, <span className="font-mono">JOURNAL.md</span>,{" "}
             <span className="font-mono">MEMORY.md</span>, <span className="font-mono">TOOLS.md</span> (any
@@ -1102,7 +1102,7 @@ function OpenclawView({
       />
 
       {importBusy ? (
-        <p className="text-[11px] text-slate-600 dark:text-slate-400">Reading markdown files…</p>
+        <p className="text-[11px] text-ps-muted">Reading markdown files…</p>
       ) : null}
       {importMsg ? (
         <p className="rounded border border-amber-900/50 bg-amber-950/30 px-2 py-1.5 text-[11px] text-amber-200">
@@ -1113,7 +1113,7 @@ function OpenclawView({
       <button
         type="button"
         onClick={onPickOpenclaw}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-slate-100 dark:bg-slate-900/80 px-3 py-2 text-xs font-medium text-amber-100 hover:bg-slate-200 dark:hover:bg-slate-800"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-ps-elevated dark:bg-ps-elevated px-3 py-2 text-xs font-medium text-amber-100 hover:bg-ps-accent-soft"
       >
         <FileText className="size-3.5 shrink-0" aria-hidden />
         Import OpenClaw markdown…
@@ -1122,17 +1122,17 @@ function OpenclawView({
       {openclawPreview ? (
         <div
           ref={openclawPreviewRef}
-          className="rounded-lg border border-indigo-500/35 bg-indigo-950/25 p-3"
+          className="rounded-lg border border-ps-accent/40 bg-ps-accent-soft p-3"
         >
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-200/90">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-ps-accent/90">
             OpenClaw import preview
           </p>
           {openclawPreview.fatalError ? (
             <p className="mt-2 text-[11px] text-red-300">{openclawPreview.fatalError}</p>
           ) : null}
-          <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">
+          <p className="mt-1 text-[11px] text-ps-muted">
             Files:{" "}
-            <span className="font-mono text-slate-700 dark:text-slate-300">
+            <span className="font-mono text-ps-muted">
               {openclawPreview.filesFound.length > 0
                 ? openclawPreview.filesFound.map((f) => `${f.toUpperCase()}.md`).join(", ")
                 : "(none recognized)"}
@@ -1156,36 +1156,36 @@ function OpenclawView({
           ))}
           <dl className="mt-3 grid gap-2 text-[11px]">
             <div className="grid grid-cols-[7rem_1fr] gap-2">
-              <dt className="text-slate-500">Companion</dt>
-              <dd className="text-slate-800 dark:text-slate-200">{openclawPreview.profile.companionName}</dd>
+              <dt className="text-ps-faint">Companion</dt>
+              <dd className="text-ps-ink">{openclawPreview.profile.companionName}</dd>
             </div>
             <div className="grid grid-cols-[7rem_1fr] gap-2">
-              <dt className="text-slate-500">Core personality</dt>
-              <dd className="text-slate-600 dark:text-slate-400">
+              <dt className="text-ps-faint">Core personality</dt>
+              <dd className="text-ps-muted">
                 {previewFieldSummary(openclawPreview.profile.corePersonality)}
               </dd>
             </div>
             <div className="grid grid-cols-[7rem_1fr] gap-2">
-              <dt className="text-slate-500">Tone</dt>
-              <dd className="text-slate-600 dark:text-slate-400">
+              <dt className="text-ps-faint">Tone</dt>
+              <dd className="text-ps-muted">
                 {previewFieldSummary(openclawPreview.profile.toneOfVoice)}
               </dd>
             </div>
             <div className="grid grid-cols-[7rem_1fr] gap-2">
-              <dt className="text-slate-500">Background</dt>
-              <dd className="text-slate-600 dark:text-slate-400">
+              <dt className="text-ps-faint">Background</dt>
+              <dd className="text-ps-muted">
                 {previewFieldSummary(openclawPreview.profile.backgroundStory)}
               </dd>
             </div>
             <div className="grid grid-cols-[7rem_1fr] gap-2">
-              <dt className="text-slate-500">User relationship</dt>
-              <dd className="text-slate-600 dark:text-slate-400">
+              <dt className="text-ps-faint">User relationship</dt>
+              <dd className="text-ps-muted">
                 {previewFieldSummary(openclawPreview.profile.relationshipStyle)}
               </dd>
             </div>
             <div className="grid grid-cols-[7rem_1fr] gap-2">
-              <dt className="text-slate-500">Special instructions</dt>
-              <dd className="text-slate-600 dark:text-slate-400">
+              <dt className="text-ps-faint">Special instructions</dt>
+              <dd className="text-ps-muted">
                 {previewFieldSummary(openclawPreview.profile.specialInstructions, 160)}
               </dd>
             </div>
@@ -1195,14 +1195,14 @@ function OpenclawView({
               type="button"
               onClick={onConfirm}
               disabled={Boolean(openclawPreview.fatalError)}
-              className="rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-medium text-slate-900 dark:text-white hover:bg-indigo-400 disabled:opacity-40"
+              className="rounded-lg bg-ps-accent px-3 py-1.5 text-xs font-medium text-ps-accent-fg hover:bg-ps-accent-hover disabled:opacity-40"
             >
               Add profile to list
             </button>
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800"
+              className="rounded-lg border border-ps-border px-3 py-1.5 text-xs text-ps-muted hover:bg-ps-accent-soft"
             >
               Cancel
             </button>
@@ -1232,8 +1232,8 @@ function JsonImportView({
       <div className="flex items-start gap-2">
         <FileJson className="mt-0.5 size-5 shrink-0 text-amber-300" aria-hidden />
         <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Import JSON</h3>
-          <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+          <h3 className="text-sm font-semibold text-ps-ink">Import JSON</h3>
+          <p className="text-[11px] leading-relaxed text-ps-muted">
             Accepts a full <span className="font-mono">personality.json</span>, a{" "}
             <span className="font-mono">profiles</span> array, or one profile object. Custom{" "}
             <span className="font-mono">extraSections</span> from an external personality editor are preserved
@@ -1260,7 +1260,7 @@ function JsonImportView({
       <button
         type="button"
         onClick={onPickJson}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-slate-100 dark:bg-slate-900/80 px-3 py-2 text-xs font-medium text-amber-100 hover:bg-slate-200 dark:hover:bg-slate-800"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-ps-elevated dark:bg-ps-elevated px-3 py-2 text-xs font-medium text-amber-100 hover:bg-ps-accent-soft"
       >
         <FileJson className="size-3.5 shrink-0" aria-hidden />
         Import personality JSON…
