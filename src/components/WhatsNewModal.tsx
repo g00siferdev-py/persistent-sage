@@ -8,7 +8,7 @@ type Props = {
 export function WhatsNewModal({ content, onDismiss }: Props) {
   return (
     <div
-      className="fixed inset-0 z-[210] flex items-center justify-center bg-ps-canvas p-4 backdrop-blur-sm"
+      className="ps-modal-backdrop z-[210]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="whats-new-title"
@@ -34,7 +34,7 @@ export function WhatsNewModal({ content, onDismiss }: Props) {
           <button
             type="button"
             onClick={onDismiss}
-            className="w-full rounded-lg bg-ps-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-ps-accent"
+            className="w-full rounded-lg bg-ps-accent px-4 py-2.5 text-sm font-semibold text-ps-accent-fg hover:bg-ps-accent"
           >
             Got it
           </button>

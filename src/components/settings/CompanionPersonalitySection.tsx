@@ -620,7 +620,7 @@ function OverviewView({
             id="companion-profile-select"
             value={file.activeProfileId}
             onChange={(e) => onSetActiveId(e.target.value)}
-            className="w-full appearance-none rounded-lg border border-ps-border/90 bg-ps-elevated dark:bg-ps-elevated py-2.5 pl-3 pr-10 text-sm font-medium text-ps-ink outline-none ring-ps-accent/0 transition focus:border-ps-accent/55 focus:ring-2 focus:ring-ps-accent/25"
+            className="ps-select w-full py-2.5 pl-3 pr-10 text-sm"
           >
             {file.profiles.map((p) => (
               <option key={p.id} value={p.id}>

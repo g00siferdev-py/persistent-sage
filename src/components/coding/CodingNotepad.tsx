@@ -149,7 +149,7 @@ export function CodingNotepad({ open, onToggle }: Props) {
             <select
               value={activeName}
               onChange={(e) => setActiveName(e.target.value)}
-              className="min-w-0 flex-1 rounded-md border border-ps-border bg-white px-1.5 py-1 text-[11px] text-ps-ink outline-none focus:border-ps-accent dark:border-ps-border dark:bg-ps-canvas dark:text-ps-ink"
+              className="ps-select min-w-0 flex-1 px-1.5 py-1 text-[11px]"
             >
               {notes.map((n) => (
                 <option key={n.name} value={n.name}>
@@ -219,7 +219,7 @@ export function CodingNotepad({ open, onToggle }: Props) {
               type="button"
               onClick={handleSubmit}
               disabled={saving}
-              className="inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-ps-accent-hover px-2 py-1 text-[11px] font-medium text-white hover:bg-ps-accent disabled:opacity-50"
+              className="inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-ps-accent-hover px-2 py-1 text-[11px] font-medium text-ps-accent-fg hover:bg-ps-accent disabled:opacity-50"
             >
               <Send className="h-3 w-3" />
               Submit

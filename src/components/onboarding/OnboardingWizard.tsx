@@ -185,7 +185,7 @@ export function OnboardingWizard({ onComplete }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-ps-canvas p-4 backdrop-blur-sm"
+      className="ps-modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-labelledby="onboarding-title"
@@ -287,7 +287,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                 value={providerId}
                 disabled={busy}
                 onChange={(e) => void applyProvider(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-ps-border bg-white dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-ps-accent"
+                className="ps-select mt-1 w-full px-3 py-2 text-sm"
               >
                 {providers.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -338,7 +338,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                         type="button"
                         disabled={busy}
                         onClick={() => void saveApiKey()}
-                        className="mt-2 w-full rounded-lg bg-ps-accent px-3 py-2 text-sm font-medium text-white hover:bg-ps-accent disabled:opacity-50"
+                        className="mt-2 w-full rounded-lg bg-ps-accent px-3 py-2 text-sm font-medium text-ps-accent-fg hover:bg-ps-accent-hover disabled:opacity-50"
                       >
                         Save API key
                       </button>
@@ -380,7 +380,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                 type="button"
                 disabled={busy}
                 onClick={() => void saveApiKey()}
-                className="mt-2 w-full rounded-lg bg-ps-accent px-3 py-2 text-sm font-medium text-white hover:bg-ps-accent disabled:opacity-50"
+                className="mt-2 w-full rounded-lg bg-ps-accent px-3 py-2 text-sm font-medium text-ps-accent-fg hover:bg-ps-accent-hover disabled:opacity-50"
               >
                 Save API key
               </button>
@@ -448,7 +448,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               type="button"
               disabled={busy}
               onClick={goNext}
-              className="inline-flex items-center gap-1 rounded-lg bg-ps-accent px-4 py-2 text-sm font-medium text-white hover:bg-ps-accent disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-lg bg-ps-accent px-4 py-2 text-sm font-medium text-ps-accent-fg hover:bg-ps-accent-hover disabled:opacity-50"
             >
               Continue
               <ChevronRight className="size-4" aria-hidden />
@@ -458,7 +458,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               type="button"
               disabled={busy}
               onClick={() => void finish()}
-              className="inline-flex items-center gap-1 rounded-lg bg-ps-accent px-4 py-2 text-sm font-medium text-white hover:bg-ps-accent disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-lg bg-ps-accent px-4 py-2 text-sm font-medium text-ps-accent-fg hover:bg-ps-accent-hover disabled:opacity-50"
             >
               Open Persistent Sage
             </button>

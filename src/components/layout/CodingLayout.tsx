@@ -190,7 +190,7 @@ export function CodingLayout({
         if (ev.payload.toolName !== "coding_run_command") return;
         if (ev.payload.phase === "start") {
           const detail = ev.payload.detail.trim();
-          codingIde.appendTerminal("command", detail || "Running command?");
+          codingIde.appendTerminal("command", detail || "Running command…");
         } else if (ev.payload.phase === "output" && ev.payload.delta) {
           codingIde.appendTerminal("output", ev.payload.delta);
         }
@@ -396,7 +396,7 @@ export function CodingLayout({
                 Loading…
               </div>
             ) : error ? (
-              <p className="px-2 py-3 text-xs text-red-600 dark:text-red-300">{error}</p>
+              <p className="px-2 py-3 text-xs text-ps-danger">{error}</p>
             ) : repoView && repoView.repos.length > 0 ? (
               <ul className="space-y-1">
                 {repoView.repos.map((repo) => (
@@ -442,19 +442,19 @@ export function CodingLayout({
                 value={newProjectTemplate}
                 onChange={(e) => setNewProjectTemplate(e.target.value)}
                 disabled={creating}
-                className="ps-input px-2 py-1.5 text-xs"
+                className="ps-select w-full px-2 py-1.5"
               >
                 <option value="empty">Empty (README + .gitignore)</option>
                 <option value="rust">Rust (cargo init)</option>
                 <option value="node">Node.js (package.json)</option>
                 <option value="python">Python (pyproject.toml + src layout)</option>
-                <option value="tauri">Tauri (React + Rust ? requires npm)</option>
-                <option value="csharp">C# (.NET console ? requires SDK)</option>
+                <option value="tauri">Tauri (React + Rust — requires npm)</option>
+                <option value="csharp">C# (.NET console — requires SDK)</option>
               </select>
               <p className="px-1 text-[10px] leading-relaxed text-ps-faint">
                 Tauri and C# templates need npm or the .NET SDK installed on this machine.
               </p>
-              {createError ? <p className="px-1 text-[10px] text-red-300">{createError}</p> : null}
+              {createError ? <p className="px-1 text-[10px] text-ps-danger">{createError}</p> : null}
               <button
                 type="button"
                 onClick={() => void createProject()}
@@ -491,7 +491,7 @@ export function CodingLayout({
                 disabled={cloning}
                 className="ps-input px-2 py-1.5 text-xs"
               />
-              {cloneError ? <p className="px-1 text-[10px] text-red-600 dark:text-red-300">{cloneError}</p> : null}
+              {cloneError ? <p className="px-1 text-[10px] text-ps-danger">{cloneError}</p> : null}
               <button
                 type="button"
                 onClick={() => void cloneRepo()}
@@ -506,7 +506,7 @@ export function CodingLayout({
                 {cloning ? "Cloning…" : "Clone"}
               </button>
               <p className="px-1 text-[10px] leading-relaxed text-ps-faint">
-                Requires a GitHub PAT in Settings ? Tools ? GitHub.
+                Requires a GitHub PAT in Settings → Tools → GitHub.
               </p>
             </div>
           </div>
@@ -603,7 +603,7 @@ export function CodingLayout({
               <button
                 type="button"
                 onClick={() => setStreamPanelOpen((v) => !v)}
-                className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${streamPanelOpen ? "bg-ps-accent-soft text-ps-accent dark:bg-ps-accent-soft dark:text-ps-accent" : "text-ps-faint hover:bg-ps-elevated hover:text-ps-muted dark:hover:bg-ps-surface dark:hover:text-ps-muted"}`}
+                className={`px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors ${streamPanelOpen ? "border-b-2 border-ps-accent text-ps-ink" : "border-b-2 border-transparent text-ps-faint hover:text-ps-muted"}`}
                 title="Toggle stream panel"
               >
                 Stream
@@ -611,7 +611,7 @@ export function CodingLayout({
               <button
                 type="button"
                 onClick={() => setDebuggerPanelOpen((v) => !v)}
-                className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${debuggerPanelOpen ? "bg-ps-accent-soft text-ps-accent dark:bg-ps-accent-soft dark:text-ps-accent" : "text-ps-faint hover:bg-ps-elevated hover:text-ps-muted dark:hover:bg-ps-surface dark:hover:text-ps-muted"}`}
+                className={`px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors ${debuggerPanelOpen ? "border-b-2 border-ps-accent text-ps-ink" : "border-b-2 border-transparent text-ps-faint hover:text-ps-muted"}`}
                 title="Toggle debugger panel"
               >
                 Debugger

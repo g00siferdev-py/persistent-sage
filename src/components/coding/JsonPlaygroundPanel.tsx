@@ -100,7 +100,7 @@ export function JsonPlaygroundPanel() {
             onClick={format}
             disabled={validation.state !== "valid"}
             title="Pretty-print with the selected indent"
-            className="flex items-center gap-1 rounded bg-ps-accent px-2.5 py-1 text-xs font-medium text-white hover:bg-ps-accent-hover disabled:opacity-50"
+            className="flex items-center gap-1 rounded bg-ps-accent px-2.5 py-1 text-xs font-medium text-ps-accent-fg hover:bg-ps-accent-hover disabled:opacity-50"
           >
             <Braces className="h-3 w-3" aria-hidden />
             Format
@@ -119,7 +119,7 @@ export function JsonPlaygroundPanel() {
             value={indent}
             onChange={(e) => setIndent(Number(e.target.value))}
             title="Indent width for Format"
-            className="rounded border border-ps-border bg-ps-canvas px-2 py-1 text-xs text-ps-ink outline-none focus:border-ps-accent"
+            className="ps-select px-2 py-1"
           >
             <option value={2}>2 spaces</option>
             <option value={4}>4 spaces</option>

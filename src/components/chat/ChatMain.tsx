@@ -13,7 +13,6 @@ import {
   PanelRightOpen,
   Send,
   Star,
-  Users,
   X,
 } from "lucide-react";
 import type { ChatMessage } from "@/types/chat";
@@ -223,94 +222,65 @@ export function ChatMain({
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-ps-surface/70">
-      <header className="flex shrink-0 flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-ps-border px-5 pb-4 pt-5 sm:px-8">
-        <div className="min-w-0 max-w-xl flex-1 pr-2">
-          <p className="ps-label mb-1">Conversation</p>
-          <h1 className="font-display truncate text-xl font-semibold tracking-tight text-ps-ink sm:text-2xl">
+      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-ps-border bg-ps-elevated/60 px-6 py-2.5">
+        <div className="flex min-w-0 items-baseline gap-3">
+          <h1 className="font-display truncate text-base font-semibold tracking-tight text-ps-ink">
             {title}
           </h1>
-          <p className="mt-1 truncate text-sm text-ps-muted" title={subtitle}>
+          <p className="hidden min-w-0 truncate text-xs text-ps-faint md:block" title={subtitle}>
             {subtitle}
           </p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <div
-            className="flex items-center gap-2 border border-ps-border bg-ps-elevated px-2.5 py-1.5"
-            style={{ borderRadius: "var(--ps-radius)" }}
-            title="Reasoning effort for providers that support thinking modes"
-          >
-            <Brain className="size-3.5 shrink-0 text-ps-faint" aria-hidden />
-            <label htmlFor="persistent-sage-thinking" className="sr-only">
-              Thinking effort
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="relative" title={`Active companion: ${activeCompanionLabel}. Choose who to talk to before starting a new chat.`}>
+            <label htmlFor="nova-header-companion" className="sr-only">
+              Companion for new chats
             </label>
+            <ChevronDown
+              className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-ps-faint"
+              aria-hidden
+            />
             <select
-              id="persistent-sage-thinking"
-              value={thinkingEffort}
-              disabled={threadLoading || sending}
-              onChange={(e) => void onThinkingEffortChange(e.target.value as "low" | "medium" | "high")}
-              className="h-8 appearance-none border-0 bg-transparent py-1 pl-0 pr-1 text-xs font-medium text-ps-ink outline-none disabled:opacity-50"
+              id="nova-header-companion"
+              value={activeCompanionProfileId}
+              onChange={async (e) => {
+                const next = e.target.value;
+                console.info("[persistent-sage-chat] companion dropdown: user selected personality_id", {
+                  personalityId: next,
+                  previousPersonalityId: activeCompanionProfileId,
+                });
+                await onCompanionChange(next);
+                console.info("[persistent-sage-chat] companion dropdown: handler finished for personality_id", {
+                  personalityId: next,
+                });
+              }}
+              disabled={threadLoading}
+              className="ps-select h-8 max-w-[14rem] min-w-[9rem] py-1 pl-2.5 pr-8"
+              title="This companion receives new chats and uses their isolated memory"
             >
-              <option value="low">Think low</option>
-              <option value="medium">Think medium</option>
-              <option value="high">Think high</option>
+              {companionOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.companionName}
+                  {o.profileName && o.profileName !== o.companionName
+                    ? ` · ${o.profileName}`
+                    : ""}
+                </option>
+              ))}
             </select>
           </div>
-          <div
-            className="flex items-center gap-2 border border-ps-accent/35 bg-ps-accent-soft px-2.5 py-1.5"
-            style={{ borderRadius: "var(--ps-radius)" }}
-            title={`Active companion: ${activeCompanionLabel}. Choose who to talk to before starting a new chat.`}
-          >
-            <Users className="size-3.5 shrink-0 text-ps-accent" aria-hidden />
-            <div className="relative">
-              <label htmlFor="nova-header-companion" className="sr-only">
-                Companion for new chats
-              </label>
-              <ChevronDown
-                className="pointer-events-none absolute right-1.5 top-1/2 size-3.5 -translate-y-1/2 text-ps-accent"
-                aria-hidden
-              />
-              <select
-                id="nova-header-companion"
-                value={activeCompanionProfileId}
-                onChange={async (e) => {
-                  const next = e.target.value;
-                  console.info("[persistent-sage-chat] companion dropdown: user selected personality_id", {
-                    personalityId: next,
-                    previousPersonalityId: activeCompanionProfileId,
-                  });
-                  await onCompanionChange(next);
-                  console.info("[persistent-sage-chat] companion dropdown: handler finished for personality_id", {
-                    personalityId: next,
-                  });
-                }}
-                disabled={threadLoading}
-                className="h-8 max-w-[min(18rem,calc(100vw-12rem))] min-w-[10rem] appearance-none border-0 bg-transparent py-1 pl-1 pr-7 text-xs font-semibold text-ps-ink outline-none disabled:opacity-50"
-                title="This companion receives new chats and uses their isolated memory"
-              >
-                {companionOptions.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.companionName}
-                    {o.profileName && o.profileName !== o.companionName
-                      ? ` · ${o.profileName}`
-                      : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <button type="button" onClick={() => setFavoritesOpen(true)} title="Favorites — messages you starred" className="ps-btn">
+          <button type="button" onClick={() => setFavoritesOpen(true)} title="Favorites — messages you starred" className="ps-btn-ghost">
             <Star className="size-3.5 text-ps-warm" aria-hidden />
-            Favorites
+            <span className="hidden lg:inline">Favorites</span>
           </button>
           {moltbookReady ? (
             <button
               type="button"
               onClick={() => setMoltbookOpen(true)}
               title="Browse Moltbook — the social network for AI agents"
-              className="ps-btn"
+              className="ps-btn-ghost"
             >
               <Globe className="size-3.5 text-ps-warm" aria-hidden />
-              Moltbook
+              <span className="hidden lg:inline">Moltbook</span>
             </button>
           ) : null}
           <button
@@ -319,12 +289,14 @@ export function ChatMain({
             aria-expanded={settingsLayoutMode !== "hidden"}
             aria-controls="nova-settings-panel"
             title={`Settings: ${settingsLayoutLabel(settingsLayoutMode)} — click to cycle Hidden → Compact → Full`}
-            className="ps-btn"
+            className="ps-btn-ghost"
           >
-            <PanelRightOpen className="size-3.5 text-ps-muted" aria-hidden />
-            {settingsLayoutMode === "hidden"
-              ? "Settings"
-              : `Settings · ${settingsLayoutLabel(settingsLayoutMode)}`}
+            <PanelRightOpen className="size-3.5" aria-hidden />
+            <span className="hidden lg:inline">
+              {settingsLayoutMode === "hidden"
+                ? "Settings"
+                : `Settings · ${settingsLayoutLabel(settingsLayoutMode)}`}
+            </span>
           </button>
         </div>
       </header>
@@ -351,7 +323,7 @@ export function ChatMain({
             <p className="text-sm text-ps-muted">Loading history & context…</p>
           </div>
         ) : null}
-        <div className="ml-0 mr-auto flex w-full max-w-3xl flex-col gap-5 sm:ml-[4%]">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
           {messages.length === 0 && !threadLoading ? (
             <p className="border border-dashed border-ps-border bg-ps-elevated px-6 py-12 text-left text-sm leading-relaxed text-ps-muted">
               {hasActiveConversation ? (
@@ -377,7 +349,7 @@ export function ChatMain({
                     : "group ps-msg-assistant"
                 }
               >
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
+                <p className="ps-msg-label">
                   {formatChatHeader(
                     m.role === "user" ? "You" : activeCompanionLabel,
                     m.createdAt,
@@ -413,7 +385,7 @@ export function ChatMain({
           )}
           {streamAssistant ? (
             <article className="ps-msg-assistant">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
+              <p className="ps-msg-label">
                 {formatChatHeader("Agent", new Date().toISOString())}
               </p>
               {streamAssistant.thinking && !streamAssistant.text ? (
@@ -432,16 +404,11 @@ export function ChatMain({
         </div>
       </div>
 
-      <footer className="ps-composer">
-        <form
-          onSubmit={handleSubmit}
-          className="ml-0 mr-auto flex w-full max-w-3xl flex-col gap-3 sm:ml-[4%]"
-        >
+      <footer className="shrink-0 border-t border-ps-border bg-ps-elevated/60 px-6 pb-5 pt-4">
+        <form onSubmit={handleSubmit} className="mx-auto flex w-full max-w-3xl flex-col gap-3">
           {projectList.length ? (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-ps-faint">
-                Projects
-              </span>
+              <span className="ps-label">Projects</span>
               {projectList.slice(0, 6).map((p) => (
                 <button
                   key={p.id}
@@ -449,20 +416,12 @@ export function ChatMain({
                   disabled={!canRunRecipe}
                   onClick={() => onContinueProject(p.id, p.title)}
                   title={`Continue ${p.title}`}
-                  className={`inline-flex items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${
- p.id === activeProjectId
- ? "border-ps-accent/50 bg-ps-accent-soft text-ps-accent dark:text-ps-accent"
- : "border-ps-border bg-ps-surface text-ps-ink hover:bg-ps-elevated"
- }`}
+                  className={`ps-chip ${p.id === activeProjectId ? "ps-chip-active" : ""}`}
                 >
                   {p.title}
                 </button>
               ))}
-              <button
-                type="button"
-                onClick={onOpenProjectWorkspace}
-                className="inline-flex items-center gap-1 rounded-md border border-ps-border px-2.5 py-1 text-[10px] font-medium text-ps-faint hover:bg-ps-elevated"
-              >
+              <button type="button" onClick={onOpenProjectWorkspace} className="ps-chip">
                 <FolderOpen className="size-3" aria-hidden />
                 Workspace
               </button>
@@ -477,7 +436,7 @@ export function ChatMain({
                   disabled={!canRunRecipe}
                   onClick={() => onRunRecipe(r.id)}
                   title={r.description || r.name}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-ps-border bg-ps-surface px-3 py-1 text-[11px] font-semibold text-ps-ink hover:bg-ps-elevated disabled:cursor-not-allowed disabled:opacity-50"
+                  className="ps-chip"
                 >
                   {r.name}
                 </button>
@@ -485,127 +444,147 @@ export function ChatMain({
             </div>
           ) : null}
           {pendingImage ? (
-            <div className="relative inline-flex w-fit max-w-full items-start gap-2 rounded-xl border border-ps-border bg-ps-elevated p-2">
+            <div className="relative inline-flex w-fit max-w-full items-start gap-2 border border-ps-border bg-ps-surface p-2" style={{ borderRadius: "var(--ps-radius)" }}>
               <img
                 src={pendingImage.previewUrl}
                 alt="Attached"
-                className="max-h-24 max-w-full rounded-lg object-contain"
+                className="max-h-24 max-w-full object-contain"
               />
               <button
                 type="button"
                 onClick={clearPendingImage}
-                className="absolute -right-2 -top-2 rounded-md border border-ps-border bg-ps-elevated dark:bg-ps-surface p-0.5 text-ps-muted hover:bg-ps-accent-soft dark:hover:bg-ps-surface"
+                className="absolute -right-2 -top-2 rounded-md border border-ps-border bg-ps-elevated p-0.5 text-ps-muted hover:bg-ps-accent-soft"
                 aria-label="Remove attached image"
               >
                 <X className="size-3.5" aria-hidden />
               </button>
             </div>
           ) : null}
-          <div className="flex gap-2">
-          <div className="relative" ref={attachMenuRef}>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="sr-only"
-            onChange={(e) => {
-              void onPickImage(e.target.files?.[0] ?? null);
-              e.target.value = "";
-            }}
-          />
-          {attachMenuOpen ? (
-            <div
-              role="menu"
-              className="ps-menu absolute bottom-full left-0 z-20 mb-1 min-w-[11rem]"
-            >
+          <div className="ps-composer-box">
+            <label className="sr-only" htmlFor="nova-composer">
+              Message
+            </label>
+            <textarea
+              id="nova-composer"
+              rows={2}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  submit();
+                }
+              }}
+              disabled={threadLoading || sending || !hasActiveConversation}
+              placeholder={
+                hasActiveConversation
+                  ? `Message ${activeCompanionLabel}…`
+                  : 'Click "New chat" in the sidebar first…'
+              }
+              className="min-h-[3.25rem] w-full resize-none bg-transparent px-4 pb-1 pt-3 text-sm text-ps-ink outline-none placeholder:text-ps-faint disabled:opacity-50"
+            />
+            <div className="flex items-center gap-2 px-2.5 pb-2.5 pt-1">
+              <div className="relative" ref={attachMenuRef}>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(e) => {
+                    void onPickImage(e.target.files?.[0] ?? null);
+                    e.target.value = "";
+                  }}
+                />
+                {attachMenuOpen ? (
+                  <div role="menu" className="ps-menu absolute bottom-full left-0 z-20 mb-1 min-w-[11rem]">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="ps-menu-item"
+                      onClick={() => {
+                        setAttachMenuOpen(false);
+                        fileInputRef.current?.click();
+                      }}
+                    >
+                      <ImagePlus className="size-3.5 shrink-0 text-ps-faint" aria-hidden />
+                      Choose from computer
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="ps-menu-item"
+                      onClick={() => {
+                        setAttachMenuOpen(false);
+                        setWebcamOpen(true);
+                      }}
+                    >
+                      <Camera className="size-3.5 shrink-0 text-ps-faint" aria-hidden />
+                      Take photo with webcam
+                    </button>
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={threadLoading || sending || !hasActiveConversation || !visionSupported}
+                  onClick={() => setAttachMenuOpen((open) => !open)}
+                  title={
+                    visionSupported
+                      ? "Attach image"
+                      : "Current model does not support images — switch to a vision model in Settings → Provider (e.g. gpt-4o, Claude 3+, llava, kimi)."
+                  }
+                  className="ps-btn-ghost p-2 disabled:pointer-events-none disabled:opacity-40"
+                  aria-label="Attach image"
+                  aria-haspopup="menu"
+                  aria-expanded={attachMenuOpen}
+                >
+                  <ImagePlus className="size-4" aria-hidden />
+                </button>
+              </div>
+              <div className="relative" title="Reasoning effort for providers that support thinking modes">
+                <Brain className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-ps-faint" aria-hidden />
+                <label htmlFor="persistent-sage-thinking" className="sr-only">
+                  Thinking effort
+                </label>
+                <select
+                  id="persistent-sage-thinking"
+                  value={thinkingEffort}
+                  disabled={threadLoading || sending}
+                  onChange={(e) => void onThinkingEffortChange(e.target.value as "low" | "medium" | "high")}
+                  className="ps-select h-8 py-1 pl-7 pr-2 text-[11px]"
+                >
+                  <option value="low">Think low</option>
+                  <option value="medium">Think medium</option>
+                  <option value="high">Think high</option>
+                </select>
+              </div>
+              <span className="ml-auto hidden text-[10px] text-ps-faint sm:inline">
+                Enter to send · Shift+Enter for newline
+              </span>
               <button
                 type="button"
-                role="menuitem"
-                className="ps-menu-item"
-                onClick={() => {
-                  setAttachMenuOpen(false);
-                  fileInputRef.current?.click();
-                }}
+                onClick={() => onAbortTurn?.()}
+                disabled={!sending}
+                title="Abort the current agent turn"
+                className="ps-btn-danger px-2.5 py-1.5"
+                aria-label="Abort turn"
               >
-                <ImagePlus className="size-3.5 shrink-0 text-ps-faint" aria-hidden />
-                Choose from computer
+                <OctagonX className="size-4" aria-hidden />
               </button>
               <button
-                type="button"
-                role="menuitem"
-                className="ps-menu-item"
-                onClick={() => {
-                  setAttachMenuOpen(false);
-                  setWebcamOpen(true);
-                }}
+                type="submit"
+                disabled={!canSend}
+                className="ps-btn-primary px-3.5 py-1.5"
+                aria-label="Send message"
               >
-                <Camera className="size-3.5 shrink-0 text-ps-faint" aria-hidden />
-                Take photo with webcam
+                {sending ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <Send className="size-4" aria-hidden />
+                )}
+                Send
               </button>
             </div>
-          ) : null}
-          <button
-            type="button"
-            disabled={threadLoading || sending || !hasActiveConversation || !visionSupported}
-            onClick={() => setAttachMenuOpen((open) => !open)}
-            title={
-              visionSupported
-                ? "Attach image"
-                : "Current model does not support images — switch to a vision model in Settings → Provider (e.g. gpt-4o, Claude 3+, llava, kimi)."
-            }
-            className="inline-flex shrink-0 items-center justify-center self-end rounded-xl border border-ps-border bg-ps-elevated px-3 py-2 text-ps-muted transition hover:border-ps-border hover:bg-ps-elevated dark:bg-ps-surface disabled:pointer-events-none disabled:opacity-40"
-            aria-label="Attach image"
-            aria-haspopup="menu"
-            aria-expanded={attachMenuOpen}
-          >
-            <ImagePlus className="size-4" aria-hidden />
-          </button>
-          </div>
-          <label className="sr-only" htmlFor="nova-composer">
-            Message
-          </label>
-          <textarea
-            id="nova-composer"
-            rows={2}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                e.stopPropagation();
-                submit();
-              }
-            }}
-            disabled={threadLoading || sending || !hasActiveConversation}
-            placeholder={
-              hasActiveConversation
-                ? `Message ${activeCompanionLabel}…`
-                : 'Click "New chat" in the sidebar first…'
-            }
-            className="min-h-[2.75rem] flex-1 resize-none rounded-xl border border-ps-border bg-ps-elevated px-3 py-2 text-sm text-ps-ink placeholder:text-ps-faint dark:placeholder:text-ps-muted shadow-inner outline-none ring-0 transition focus:border-ps-accent/50 focus:ring-2 focus:ring-ps-accent/30 disabled:opacity-50"
-          />
-          <button
-            type="button"
-            onClick={() => onAbortTurn?.()}
-            disabled={!sending}
-            title="Abort the current agent turn"
-            className="ps-btn-danger self-end px-3 py-2"
-            aria-label="Abort turn"
-          >
-            <OctagonX className="size-4" aria-hidden />
-          </button>
-          <button
-            type="submit"
-            disabled={!canSend}
-            className="inline-flex shrink-0 items-center justify-center gap-2 self-end rounded-xl bg-ps-accent px-3 py-2 text-ps-accent-fg shadow-sm transition hover:bg-ps-accent-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ps-accent disabled:pointer-events-none disabled:opacity-40"
-            aria-label="Send message"
-          >
-            {sending ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden />
-            ) : (
-              <Send className="size-4" aria-hidden />
-            )}
-          </button>
           </div>
         </form>
       </footer>

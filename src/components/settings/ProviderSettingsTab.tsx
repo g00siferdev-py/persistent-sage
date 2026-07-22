@@ -92,7 +92,7 @@ function ModelPickRow({
         <select
           id={htmlFor}
           title="Select model…"
-          className="min-w-0 flex-1 cursor-pointer rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas py-2 pl-3 pr-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50 disabled:cursor-not-allowed disabled:opacity-50 [color-scheme:light] dark:[color-scheme:dark]"
+          className="ps-select min-w-0 flex-1 py-2 pl-3 pr-2 text-sm"
           value={safeValue}
           disabled={disabled || optionIds.length === 0}
           onChange={(e) => onChangeModel(e.target.value)}
@@ -394,7 +394,7 @@ export function ProviderSettingsTab({
             value={settings?.selectedProvider ?? "placeholder"}
             disabled={!settings}
             onChange={(e) => void onProviderChange(e.target.value)}
-            className="w-full appearance-none rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas py-2.5 pl-10 pr-9 text-sm text-ps-ink outline-none focus:border-ps-accent/50 focus:ring-2 focus:ring-ps-accent/25 disabled:opacity-50"
+            className="ps-select w-full py-2.5 pl-10 pr-9 text-sm"
           >
             {providers
               .filter((p) => p.id !== "ollama" && p.id !== "ollama_cloud")

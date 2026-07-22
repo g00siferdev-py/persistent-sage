@@ -24,7 +24,7 @@ export function CodingViewToolbar({ viewMode, onChange, dirtyCount }: Props) {
             onClick={() => onChange(m.id)}
             className={`rounded px-2.5 py-0.5 text-[11px] font-medium ${
  viewMode === m.id
- ? "bg-ps-accent-hover text-white dark:bg-ps-accent dark:text-ps-accent-fg"
+ ? "bg-ps-accent-hover text-ps-accent-fg dark:bg-ps-accent dark:text-ps-accent-fg"
  : "text-ps-muted hover:bg-ps-elevated hover:text-ps-ink dark:text-ps-faint dark:hover:bg-transparent dark:hover:text-ps-ink"
  }`}
           >

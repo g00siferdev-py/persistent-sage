@@ -153,7 +153,7 @@ export function CodingPlaygroundPanel() {
             onClick={() => setTool(id)}
             className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium ${
  tool === id
- ? "bg-ps-accent text-white"
+ ? "bg-ps-accent text-ps-accent-fg"
  : "text-ps-faint hover:bg-ps-surface hover:text-ps-ink"
  }`}
           >
@@ -175,7 +175,7 @@ export function CodingPlaygroundPanel() {
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value as PlaygroundLanguage)}
             disabled={loading}
-            className="rounded border border-ps-border bg-ps-canvas px-2 py-1 text-xs text-ps-ink outline-none focus:border-ps-accent"
+            className="ps-select px-2 py-1"
           >
             {LANGUAGES.map((l) => (
               <option key={l.id} value={l.id}>
@@ -196,7 +196,7 @@ export function CodingPlaygroundPanel() {
             type="button"
             onClick={() => void run()}
             disabled={loading || !code.trim()}
-            className="flex items-center gap-1 rounded bg-ps-accent px-2.5 py-1 text-xs font-medium text-white hover:bg-ps-accent-hover disabled:opacity-50"
+            className="flex items-center gap-1 rounded bg-ps-accent px-2.5 py-1 text-xs font-medium text-ps-accent-fg hover:bg-ps-accent-hover disabled:opacity-50"
           >
             <Play className="h-3 w-3" />
             {loading ? "Running…" : "Run"}
@@ -248,7 +248,7 @@ export function CodingPlaygroundPanel() {
               max={300}
               value={timeout}
               onChange={(e) => setTimeout(Number(e.target.value))}
-              className="rounded border border-ps-border bg-ps-canvas px-2 py-1 text-xs text-ps-ink outline-none focus:border-ps-accent"
+              className="ps-select px-2 py-1"
             />
           </div>
           <div className="flex w-40 flex-col gap-1">
@@ -258,7 +258,7 @@ export function CodingPlaygroundPanel() {
             <select
               value={allowNetwork ? "allow" : "block"}
               onChange={(e) => setAllowNetwork(e.target.value === "allow")}
-              className="rounded border border-ps-border bg-ps-canvas px-2 py-1 text-xs text-ps-ink outline-none focus:border-ps-accent"
+              className="ps-select px-2 py-1"
             >
               <option value="block">Blocked (sandbox)</option>
               <option value="allow">Allowed</option>

@@ -205,7 +205,7 @@ export function WebcamCaptureModal({ open, onClose, onCapture }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[180] flex items-center justify-center bg-ps-canvas p-4 backdrop-blur-sm"
+      className="ps-modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-labelledby="webcam-capture-title"
@@ -276,7 +276,7 @@ export function WebcamCaptureModal({ open, onClose, onCapture }: Props) {
               type="button"
               disabled={!ready || capturing}
               onClick={() => void handleCapture()}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-ps-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-ps-accent disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-ps-accent px-3 py-1.5 text-xs font-semibold text-ps-accent-fg hover:bg-ps-accent disabled:opacity-40"
             >
               {capturing ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
               Capture photo

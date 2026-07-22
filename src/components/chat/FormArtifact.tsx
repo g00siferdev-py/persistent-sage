@@ -30,7 +30,7 @@ function FieldInput({
   const kind = field.kind ?? "text";
   const id = `artifact-field-${field.id}`;
   const base =
-    "w-full rounded-md border border-ps-border bg-white dark:bg-ps-canvas px-2.5 py-1.5 text-sm text-ps-ink disabled:opacity-50";
+    "ps-input w-full px-2.5 py-1.5 text-sm disabled:opacity-50";
 
   if (kind === "checkbox") {
     return (
@@ -207,7 +207,7 @@ export function FormArtifact({
         type="button"
         disabled={disabled}
         onClick={handleSubmit}
-        className="inline-flex items-center gap-2 rounded-lg bg-ps-accent px-3 py-2 text-xs font-semibold text-white hover:bg-ps-accent disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-lg bg-ps-accent px-3 py-2 text-xs font-semibold text-ps-accent-fg hover:bg-ps-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Send className="size-3.5" aria-hidden />
         {buttonLabel}

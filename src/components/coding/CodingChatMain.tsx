@@ -144,7 +144,7 @@ export function CodingChatMain({
         </div>
       ) : null}
 
-      <form onSubmit={submit} className="ps-composer !px-5 !py-3">
+      <form onSubmit={submit} className="shrink-0 border-t border-ps-border bg-ps-elevated/60 px-5 py-3">
         <div className="flex gap-2">
           <textarea
             value={draft}

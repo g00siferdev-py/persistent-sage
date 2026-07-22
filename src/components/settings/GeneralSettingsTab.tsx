@@ -332,7 +332,7 @@ export function GeneralSettingsTab({
                   : !pendingUpdate)
               }
               onClick={() => void installPendingUpdate()}
-              className="inline-flex items-center gap-2 rounded-lg bg-ps-accent px-3 py-2 text-xs font-semibold text-white hover:bg-ps-accent disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-ps-accent px-3 py-2 text-xs font-semibold text-ps-accent-fg hover:bg-ps-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               {updateBusy &&
               (pendingUpdate || storeUpdateAvailable) ? (
@@ -839,7 +839,7 @@ export function GeneralSettingsTab({
       </section>
       {destructiveModal ? (
       <div
-        className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4"
+        className="ps-modal-backdrop"
         role="dialog"
         aria-modal="true"
         aria-labelledby="destructive-modal-warning"

@@ -127,6 +127,37 @@
     outline: 2px solid var(--ps-accent);
     outline-offset: 2px;
   }
+
+  /* Native select popups must stay readable in both themes (Windows WebView2
+     renders option lists from these colors, not from Tailwind classes). */
+  select {
+    color: var(--ps-ink);
+  }
+
+  option,
+  optgroup {
+    background-color: var(--ps-surface);
+    color: var(--ps-ink);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--ps-border);
+    border-radius: 5px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--ps-border-strong);
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
 }
 
 @layer components {
@@ -219,6 +250,43 @@
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--ps-accent) 22%, transparent);
   }
 
+  .ps-select {
+    @apply appearance-none border border-ps-border bg-ps-surface text-xs font-medium text-ps-ink outline-none transition;
+    border-radius: var(--ps-radius);
+  }
+
+  .ps-select:focus {
+    border-color: var(--ps-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ps-accent) 20%, transparent);
+  }
+
+  .ps-select:disabled {
+    @apply opacity-50;
+  }
+
+  .ps-modal-backdrop {
+    @apply fixed inset-0 z-[200] flex items-center justify-center p-4;
+    background: var(--ps-overlay);
+    backdrop-filter: blur(3px);
+  }
+
+  .ps-modal {
+    @apply flex flex-col overflow-hidden border border-ps-border bg-ps-surface;
+    border-radius: var(--ps-radius-lg);
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.28);
+  }
+
+  .ps-composer-box {
+    @apply flex flex-col border border-ps-border bg-ps-surface;
+    border-radius: var(--ps-radius-lg);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .ps-composer-box:focus-within {
+    border-color: var(--ps-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ps-accent) 18%, transparent);
+  }
+
   .ps-menu {
     @apply z-30 min-w-[12rem] overflow-hidden border border-ps-border bg-ps-surface py-1;
     border-radius: var(--ps-radius-lg);
@@ -270,14 +338,26 @@
     @apply text-sm font-semibold tracking-tight text-ps-ink;
   }
 
+  /* Document-style transcript rows — no chat bubbles. */
   .ps-msg-user {
-    @apply ml-[12%] border border-ps-border bg-ps-elevated px-4 py-3 text-sm leading-relaxed text-ps-ink;
-    border-radius: var(--ps-radius-lg) var(--ps-radius-lg) 0.2rem var(--ps-radius-lg);
+    @apply border-l-2 bg-transparent py-1 pl-4 pr-0 text-sm leading-relaxed text-ps-ink;
+    border-left-color: var(--ps-warm);
   }
 
   .ps-msg-assistant {
-    @apply mr-[8%] border-l-[3px] border-l-ps-accent border-y border-r border-ps-border bg-ps-surface px-4 py-3 text-sm leading-relaxed text-ps-ink;
-    border-radius: 0.2rem var(--ps-radius-lg) var(--ps-radius-lg) var(--ps-radius-lg);
+    @apply border-l-2 bg-transparent py-1 pl-4 pr-0 text-sm leading-relaxed text-ps-ink;
+    border-left-color: var(--ps-accent);
+  }
+
+  .ps-msg-label {
+    @apply mb-1.5 flex items-baseline gap-2 text-[11px] font-semibold tracking-wide text-ps-ink;
+    font-family: var(--ps-font-display);
+  }
+
+  .ps-msg-label time,
+  .ps-msg-label .ps-msg-time {
+    @apply text-[10px] font-normal tracking-normal text-ps-faint;
+    font-family: var(--ps-font-body);
   }
 
   .ps-composer {

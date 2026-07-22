@@ -56,7 +56,7 @@ export function MarkdownPlaygroundPanel() {
       title={label}
       className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-medium ${
  view === mode
- ? "bg-ps-accent text-white"
+ ? "bg-ps-accent text-ps-accent-fg"
  : "text-ps-faint hover:bg-ps-surface hover:text-ps-ink"
  }`}
     >

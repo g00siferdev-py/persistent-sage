@@ -938,7 +938,7 @@ export function ToolsSettingsTab({
                       schedulePatch({ moltbookDefaultSubmolt });
                     }}
                     disabled={submoltsLoading}
-                    className="w-full max-w-xs rounded-lg border border-[#3d8b8f]/45 bg-[#0a2a2d]/80 px-3 py-2 text-sm text-[#e8f4f3] outline-none focus:border-[#e86d4a]/60 disabled:opacity-50"
+                    className="ps-select w-full max-w-xs px-3 py-2 text-sm"
                   >
                     {settings?.moltbookDefaultSubmolt &&
                     !submoltOptions.some((o) => o.name === settings.moltbookDefaultSubmolt) ? (

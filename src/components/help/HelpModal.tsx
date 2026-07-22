@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { CircleHelp, X } from "lucide-react";
 import { HelpContent } from "@/components/help/HelpContent";
 
@@ -7,25 +9,39 @@ type Props = {
 };
 
 export function HelpModal({ open, onClose }: Props) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
-  return (
+  // Portal to <body>: the topbar uses backdrop-filter, which traps fixed
+  // descendants in its own stacking context (the "help behind chat" bug).
+  return createPortal(
     <div
-      className="fixed inset-0 z-[180] flex items-center justify-center bg-ps-canvas p-4 backdrop-blur-sm"
+      className="ps-modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-labelledby="help-modal-title"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      <div className="flex max-h-[min(40rem,90vh)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-ps-border bg-white shadow-2xl dark:bg-ps-elevated">
-        <div className="flex shrink-0 items-center justify-between border-b border-ps-border px-4 py-3 dark:border-ps-border">
+      <div className="ps-modal max-h-[min(40rem,90vh)] w-full max-w-lg">
+        <div className="flex shrink-0 items-center justify-between border-b border-ps-border px-4 py-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-ps-ink">
             <CircleHelp className="size-4 text-ps-accent" aria-hidden />
-            <span id="help-modal-title">Help</span>
+            <span id="help-modal-title" className="font-display">Help</span>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1 text-ps-faint hover:bg-ps-elevated hover:text-ps-ink dark:hover:bg-ps-surface dark:hover:text-ps-ink"
+            className="ps-btn-ghost p-1.5"
             aria-label="Close help"
           >
             <X className="size-4" aria-hidden />
@@ -35,6 +51,7 @@ export function HelpModal({ open, onClose }: Props) {
           <HelpContent />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

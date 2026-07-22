@@ -103,7 +103,7 @@ function SidebarSection({
           type="button"
           onClick={onToggle}
           aria-expanded={open}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left text-[11px] font-semibold uppercase tracking-wider text-ps-faint transition hover:bg-ps-accent-soft hover:text-ps-muted dark:hover:text-ps-muted"
+          className="flex min-w-0 flex-1 items-center gap-2 px-1 py-1 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-ps-faint transition-colors hover:text-ps-ink"
         >
           <ChevronDown
             className={`size-3.5 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`}

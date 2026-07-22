@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { Loader2, Star, StarOff, X } from "lucide-react";
 import type { StoredMessage } from "@/types/chat";
@@ -52,9 +53,9 @@ export function FavoritesPanel({ open, onClose, onOpenConversation }: Props) {
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ps-canvas p-4 backdrop-blur-[2px]"
+      className="ps-modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-label="Favorites"
@@ -62,7 +63,7 @@ export function FavoritesPanel({ open, onClose, onOpenConversation }: Props) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-ps-border bg-white shadow-2xl dark:border-ps-border dark:bg-ps-canvas">
+      <div className="ps-modal max-h-[85vh] w-full max-w-2xl">
         <header className="flex shrink-0 items-center justify-between border-b border-ps-border px-4 py-3 dark:border-ps-border">
           <div className="flex items-center gap-2">
             <Star className="size-4 fill-amber-400 text-amber-400" aria-hidden />
@@ -153,6 +154,7 @@ export function FavoritesPanel({ open, onClose, onOpenConversation }: Props) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
