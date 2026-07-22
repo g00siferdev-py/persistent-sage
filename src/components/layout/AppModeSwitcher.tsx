@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Code2, MessageCircle } from "lucide-react";
+import { Code2, LayoutGrid, MessageCircle } from "lucide-react";
 import { appModeLabel, type AppMode } from "@/lib/appMode";
 import packageJson from "../../../package.json";
 
@@ -9,10 +9,7 @@ type Props = {
   onModeChange: (mode: AppMode) => void;
 };
 
-/**
- * Mode rail for Companion / Coding, with layout room for a future Productivity mode.
- * Productivity is not selectable yet — the spacer keeps the visual system 3-mode ready.
- */
+/** Mode rail for Companion / Productivity / Coding. */
 export function AppModeSwitcher({ mode, onModeChange }: Props) {
   const [versionLabel, setVersionLabel] = useState(`v${packageJson.version}`);
 
@@ -51,11 +48,11 @@ export function AppModeSwitcher({ mode, onModeChange }: Props) {
           icon={<MessageCircle className="h-3.5 w-3.5" aria-hidden />}
           onClick={() => onModeChange("companion")}
         />
-        {/* Reserved slot for future Productivity Mode — keeps rhythm for three modes. */}
-        <div
-          className="pointer-events-none hidden w-0 overflow-hidden opacity-0 md:block"
-          aria-hidden
-          data-future-mode="productivity"
+        <ModeButton
+          active={mode === "productivity"}
+          label={appModeLabel("productivity")}
+          icon={<LayoutGrid className="h-3.5 w-3.5" aria-hidden />}
+          onClick={() => onModeChange("productivity")}
         />
         <ModeButton
           active={mode === "coding"}

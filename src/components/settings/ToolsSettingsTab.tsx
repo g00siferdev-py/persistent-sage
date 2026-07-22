@@ -173,6 +173,10 @@ export function ToolsSettingsTab({
   refreshSettings,
 }: ToolsSettingsTabProps) {
   const [githubPatInput, setGithubPatInput] = useState("");
+  const [googleClientIdInput, setGoogleClientIdInput] = useState("");
+  const [googleSecretInput, setGoogleSecretInput] = useState("");
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [googleMsg, setGoogleMsg] = useState<string | null>(null);
   const [moltbookKeyInput, setMoltbookKeyInput] = useState("");
   const [moltbookAgentName, setMoltbookAgentName] = useState("");
   const [moltbookBusy, setMoltbookBusy] = useState(false);
@@ -1296,6 +1300,240 @@ export function ToolsSettingsTab({
                   How often to check for replies on the agent&apos;s posts (1–30, default 2).
                 </span>
               </label>
+            ) : null}
+          </>
+        ) : null}
+      </SettingsSection>
+
+      <SettingsSection
+        title="Google Workspace"
+        className="rounded-lg border border-ps-border bg-ps-elevated p-3"
+        description={
+          <>
+            Gmail, Google Calendar, and Google Drive — powers the Productivity-mode widgets and
+            (optionally) companion agent tools like &ldquo;did I get an email from…&rdquo; or
+            &ldquo;add a vet appointment Tuesday at 11&rdquo;. Sign-in uses your own Google OAuth
+            client; tokens are stored encrypted on this machine.
+          </>
+        }
+      >
+        <SettingsToggleCard
+          id="google-enabled"
+          title="Enable Google Workspace integration"
+          compact
+          description="Master switch. Create a Desktop-app OAuth client in Google Cloud Console (APIs & Services → Credentials), enable the Gmail, Calendar, and Drive APIs, then paste the Client ID below."
+          checked={settings?.googleEnabled ?? false}
+          onChange={(googleEnabled) => {
+            setSettings((s) => (s ? { ...s, googleEnabled } : s));
+            flushDebounce();
+            void (async () => {
+              try {
+                setError(null);
+                const next = await applySettingsPatch({ googleEnabled });
+                setSettings(next);
+              } catch (err) {
+                setError(String(err));
+                await refreshSettings();
+              }
+            })();
+          }}
+        />
+        {settings?.googleEnabled ? (
+          <>
+            <div className="ml-0 space-y-2 rounded-md border border-ps-border bg-ps-surface px-3 py-3">
+              <p className="ps-label">OAuth client</p>
+              <p className="text-[11px] leading-relaxed text-ps-faint">
+                Client ID:{" "}
+                {settings?.googleClientId ? (
+                  <span className="font-mono text-ps-muted">{settings.googleClientId.slice(0, 28)}…</span>
+                ) : (
+                  <span className="text-ps-warm">not set</span>
+                )}
+                {" · "}Client secret:{" "}
+                {settings?.hasGoogleClientSecret ? (
+                  <span className="text-ps-success">saved (encrypted)</span>
+                ) : (
+                  <span className="text-ps-faint">optional for Desktop clients</span>
+                )}
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  autoComplete="off"
+                  placeholder="…apps.googleusercontent.com"
+                  value={googleClientIdInput}
+                  onChange={(e) => setGoogleClientIdInput(e.target.value)}
+                  className="ps-input min-w-0 flex-1 px-3 py-2 font-mono text-xs"
+                />
+                <button
+                  type="button"
+                  disabled={!googleClientIdInput.trim()}
+                  onClick={() => {
+                    flushDebounce();
+                    void (async () => {
+                      try {
+                        setError(null);
+                        const next = await applySettingsPatch({
+                          googleClientId: googleClientIdInput.trim(),
+                        });
+                        setSettings(next);
+                        setGoogleClientIdInput("");
+                        setGoogleMsg("Client ID saved.");
+                      } catch (err) {
+                        setError(String(err));
+                      }
+                    })();
+                  }}
+                  className="ps-btn-primary px-3 py-2"
+                >
+                  Save ID
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  autoComplete="off"
+                  placeholder="Client secret (optional)"
+                  value={googleSecretInput}
+                  onChange={(e) => setGoogleSecretInput(e.target.value)}
+                  className="ps-input min-w-0 flex-1 px-3 py-2 font-mono text-xs"
+                />
+                <button
+                  type="button"
+                  disabled={!googleSecretInput.trim()}
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        setError(null);
+                        await invoke("settings_save_api_key", {
+                          provider: "google_client_secret",
+                          apiKey: googleSecretInput,
+                        });
+                        setGoogleSecretInput("");
+                        setGoogleMsg("Client secret saved (encrypted).");
+                        await refreshSettings();
+                      } catch (err) {
+                        setError(String(err));
+                      }
+                    })();
+                  }}
+                  className="ps-btn-primary px-3 py-2"
+                >
+                  Save secret
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={googleBusy || !settings?.googleClientId}
+                  onClick={() => {
+                    setGoogleBusy(true);
+                    setGoogleMsg(null);
+                    void (async () => {
+                      try {
+                        setError(null);
+                        await invoke("google_auth_start");
+                        setGoogleMsg("Google account connected.");
+                        await refreshSettings();
+                      } catch (err) {
+                        setError(String(err));
+                      } finally {
+                        setGoogleBusy(false);
+                      }
+                    })();
+                  }}
+                  className="ps-btn-primary px-3 py-2"
+                >
+                  {googleBusy
+                    ? "Waiting for browser…"
+                    : settings?.googleConnected
+                      ? "Reconnect account"
+                      : "Connect Google account"}
+                </button>
+                {settings?.googleConnected ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          await invoke("google_disconnect");
+                          setGoogleMsg("Disconnected.");
+                          await refreshSettings();
+                        } catch (err) {
+                          setError(String(err));
+                        }
+                      })();
+                    }}
+                    className="ps-btn px-3 py-2"
+                  >
+                    Disconnect
+                  </button>
+                ) : null}
+              </div>
+              {settings?.googleConnected && settings?.googleAccountEmail ? (
+                <p className="text-[11px] text-ps-success">
+                  Connected as {settings.googleAccountEmail}
+                </p>
+              ) : null}
+              {googleMsg ? <p className="text-[11px] text-ps-success">{googleMsg}</p> : null}
+            </div>
+
+            <SettingsToggleCard
+              id="google-gmail"
+              title="Gmail"
+              compact
+              description="Email widget + gmail_search / gmail_read / gmail_create_draft tools. Reconnect after changing services so the OAuth scopes match."
+              checked={settings?.googleGmailEnabled ?? true}
+              onChange={(googleGmailEnabled) => {
+                setSettings((s) => (s ? { ...s, googleGmailEnabled } : s));
+                schedulePatch({ googleGmailEnabled });
+              }}
+            />
+            <SettingsToggleCard
+              id="google-calendar"
+              title="Google Calendar"
+              compact
+              description="Calendar widget + calendar_list_events / calendar_create_event tools."
+              checked={settings?.googleCalendarEnabled ?? true}
+              onChange={(googleCalendarEnabled) => {
+                setSettings((s) => (s ? { ...s, googleCalendarEnabled } : s));
+                schedulePatch({ googleCalendarEnabled });
+              }}
+            />
+            <SettingsToggleCard
+              id="google-drive"
+              title="Google Drive"
+              compact
+              description="Documents widget + drive_search / drive_read_document tools, and email attachments from Drive."
+              checked={settings?.googleDriveEnabled ?? true}
+              onChange={(googleDriveEnabled) => {
+                setSettings((s) => (s ? { ...s, googleDriveEnabled } : s));
+                schedulePatch({ googleDriveEnabled });
+              }}
+            />
+            <SettingsToggleCard
+              id="google-agent-tools"
+              title="Companion agent tools"
+              compact
+              description="Lets your companion answer questions like “any email from Vanessa today?”, add calendar events, and draft emails with Drive attachments during chat."
+              checked={settings?.googleAgentToolsEnabled ?? false}
+              onChange={(googleAgentToolsEnabled) => {
+                setSettings((s) => (s ? { ...s, googleAgentToolsEnabled } : s));
+                schedulePatch({ googleAgentToolsEnabled });
+              }}
+            />
+            {settings?.googleAgentToolsEnabled ? (
+              <SettingsToggleCard
+                id="google-agent-send"
+                title="Allow the agent to send email directly"
+                compact
+                description="Off (recommended): the agent creates Gmail drafts you review and send. On: gmail_send is available and mail leaves your account without review."
+                checked={settings?.googleAgentSendEnabled ?? false}
+                onChange={(googleAgentSendEnabled) => {
+                  setSettings((s) => (s ? { ...s, googleAgentSendEnabled } : s));
+                  schedulePatch({ googleAgentSendEnabled });
+                }}
+              />
             ) : null}
           </>
         ) : null}

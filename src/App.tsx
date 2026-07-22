@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { CompanionLayout, CodingLayout } from "@/components/layout";
+import { ProductivityLayout } from "@/components/layout/ProductivityLayout";
 import {
   loadActiveConversationId,
   loadActiveRepoId,
@@ -39,6 +40,15 @@ function App() {
         activeRepoId={activeRepoId}
         onActiveConversationIdChange={setConversationId}
         onActiveRepoIdChange={setRepoId}
+        onModeChange={setMode}
+      />
+    );
+  }
+
+  if (mode === "productivity") {
+    return (
+      <ProductivityLayout
+        activeConversationId={activeConversationId}
         onModeChange={setMode}
       />
     );

@@ -1303,6 +1303,14 @@ pub async fn run_builtin_tool(
         return crate::moltbook::run_moltbook_tool(http, settings, n, &v).await;
     }
 
+    if crate::google::is_google_tool_name(n) {
+        let settings =
+            settings.ok_or_else(|| tool_err("Google tools need settings context"))?;
+        let v: Value = serde_json::from_str(arguments_json)
+            .map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
+        return crate::google::run_google_tool(http, settings, n, &v).await;
+    }
+
     if crate::pdf::is_pdf_tool_name(n) {
         let root = workspace_root.ok_or_else(|| tool_err("workspace tools are not enabled"))?;
         let v: Value = serde_json::from_str(arguments_json)

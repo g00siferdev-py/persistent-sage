@@ -80,6 +80,16 @@ export type SettingsView = {
   moltbookBlockedTopics: string;
   moltbookReplyWatcherEnabled: boolean;
   moltbookReplyPollMinutes: number;
+  googleEnabled: boolean;
+  googleClientId: string;
+  googleGmailEnabled: boolean;
+  googleCalendarEnabled: boolean;
+  googleDriveEnabled: boolean;
+  googleAgentToolsEnabled: boolean;
+  googleAgentSendEnabled: boolean;
+  googleAccountEmail: string;
+  hasGoogleClientSecret: boolean;
+  googleConnected: boolean;
 };
 
 export type SettingsPatch = {
@@ -137,6 +147,13 @@ export type SettingsPatch = {
   moltbookBlockedTopics?: string;
   moltbookReplyWatcherEnabled?: boolean;
   moltbookReplyPollMinutes?: number;
+  googleEnabled?: boolean;
+  googleClientId?: string;
+  googleGmailEnabled?: boolean;
+  googleCalendarEnabled?: boolean;
+  googleDriveEnabled?: boolean;
+  googleAgentToolsEnabled?: boolean;
+  googleAgentSendEnabled?: boolean;
 };
 
 export type ProviderDescriptor = {

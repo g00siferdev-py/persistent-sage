@@ -794,6 +794,13 @@ async fn run_chat_completion(
     {
         tool_definitions.extend(crate::moltbook::tool_definitions());
     }
+    if options.enable_tools
+        && !is_coding_turn
+        && state.settings.google_enabled()
+        && state.settings.google_agent_tools_enabled()
+    {
+        tool_definitions.extend(crate::google::tool_definitions(&state.settings));
+    }
     let database_tools_enabled = options.enable_tools
         && !is_coding_turn
         && (state.settings.agent_workspace_enabled() || state.settings.database_app_data_enabled());

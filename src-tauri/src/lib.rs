@@ -23,6 +23,7 @@ mod coding_notes;
 mod coding_tools;
 mod database_query;
 mod distribution;
+mod google;
 mod paths;
 mod pdf;
 mod embedding;
@@ -262,6 +263,37 @@ async fn recipe_run(
 #[tauri::command]
 fn project_list(state: State<'_, NovaState>) -> Result<projects::ProjectListView, String> {
     projects::list_projects_view(&state.workspace_root)
+}
+
+/// Create a project directly from the Productivity-mode Projects widget (no chat turn).
+#[tauri::command]
+fn project_create_direct(
+    title: String,
+    kind: Option<String>,
+    state: State<'_, NovaState>,
+) -> Result<projects::ProjectMeta, String> {
+    let t = title.trim();
+    if t.is_empty() {
+        return Err("project title is required".into());
+    }
+    let id: String = t
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    projects::create_project(
+        &state.workspace_root,
+        &id,
+        t,
+        kind.as_deref().unwrap_or("document"),
+        None,
+        None,
+    )
+}
+
+#[tauri::command]
+fn project_read_doc(id: String, state: State<'_, NovaState>) -> Result<String, String> {
+    projects::read_document(&state.workspace_root, &id)
 }
 
 #[tauri::command]
@@ -1138,6 +1170,16 @@ pub fn run() {
             moltbook_scheduler::moltbook_scheduler_run_interact,
             moltbook_scheduler::moltbook_scheduler_run_post,
             moltbook_scheduler::moltbook_scheduler_ask_share,
+            google::google_status,
+            google::google_auth_start,
+            google::google_disconnect,
+            google::google_gmail_list,
+            google::google_gmail_get,
+            google::google_gmail_send,
+            google::google_calendar_events,
+            google::google_calendar_create_event,
+            google::google_calendar_delete_event,
+            google::google_drive_list,
             provider_info,
             provider_list_available,
             ollama_cloud_list_models,
@@ -1182,6 +1224,8 @@ pub fn run() {
             recipe_list,
             recipe_run,
             project_list,
+            project_create_direct,
+            project_read_doc,
             project_format_form_submission,
             coding_repo_list,
             coding_repo_set_active,

@@ -197,6 +197,28 @@ pub struct SettingsFile {
     /// How often (minutes) to poll for replies when the reply watcher is enabled.
     #[serde(default = "default_moltbook_reply_poll_minutes")]
     pub moltbook_reply_poll_minutes: u32,
+    /// Master switch for the Google Workspace (Gmail / Calendar / Drive) integration.
+    #[serde(default)]
+    pub google_enabled: bool,
+    /// OAuth 2.0 Desktop client ID from the user's Google Cloud project (not a secret).
+    #[serde(default)]
+    pub google_client_id: String,
+    /// Per-service switches — each adds OAuth scopes and enables widgets/tools.
+    #[serde(default = "default_true")]
+    pub google_gmail_enabled: bool,
+    #[serde(default = "default_true")]
+    pub google_calendar_enabled: bool,
+    #[serde(default = "default_true")]
+    pub google_drive_enabled: bool,
+    /// When true the companion gets Google agent tools (search mail, calendar, documents).
+    #[serde(default)]
+    pub google_agent_tools_enabled: bool,
+    /// When true the agent may SEND email directly; otherwise it can only create drafts.
+    #[serde(default)]
+    pub google_agent_send_enabled: bool,
+    /// Connected Google account email (display only — tokens are encrypted separately).
+    #[serde(default)]
+    pub google_account_email: String,
 }
 
 fn default_moltbook_interact_interval_minutes() -> u32 {
@@ -408,6 +430,14 @@ impl Default for SettingsFile {
             moltbook_blocked_topics: String::new(),
             moltbook_reply_watcher_enabled: false,
             moltbook_reply_poll_minutes: default_moltbook_reply_poll_minutes(),
+            google_enabled: false,
+            google_client_id: String::new(),
+            google_gmail_enabled: true,
+            google_calendar_enabled: true,
+            google_drive_enabled: true,
+            google_agent_tools_enabled: false,
+            google_agent_send_enabled: false,
+            google_account_email: String::new(),
         }
     }
 }
@@ -478,6 +508,16 @@ pub struct SettingsView {
     pub moltbook_blocked_topics: String,
     pub moltbook_reply_watcher_enabled: bool,
     pub moltbook_reply_poll_minutes: u32,
+    pub google_enabled: bool,
+    pub google_client_id: String,
+    pub google_gmail_enabled: bool,
+    pub google_calendar_enabled: bool,
+    pub google_drive_enabled: bool,
+    pub google_agent_tools_enabled: bool,
+    pub google_agent_send_enabled: bool,
+    pub google_account_email: String,
+    pub has_google_client_secret: bool,
+    pub google_connected: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -540,6 +580,13 @@ pub struct SettingsUpdatePayload {
     pub moltbook_blocked_topics: Option<String>,
     pub moltbook_reply_watcher_enabled: Option<bool>,
     pub moltbook_reply_poll_minutes: Option<u32>,
+    pub google_enabled: Option<bool>,
+    pub google_client_id: Option<String>,
+    pub google_gmail_enabled: Option<bool>,
+    pub google_calendar_enabled: Option<bool>,
+    pub google_drive_enabled: Option<bool>,
+    pub google_agent_tools_enabled: Option<bool>,
+    pub google_agent_send_enabled: Option<bool>,
 }
 
 // --- Crypto ------------------------------------------------------------------
@@ -846,6 +893,94 @@ impl SettingsManager {
         Ok(())
     }
 
+    // --- Google Workspace integration --------------------------------------
+
+    pub fn google_enabled(&self) -> bool {
+        self.inner.read().map(|g| g.google_enabled).unwrap_or(false)
+    }
+
+    pub fn google_agent_tools_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.google_agent_tools_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn google_agent_send_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.google_agent_send_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn google_gmail_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.google_gmail_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn google_calendar_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.google_calendar_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn google_drive_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.google_drive_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn google_client_id(&self) -> String {
+        self.inner
+            .read()
+            .map(|g| g.google_client_id.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn set_google_account_email(&self, email: &str) -> Result<(), SettingsError> {
+        {
+            let mut inner = self
+                .inner
+                .write()
+                .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
+            inner.google_account_email = email.trim().to_string();
+        }
+        self.persist()
+    }
+
+    pub fn google_account_email(&self) -> String {
+        self.inner
+            .read()
+            .map(|g| g.google_account_email.clone())
+            .unwrap_or_default()
+    }
+
+    /// Store an arbitrary secret string under a raw slot name (used for Google OAuth tokens).
+    pub fn save_secret_slot(&self, slot: &str, value: &str) -> Result<(), SettingsError> {
+        let v = value.trim();
+        if v.is_empty() {
+            let mut inner = self
+                .inner
+                .write()
+                .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
+            inner.encrypted_api_keys.remove(slot);
+            drop(inner);
+            return self.persist();
+        }
+        let blob = encrypt_aes_gcm(&self.aes_key, v.as_bytes())?;
+        let mut inner = self
+            .inner
+            .write()
+            .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
+        inner.encrypted_api_keys.insert(slot.to_string(), blob);
+        drop(inner);
+        self.persist()
+    }
+
     pub fn view(&self) -> Result<SettingsView, SettingsError> {
         let inner = self
             .inner
@@ -935,6 +1070,22 @@ impl SettingsManager {
             moltbook_blocked_topics: inner.moltbook_blocked_topics.clone(),
             moltbook_reply_watcher_enabled: inner.moltbook_reply_watcher_enabled,
             moltbook_reply_poll_minutes: inner.moltbook_reply_poll_minutes,
+            google_enabled: inner.google_enabled,
+            google_client_id: inner.google_client_id.clone(),
+            google_gmail_enabled: inner.google_gmail_enabled,
+            google_calendar_enabled: inner.google_calendar_enabled,
+            google_drive_enabled: inner.google_drive_enabled,
+            google_agent_tools_enabled: inner.google_agent_tools_enabled,
+            google_agent_send_enabled: inner.google_agent_send_enabled,
+            google_account_email: inner.google_account_email.clone(),
+            has_google_client_secret: can_decrypt_api_blob(
+                &self.aes_key,
+                inner.encrypted_api_keys.get("google_client_secret"),
+            ),
+            google_connected: can_decrypt_api_blob(
+                &self.aes_key,
+                inner.encrypted_api_keys.get("google_tokens"),
+            ),
         })
     }
 
@@ -1575,6 +1726,27 @@ impl SettingsManager {
         if let Some(m) = patch.moltbook_reply_poll_minutes {
             inner.moltbook_reply_poll_minutes = m.clamp(1, 30);
         }
+        if let Some(b) = patch.google_enabled {
+            inner.google_enabled = b;
+        }
+        if let Some(s) = patch.google_client_id {
+            inner.google_client_id = s.trim().to_string();
+        }
+        if let Some(b) = patch.google_gmail_enabled {
+            inner.google_gmail_enabled = b;
+        }
+        if let Some(b) = patch.google_calendar_enabled {
+            inner.google_calendar_enabled = b;
+        }
+        if let Some(b) = patch.google_drive_enabled {
+            inner.google_drive_enabled = b;
+        }
+        if let Some(b) = patch.google_agent_tools_enabled {
+            inner.google_agent_tools_enabled = b;
+        }
+        if let Some(b) = patch.google_agent_send_enabled {
+            inner.google_agent_send_enabled = b;
+        }
         inner.version = SETTINGS_VERSION;
         drop(inner);
         self.persist()
@@ -1647,6 +1819,7 @@ fn normalize_key_slot(provider: &str) -> Result<String, SettingsError> {
         "xai" | "grok" => Ok("xai".into()),
         "github" | "github_pat" => Ok("github".into()),
         "moltbook" => Ok("moltbook".into()),
+        "google_client_secret" => Ok("google_client_secret".into()),
         _ => Err(SettingsError::InvalidKeySlot(provider.to_string())),
     }
 }

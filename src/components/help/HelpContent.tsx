@@ -8,6 +8,7 @@ import {
   FolderOpen,
   Globe,
   Keyboard,
+  LayoutGrid,
   MessageCircle,
   Rocket,
   Star,
@@ -160,6 +161,35 @@ export function HelpContent() {
           <li>
             <strong>Pulse</strong> (Settings → General) runs scheduled companion
             check-ins in your open thread.
+          </li>
+        </ul>
+      </Section>
+
+      <Section
+        icon={<LayoutGrid className="size-4 text-ps-accent" aria-hidden />}
+        title="Productivity mode"
+      >
+        <ul className="list-inside list-disc space-y-1">
+          <li>
+            A customizable canvas of <strong>movable widgets</strong> — drag a
+            widget by its header, resize from the corner, and add or close
+            widgets from the toolbar. Your layout is remembered.
+          </li>
+          <li>
+            <strong>Email, Calendar, and Documents</strong> widgets are powered
+            by your Google account (Gmail / Google Calendar / Google Drive).
+            Set up under <strong>Settings → Tools → Google Workspace</strong>,
+            then click <em>Connect Google account</em>.
+          </li>
+          <li>
+            <strong>Projects</strong> — create and browse collaborative project
+            documents here; continue them conversationally from companion chat.
+          </li>
+          <li>
+            With <strong>companion agent tools</strong> enabled, you can ask
+            things like &ldquo;any email from Vanessa today?&rdquo;, &ldquo;add a
+            vet appointment Tuesday at 11am&rdquo;, or &ldquo;draft an email with
+            the payoff request from my Drive attached&rdquo; right from chat.
           </li>
         </ul>
       </Section>

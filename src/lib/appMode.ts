@@ -1,9 +1,8 @@
-/** Top-level product mode: companion chat vs coding workspace (Persistent Sage v2).
- *  A future "productivity" mode is planned between companion and coding. */
-export type AppMode = "companion" | "coding";
+/** Top-level product mode: companion chat, productivity workspace, or coding workspace. */
+export type AppMode = "companion" | "productivity" | "coding";
 
-/** Reserved for the upcoming Productivity Mode layout (not selectable yet). */
-export type FutureAppMode = AppMode | "productivity";
+/** @deprecated Productivity is live — kept for transitional imports. */
+export type FutureAppMode = AppMode;
 
 const MODE_KEY = "persistent-sage.appMode";
 const CONV_KEY = "persistent-sage.activeConversationId";
@@ -13,6 +12,7 @@ export function loadAppMode(): AppMode {
   try {
     const raw = localStorage.getItem(MODE_KEY);
     if (raw === "coding") return "coding";
+    if (raw === "productivity") return "productivity";
   } catch {
     /* private mode */
   }
@@ -63,18 +63,18 @@ export function saveActiveRepoId(id: string | null): void {
   }
 }
 
-export function appModeLabel(mode: FutureAppMode): string {
+export function appModeLabel(mode: AppMode): string {
   if (mode === "coding") return "Coding";
   if (mode === "productivity") return "Productivity";
   return "Companion";
 }
 
-export function appModeDescription(mode: FutureAppMode): string {
+export function appModeDescription(mode: AppMode): string {
   if (mode === "coding") {
     return "Work on git repos under workspace/repos with shell and git tools.";
   }
   if (mode === "productivity") {
-    return "Focused work sessions — coming in a future update.";
+    return "Email, calendar, documents, and projects — arranged your way.";
   }
   return "Chat, memory, personality, and collaborative projects.";
 }
