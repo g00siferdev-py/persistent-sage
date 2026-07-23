@@ -24,6 +24,7 @@ export function WebcamCaptureModal({ open, onClose, onCapture }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const previewFrameRef = useRef<number | null>(null);
+  const previewRunRef = useRef(0);
   const previewActiveRef = useRef(false);
   const previewBusyRef = useRef(false);
   const readyRef = useRef(false);
@@ -33,6 +34,7 @@ export function WebcamCaptureModal({ open, onClose, onCapture }: Props) {
   const [capturing, setCapturing] = useState(false);
 
   const stopPreviewLoop = useCallback(() => {
+    previewRunRef.current += 1;
     previewActiveRef.current = false;
     if (previewFrameRef.current !== null) {
       cancelAnimationFrame(previewFrameRef.current);
@@ -63,10 +65,11 @@ export function WebcamCaptureModal({ open, onClose, onCapture }: Props) {
 
   const runNativePreviewLoop = useCallback(() => {
     stopPreviewLoop();
+    const previewRun = previewRunRef.current;
     previewActiveRef.current = true;
 
     const tick = async () => {
-      if (!previewActiveRef.current) return;
+      if (!previewActiveRef.current || previewRunRef.current !== previewRun) return;
 
       if (!previewBusyRef.current) {
         previewBusyRef.current = true;
@@ -88,7 +91,7 @@ export function WebcamCaptureModal({ open, onClose, onCapture }: Props) {
         }
       }
 
-      if (previewActiveRef.current) {
+      if (previewActiveRef.current && previewRunRef.current === previewRun) {
         previewFrameRef.current = requestAnimationFrame(() => {
           void tick();
         });
@@ -98,12 +101,13 @@ export function WebcamCaptureModal({ open, onClose, onCapture }: Props) {
     void tick();
   }, [stopPreviewLoop]);
 
-  const startNative = useCallback(async () => {
+  const startNative = useCallback(async (isCancelled: () => boolean) => {
     setMode("native");
     setReady(false);
     readyRef.current = false;
     setError(null);
     const ok = await tryStartNativeWebcam();
+    if (isCancelled()) return;
     if (!ok) {
       throw new Error("Native camera unavailable.");
     }
@@ -137,11 +141,12 @@ export function WebcamCaptureModal({ open, onClose, onCapture }: Props) {
     void (async () => {
       try {
         if (isTauriApp()) {
-          await startNative();
+          await startNative(() => cancelled);
           return;
         }
 
         const nativeOk = await tryStartNativeWebcam();
+        if (cancelled) return;
         if (nativeOk) {
           setMode("native");
           runNativePreviewLoop();
