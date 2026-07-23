@@ -46,6 +46,9 @@ jobs:
         run: npm run msix:pack
         env:
           CARGO_BUILD_JOBS: 2
+          # Built-in Google OAuth client (see build-windows.yml for details).
+          PS_GOOGLE_CLIENT_ID: ${{ secrets.PS_GOOGLE_CLIENT_ID }}
+          PS_GOOGLE_CLIENT_SECRET: ${{ secrets.PS_GOOGLE_CLIENT_SECRET }}
 
       - name: List generated package
         shell: pwsh

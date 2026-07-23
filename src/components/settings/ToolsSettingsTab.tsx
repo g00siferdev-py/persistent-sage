@@ -177,6 +177,7 @@ export function ToolsSettingsTab({
   const [googleSecretInput, setGoogleSecretInput] = useState("");
   const [googleBusy, setGoogleBusy] = useState(false);
   const [googleMsg, setGoogleMsg] = useState<string | null>(null);
+  const [googleHasBuiltin, setGoogleHasBuiltin] = useState(false);
   const [moltbookKeyInput, setMoltbookKeyInput] = useState("");
   const [moltbookAgentName, setMoltbookAgentName] = useState("");
   const [moltbookBusy, setMoltbookBusy] = useState(false);
@@ -191,6 +192,18 @@ export function ToolsSettingsTab({
   );
   const [submoltsLoading, setSubmoltsLoading] = useState(false);
   const [submoltsError, setSubmoltsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!settings?.googleEnabled) return;
+    void (async () => {
+      try {
+        const s = await invoke<{ hasBuiltinClient: boolean }>("google_status");
+        setGoogleHasBuiltin(!!s.hasBuiltinClient);
+      } catch {
+        setGoogleHasBuiltin(false);
+      }
+    })();
+  }, [settings?.googleEnabled]);
 
   useEffect(() => {
     setPreferSubmolt(Boolean(settings?.moltbookDefaultSubmolt?.trim()));
@@ -1312,8 +1325,8 @@ export function ToolsSettingsTab({
           <>
             Gmail, Google Calendar, and Google Drive — powers the Productivity-mode widgets and
             (optionally) companion agent tools like &ldquo;did I get an email from…&rdquo; or
-            &ldquo;add a vet appointment Tuesday at 11&rdquo;. Sign-in uses your own Google OAuth
-            client; tokens are stored encrypted on this machine.
+            &ldquo;add a vet appointment Tuesday at 11&rdquo;. Tokens are stored encrypted on this
+            machine; nothing is shared with Persistent Sage servers (there are none).
           </>
         }
       >
@@ -1321,7 +1334,7 @@ export function ToolsSettingsTab({
           id="google-enabled"
           title="Enable Google Workspace integration"
           compact
-          description="Master switch. Create a Desktop-app OAuth client in Google Cloud Console (APIs & Services → Credentials), enable the Gmail, Calendar, and Drive APIs, then paste the Client ID below."
+          description="Master switch. Official builds include the Persistent Sage Google app — after enabling, just click Sign in with Google below. Self-builds can supply their own OAuth client under Advanced."
           checked={settings?.googleEnabled ?? false}
           onChange={(googleEnabled) => {
             setSettings((s) => (s ? { ...s, googleEnabled } : s));
@@ -1341,91 +1354,22 @@ export function ToolsSettingsTab({
         {settings?.googleEnabled ? (
           <>
             <div className="ml-0 space-y-2 rounded-md border border-ps-border bg-ps-surface px-3 py-3">
-              <p className="ps-label">OAuth client</p>
-              <p className="text-[11px] leading-relaxed text-ps-faint">
-                Client ID:{" "}
-                {settings?.googleClientId ? (
-                  <span className="font-mono text-ps-muted">{settings.googleClientId.slice(0, 28)}…</span>
-                ) : (
-                  <span className="text-ps-warm">not set</span>
-                )}
-                {" · "}Client secret:{" "}
-                {settings?.hasGoogleClientSecret ? (
-                  <span className="text-ps-success">saved (encrypted)</span>
-                ) : (
-                  <span className="text-ps-faint">optional for Desktop clients</span>
-                )}
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  autoComplete="off"
-                  placeholder="…apps.googleusercontent.com"
-                  value={googleClientIdInput}
-                  onChange={(e) => setGoogleClientIdInput(e.target.value)}
-                  className="ps-input min-w-0 flex-1 px-3 py-2 font-mono text-xs"
-                />
-                <button
-                  type="button"
-                  disabled={!googleClientIdInput.trim()}
-                  onClick={() => {
-                    flushDebounce();
-                    void (async () => {
-                      try {
-                        setError(null);
-                        const next = await applySettingsPatch({
-                          googleClientId: googleClientIdInput.trim(),
-                        });
-                        setSettings(next);
-                        setGoogleClientIdInput("");
-                        setGoogleMsg("Client ID saved.");
-                      } catch (err) {
-                        setError(String(err));
-                      }
-                    })();
-                  }}
-                  className="ps-btn-primary px-3 py-2"
-                >
-                  Save ID
-                </button>
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  autoComplete="off"
-                  placeholder="Client secret (optional)"
-                  value={googleSecretInput}
-                  onChange={(e) => setGoogleSecretInput(e.target.value)}
-                  className="ps-input min-w-0 flex-1 px-3 py-2 font-mono text-xs"
-                />
-                <button
-                  type="button"
-                  disabled={!googleSecretInput.trim()}
-                  onClick={() => {
-                    void (async () => {
-                      try {
-                        setError(null);
-                        await invoke("settings_save_api_key", {
-                          provider: "google_client_secret",
-                          apiKey: googleSecretInput,
-                        });
-                        setGoogleSecretInput("");
-                        setGoogleMsg("Client secret saved (encrypted).");
-                        await refreshSettings();
-                      } catch (err) {
-                        setError(String(err));
-                      }
-                    })();
-                  }}
-                  className="ps-btn-primary px-3 py-2"
-                >
-                  Save secret
-                </button>
-              </div>
+              <p className="ps-label">Account</p>
+              {settings?.googleConnected && settings?.googleAccountEmail ? (
+                <p className="text-[11px] text-ps-success">
+                  Connected as {settings.googleAccountEmail}
+                </p>
+              ) : (
+                <p className="text-[11px] leading-relaxed text-ps-faint">
+                  {googleHasBuiltin
+                    ? "This build includes the Persistent Sage Google app — no setup needed, just sign in."
+                    : "This build has no built-in Google app credentials. Add your own OAuth client under Advanced below, then sign in."}
+                </p>
+              )}
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  disabled={googleBusy || !settings?.googleClientId}
+                  disabled={googleBusy || (!googleHasBuiltin && !settings?.googleClientId)}
                   onClick={() => {
                     setGoogleBusy(true);
                     setGoogleMsg(null);
@@ -1448,7 +1392,7 @@ export function ToolsSettingsTab({
                     ? "Waiting for browser…"
                     : settings?.googleConnected
                       ? "Reconnect account"
-                      : "Connect Google account"}
+                      : "Sign in with Google"}
                 </button>
                 {settings?.googleConnected ? (
                   <button
@@ -1470,12 +1414,120 @@ export function ToolsSettingsTab({
                   </button>
                 ) : null}
               </div>
-              {settings?.googleConnected && settings?.googleAccountEmail ? (
-                <p className="text-[11px] text-ps-success">
-                  Connected as {settings.googleAccountEmail}
-                </p>
-              ) : null}
               {googleMsg ? <p className="text-[11px] text-ps-success">{googleMsg}</p> : null}
+              <details className="pt-1">
+                <summary className="cursor-pointer select-none text-[11px] font-medium text-ps-muted hover:text-ps-ink">
+                  Advanced — use your own OAuth client
+                </summary>
+                <div className="mt-2 space-y-2">
+                  <p className="text-[11px] leading-relaxed text-ps-faint">
+                    For self-builds or development: create a <strong>Desktop app</strong> client in
+                    Google Cloud Console (APIs &amp; Services → Credentials) with the Gmail,
+                    Calendar, and Drive APIs enabled. A saved Client ID overrides the built-in app.
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-ps-faint">
+                    Client ID:{" "}
+                    {settings?.googleClientId ? (
+                      <span className="font-mono text-ps-muted">{settings.googleClientId.slice(0, 28)}…</span>
+                    ) : (
+                      <span className="text-ps-faint">using built-in</span>
+                    )}
+                    {" · "}Client secret:{" "}
+                    {settings?.hasGoogleClientSecret ? (
+                      <span className="text-ps-success">saved (encrypted)</span>
+                    ) : (
+                      <span className="text-ps-faint">not set</span>
+                    )}
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      placeholder="…apps.googleusercontent.com"
+                      value={googleClientIdInput}
+                      onChange={(e) => setGoogleClientIdInput(e.target.value)}
+                      className="ps-input min-w-0 flex-1 px-3 py-2 font-mono text-xs"
+                    />
+                    <button
+                      type="button"
+                      disabled={!googleClientIdInput.trim()}
+                      onClick={() => {
+                        flushDebounce();
+                        void (async () => {
+                          try {
+                            setError(null);
+                            const next = await applySettingsPatch({
+                              googleClientId: googleClientIdInput.trim(),
+                            });
+                            setSettings(next);
+                            setGoogleClientIdInput("");
+                            setGoogleMsg("Client ID saved.");
+                          } catch (err) {
+                            setError(String(err));
+                          }
+                        })();
+                      }}
+                      className="ps-btn-primary px-3 py-2"
+                    >
+                      Save ID
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      placeholder="Client secret (optional)"
+                      value={googleSecretInput}
+                      onChange={(e) => setGoogleSecretInput(e.target.value)}
+                      className="ps-input min-w-0 flex-1 px-3 py-2 font-mono text-xs"
+                    />
+                    <button
+                      type="button"
+                      disabled={!googleSecretInput.trim()}
+                      onClick={() => {
+                        void (async () => {
+                          try {
+                            setError(null);
+                            await invoke("settings_save_api_key", {
+                              provider: "google_client_secret",
+                              apiKey: googleSecretInput,
+                            });
+                            setGoogleSecretInput("");
+                            setGoogleMsg("Client secret saved (encrypted).");
+                            await refreshSettings();
+                          } catch (err) {
+                            setError(String(err));
+                          }
+                        })();
+                      }}
+                      className="ps-btn-primary px-3 py-2"
+                    >
+                      Save secret
+                    </button>
+                  </div>
+                  {settings?.googleClientId ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        flushDebounce();
+                        void (async () => {
+                          try {
+                            setError(null);
+                            const next = await applySettingsPatch({ googleClientId: "" });
+                            setSettings(next);
+                            setGoogleMsg("Reverted to the built-in app client.");
+                          } catch (err) {
+                            setError(String(err));
+                          }
+                        })();
+                      }}
+                      className="ps-btn px-3 py-2"
+                    >
+                      Clear override — use built-in app
+                    </button>
+                  ) : null}
+                </div>
+              </details>
             </div>
 
             <SettingsToggleCard

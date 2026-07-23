@@ -28,18 +28,27 @@ export function GoogleConnectCard({ status, onStatusChange, compact = false }: P
     }
   };
 
-  const missingSetup = !status?.enabled || !status?.hasClientId;
+  const notEnabled = !status?.enabled;
+  const missingClient = !!status?.enabled && !status?.hasClientId;
+  const missingSetup = notEnabled || missingClient;
 
   return (
     <div className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${compact ? "py-4" : "py-10"}`}>
       <p className="text-sm text-ps-muted">
-        {missingSetup ? (
+        {notEnabled ? (
           <>
-            Google Workspace is not set up yet. Enable it and add your OAuth
-            Client ID under <strong className="text-ps-ink">Settings → Tools → Google Workspace</strong>.
+            Google Workspace is turned off. Enable it under{" "}
+            <strong className="text-ps-ink">Settings → Tools → Google Workspace</strong>, then sign
+            in here.
+          </>
+        ) : missingClient ? (
+          <>
+            This build has no built-in Google app credentials. Add your own OAuth Client ID under{" "}
+            <strong className="text-ps-ink">Settings → Tools → Google Workspace</strong> (Desktop
+            app client from Google Cloud Console).
           </>
         ) : (
-          <>Connect your Google account to use Gmail, Calendar, and Drive here and from companion chat.</>
+          <>Sign in with Google to use Gmail, Calendar, and Drive here and from companion chat.</>
         )}
       </p>
       {!missingSetup ? (
@@ -49,7 +58,7 @@ export function GoogleConnectCard({ status, onStatusChange, compact = false }: P
           ) : (
             <LogIn className="size-4" aria-hidden />
           )}
-          {busy ? "Waiting for browser sign-in…" : "Connect Google account"}
+          {busy ? "Waiting for browser sign-in…" : "Sign in with Google"}
         </button>
       ) : null}
       {error ? <p className="max-w-sm text-xs text-ps-danger">{error}</p> : null}

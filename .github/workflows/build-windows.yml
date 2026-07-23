@@ -54,6 +54,12 @@ jobs:
           # content in GitHub Secrets after running `npm run tauri signer generate`.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Built-in Google OAuth client for one-click "Sign in with Google"
+          # (Productivity mode). Create a Desktop-app OAuth client in Google Cloud
+          # Console and store both values as GitHub Secrets. Optional — without
+          # them, users must supply their own client under Settings → Tools.
+          PS_GOOGLE_CLIENT_ID: ${{ secrets.PS_GOOGLE_CLIENT_ID }}
+          PS_GOOGLE_CLIENT_SECRET: ${{ secrets.PS_GOOGLE_CLIENT_SECRET }}
 
       - name: Package portable folder
         run: npm run package:portable

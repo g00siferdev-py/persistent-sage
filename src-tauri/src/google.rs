@@ -37,6 +37,35 @@ fn tool_err(msg: impl Into<String>) -> ProviderError {
     ProviderError::Api(msg.into())
 }
 
+/// Built-in app OAuth client, baked in at compile time for official builds:
+/// `PS_GOOGLE_CLIENT_ID` / `PS_GOOGLE_CLIENT_SECRET` env vars during `cargo build`.
+/// Users never need Google Cloud Console when these are present; a client ID
+/// saved in Settings always overrides the built-in one (for self-builds/testing).
+const BUILTIN_CLIENT_ID: Option<&str> = option_env!("PS_GOOGLE_CLIENT_ID");
+const BUILTIN_CLIENT_SECRET: Option<&str> = option_env!("PS_GOOGLE_CLIENT_SECRET");
+
+/// Effective OAuth client id: user override from Settings, else built-in.
+fn effective_client_id(settings: &SettingsManager) -> String {
+    let user = settings.google_client_id();
+    if !user.trim().is_empty() {
+        return user.trim().to_string();
+    }
+    BUILTIN_CLIENT_ID.unwrap_or("").trim().to_string()
+}
+
+/// Effective OAuth client secret: user secret when a user client id is in use,
+/// else the built-in secret paired with the built-in client id.
+fn effective_client_secret(settings: &SettingsManager) -> Result<String, ProviderError> {
+    let user_id = settings.google_client_id();
+    if !user_id.trim().is_empty() {
+        return Ok(settings
+            .decrypt_api_key("google_client_secret")
+            .map_err(|e| tool_err(e.to_string()))?
+            .unwrap_or_default());
+    }
+    Ok(BUILTIN_CLIENT_SECRET.unwrap_or("").trim().to_string())
+}
+
 // --- Token storage -------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,6 +144,10 @@ pub struct GoogleStatus {
     pub account_email: String,
     pub has_client_id: bool,
     pub has_client_secret: bool,
+    /// True when this build ships an app-level OAuth client (one-click sign-in).
+    pub has_builtin_client: bool,
+    /// True when the built-in client is what sign-in will use (no user override).
+    pub using_builtin_client: bool,
     pub gmail_enabled: bool,
     pub calendar_enabled: bool,
     pub drive_enabled: bool,
@@ -124,12 +157,16 @@ pub struct GoogleStatus {
 
 fn status_from_settings(settings: &SettingsManager) -> Result<GoogleStatus, String> {
     let view = settings.view().map_err(|e| e.to_string())?;
+    let has_builtin = BUILTIN_CLIENT_ID.map(|s| !s.trim().is_empty()).unwrap_or(false);
+    let user_id_set = !view.google_client_id.trim().is_empty();
     Ok(GoogleStatus {
         enabled: view.google_enabled,
         connected: view.google_connected,
         account_email: view.google_account_email,
-        has_client_id: !view.google_client_id.trim().is_empty(),
+        has_client_id: user_id_set || has_builtin,
         has_client_secret: view.has_google_client_secret,
+        has_builtin_client: has_builtin,
+        using_builtin_client: has_builtin && !user_id_set,
         gmail_enabled: view.google_gmail_enabled,
         calendar_enabled: view.google_calendar_enabled,
         drive_enabled: view.google_drive_enabled,
@@ -266,18 +303,16 @@ pub async fn auth_start(
     http: &reqwest::Client,
     settings: &Arc<SettingsManager>,
 ) -> Result<GoogleStatus, String> {
-    let client_id = settings.google_client_id();
-    if client_id.trim().is_empty() {
+    let client_id = effective_client_id(settings);
+    if client_id.is_empty() {
         return Err(
-            "Add your Google OAuth Client ID first (Settings → Tools → Google Workspace). \
-             Create a Desktop app client at console.cloud.google.com → APIs & Services → Credentials."
+            "This build has no built-in Google app credentials. Either use an official release, \
+             or add your own OAuth Client ID (Settings → Tools → Google Workspace) from a Desktop \
+             app client at console.cloud.google.com → APIs & Services → Credentials."
                 .into(),
         );
     }
-    let client_secret = settings
-        .decrypt_api_key("google_client_secret")
-        .map_err(|e| e.to_string())?
-        .unwrap_or_default();
+    let client_secret = effective_client_secret(settings).map_err(|e| e.to_string())?;
 
     let listener =
         TcpListener::bind("127.0.0.1:0").map_err(|e| format!("bind loopback: {e}"))?;
@@ -391,11 +426,8 @@ async fn access_token(
             "Google session expired and no refresh token is stored — reconnect the account.",
         ));
     };
-    let client_id = settings.google_client_id();
-    let client_secret = settings
-        .decrypt_api_key("google_client_secret")
-        .map_err(|e| tool_err(e.to_string()))?
-        .unwrap_or_default();
+    let client_id = effective_client_id(settings);
+    let client_secret = effective_client_secret(settings)?;
     let mut params: Vec<(&str, &str)> = vec![
         ("client_id", client_id.as_str()),
         ("refresh_token", refresh.as_str()),

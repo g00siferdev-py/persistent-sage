@@ -6,6 +6,10 @@ export type GoogleStatus = {
   accountEmail: string;
   hasClientId: boolean;
   hasClientSecret: boolean;
+  /** This build ships an app-level OAuth client — users sign in with one click. */
+  hasBuiltinClient: boolean;
+  /** The built-in client is active (no user override saved in Settings). */
+  usingBuiltinClient: boolean;
   gmailEnabled: boolean;
   calendarEnabled: boolean;
   driveEnabled: boolean;
