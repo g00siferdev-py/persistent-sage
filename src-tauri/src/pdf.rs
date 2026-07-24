@@ -370,19 +370,19 @@ fn sanitize_html_for_pdf(html: &str) -> String {
     builder.attribute_filter(|element, attribute, value| match (element, attribute) {
         ("img", "src") => {
             if is_safe_pdf_img_src(value) {
-                Some(value.to_string())
+                Some(std::borrow::Cow::Borrowed(value))
             } else {
                 None
             }
         }
         ("a", "href") => {
             if is_safe_pdf_anchor_href(value) {
-                Some(value.to_string())
+                Some(std::borrow::Cow::Borrowed(value))
             } else {
                 None
             }
         }
-        _ => Some(value.to_string()),
+        _ => Some(std::borrow::Cow::Borrowed(value)),
     });
     builder.clean(html).to_string()
 }

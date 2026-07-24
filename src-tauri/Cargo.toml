@@ -44,6 +44,8 @@ nokhwa = { version = "0.10", features = ["input-native"] }
 pdf-extract = "0.12.0"
 pulldown-cmark = "0.13.4"
 ammonia = "4"
+# Required by app_instance.rs process liveness checks on Unix (`libc::kill`).
+libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38.2"
