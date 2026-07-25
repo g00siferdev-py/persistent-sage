@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test": "node --experimental-strip-types --test src/lib/externalNavigation.test.ts",
     "preview": "vite preview",
     "tauri": "tauri",
     "branding:nsis": "node scripts/generate-nsis-branding.mjs",

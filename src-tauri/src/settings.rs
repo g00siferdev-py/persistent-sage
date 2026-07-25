@@ -220,22 +220,33 @@ fn default_moltbook_base_url() -> String {
 }
 
 /// skill.md: always use `www` — bare `moltbook.com` redirects and strips Authorization.
+///
+/// Only the official Moltbook API host is accepted. Arbitrary base URLs would send the
+/// encrypted `moltbook` API key as a Bearer token to a third party (skill.md forbids this).
 pub fn normalize_moltbook_base_url(raw: &str) -> String {
-    let t = raw.trim().trim_end_matches('/').to_string();
+    let t = raw.trim().trim_end_matches('/');
     if t.is_empty() {
         return default_moltbook_base_url();
     }
-    let lowered = t.to_ascii_lowercase();
-    let normalized = if let Some(rest) = lowered.strip_prefix("https://moltbook.com") {
-        format!("https://www.moltbook.com{rest}")
-    } else if let Some(rest) = lowered.strip_prefix("http://moltbook.com") {
-        format!("https://www.moltbook.com{rest}")
-    } else if let Some(rest) = lowered.strip_prefix("http://www.moltbook.com") {
-        format!("https://www.moltbook.com{rest}")
-    } else {
-        t
+    let Ok(parsed) = url::Url::parse(t) else {
+        return default_moltbook_base_url();
     };
-    normalized.trim_end_matches('/').to_string()
+    if parsed.scheme() != "https" {
+        return default_moltbook_base_url();
+    }
+    let Some(host) = parsed.host_str() else {
+        return default_moltbook_base_url();
+    };
+    let host = host.to_ascii_lowercase();
+    if host != "www.moltbook.com" && host != "moltbook.com" {
+        return default_moltbook_base_url();
+    }
+    // Force www + https; preserve a path if the user pasted a full API root.
+    let mut path = parsed.path().trim_end_matches('/').to_string();
+    if path.is_empty() || path == "/" {
+        path = "/api/v1".into();
+    }
+    format!("https://www.moltbook.com{path}")
 }
 
 fn default_moltbook_submolt() -> String {
@@ -1653,7 +1664,7 @@ fn normalize_key_slot(provider: &str) -> Result<String, SettingsError> {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_key_slot;
+    use super::{default_moltbook_base_url, normalize_key_slot, normalize_moltbook_base_url};
 
     #[test]
     fn normalizes_api_key_slots_by_provider() {
@@ -1674,6 +1685,31 @@ mod tests {
         for (provider, slot) in cases {
             assert_eq!(normalize_key_slot(provider).unwrap(), slot);
         }
+    }
+
+    #[test]
+    fn moltbook_base_url_pins_to_official_https_www_host() {
+        assert_eq!(
+            normalize_moltbook_base_url("https://moltbook.com/api/v1"),
+            default_moltbook_base_url()
+        );
+        assert_eq!(
+            normalize_moltbook_base_url("http://www.moltbook.com/api/v1"),
+            default_moltbook_base_url()
+        );
+        assert_eq!(
+            normalize_moltbook_base_url("https://www.moltbook.com/api/v1/"),
+            default_moltbook_base_url()
+        );
+        // Third-party hosts must not receive the Bearer API key.
+        assert_eq!(
+            normalize_moltbook_base_url("https://evil.example/api/v1"),
+            default_moltbook_base_url()
+        );
+        assert_eq!(
+            normalize_moltbook_base_url("https://www.moltbook.com.evil.example/api/v1"),
+            default_moltbook_base_url()
+        );
     }
 }
 

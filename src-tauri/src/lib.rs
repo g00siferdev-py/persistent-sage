@@ -450,6 +450,31 @@ fn open_external_url(url: String) -> Result<(), String> {
     opener::open(parsed.as_str()).map_err(|e| format!("open URL: {e}"))
 }
 
+/// Validate a user-clicked http(s) URL before handing it to the OS browser.
+///
+/// Used when Markdown/preview anchors would otherwise navigate the main webview
+/// and unload the SPA (losing unsaved drafts). Rejects credentials and non-http(s).
+fn parse_browser_url(url: &str) -> Result<url::Url, String> {
+    let parsed = url::Url::parse(url.trim()).map_err(|e| format!("invalid URL: {e}"))?;
+    if parsed.scheme() != "https" && parsed.scheme() != "http" {
+        return Err("only http(s) URLs can be opened in the system browser".into());
+    }
+    if parsed.host_str().is_none() {
+        return Err("URL has no host".into());
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("URLs with embedded credentials are not allowed".into());
+    }
+    Ok(parsed)
+}
+
+/// Open a user-clicked http(s) URL in the system default browser (any host).
+#[tauri::command]
+fn open_browser_url(url: String) -> Result<(), String> {
+    let parsed = parse_browser_url(&url)?;
+    opener::open(parsed.as_str()).map_err(|e| format!("open URL: {e}"))
+}
+
 #[tauri::command]
 async fn provider_info(state: State<'_, NovaState>) -> Result<String, String> {
     let engine = state.llm.read().await.clone();
@@ -1124,6 +1149,7 @@ pub fn run() {
             reveal_data_directory,
             open_feedback_issue,
             open_external_url,
+            open_browser_url,
             open_share_url,
             moltbook::moltbook_status,
             moltbook::moltbook_register_agent,
@@ -1215,3 +1241,22 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running Persistent Sage (Tauri application)");
 }
+
+#[cfg(test)]
+mod browser_url_tests {
+    use super::parse_browser_url;
+
+    #[test]
+    fn accepts_http_and_https_without_credentials() {
+        assert!(parse_browser_url("https://example.com/path").is_ok());
+        assert!(parse_browser_url("http://example.com").is_ok());
+    }
+
+    #[test]
+    fn rejects_non_http_schemes_and_embedded_credentials() {
+        assert!(parse_browser_url("javascript:alert(1)").is_err());
+        assert!(parse_browser_url("file:///etc/passwd").is_err());
+        assert!(parse_browser_url("https://user:pass@example.com/secret").is_err());
+    }
+}
+
