@@ -252,12 +252,32 @@ async fn write_pdf(
     if let Some(parent) = out_path.parent() {
         assert_path_in_workspace(workspace_root, parent)?;
         std::fs::create_dir_all(parent).map_err(|e| tool_err(format!("create_dir_all: {e}")))?;
+        // Re-check after create_dir_all so a swapped symlink parent cannot escape the jail.
+        assert_path_in_workspace(workspace_root, parent)?;
     }
     assert_path_in_workspace(workspace_root, &out_path)?;
 
+    // Refuse to overwrite through an existing symlink that leaves the workspace between
+    // the check above and Chromium's open (defense in depth for TOCTOU).
+    if out_path.exists() {
+        let meta =
+            std::fs::symlink_metadata(&out_path).map_err(|e| tool_err(format!("stat output: {e}")))?;
+        if meta.file_type().is_symlink() {
+            return Err(tool_err(
+                "workspace_write_pdf refuses to write through a symlink; remove the symlink or choose another path",
+            ));
+        }
+    }
+
     render_html_to_pdf(data_directory, &html_doc, &out_path).await?;
 
-    let size = std::fs::metadata(&out_path).map(|m| m.len()).unwrap_or(0);
+    // Confirm Chromium did not follow a raced symlink outside the workspace.
+    assert_path_in_workspace(workspace_root, &out_path)?;
+    let meta = std::fs::metadata(&out_path).map_err(|e| tool_err(format!("stat PDF: {e}")))?;
+    if !meta.is_file() {
+        return Err(tool_err("PDF output path is not a regular file after rendering"));
+    }
+    let size = meta.len();
     if size == 0 {
         return Err(tool_err(
             "PDF rendering produced an empty file (the browser may have failed to render the content)",
@@ -377,11 +397,14 @@ async fn render_html_to_pdf(
     let render_dir = data_directory.join("pdf_render");
     std::fs::create_dir_all(&render_dir)
         .map_err(|e| tool_err(format!("could not create PDF render dir: {e}")))?;
-    let profile_dir = render_dir.join("profile");
+
+    // Unique profile per render so concurrent PDF jobs cannot share Chromium's
+    // SingletonLock / corrupt a shared user-data-dir.
+    let stamp = uuid::Uuid::new_v4();
+    let profile_dir = render_dir.join(format!("profile-{stamp}"));
     std::fs::create_dir_all(&profile_dir)
         .map_err(|e| tool_err(format!("could not create PDF render profile: {e}")))?;
 
-    let stamp = uuid::Uuid::new_v4();
     let html_path = render_dir.join(format!("render-{stamp}.html"));
     std::fs::write(&html_path, html_doc)
         .map_err(|e| tool_err(format!("could not write temp HTML for PDF: {e}")))?;
@@ -414,8 +437,9 @@ async fn render_html_to_pdf(
         .map_err(|_| tool_err("PDF rendering timed out"))
         .and_then(|r| r.map_err(|e| tool_err(format!("failed to start browser for PDF: {e}"))));
 
-    // Best-effort cleanup of the temp HTML regardless of outcome.
+    // Best-effort cleanup of temp HTML + ephemeral profile regardless of outcome.
     let _ = std::fs::remove_file(&html_path);
+    let _ = std::fs::remove_dir_all(&profile_dir);
 
     let output = output?;
     if !output.status.success() {

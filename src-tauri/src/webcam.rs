@@ -2,6 +2,7 @@
 //! Bypasses WebView2 `getUserMedia`, which often cannot access the camera in Tauri desktop apps.
 
 use std::sync::mpsc::{self, SyncSender};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread::{self, JoinHandle};
 
 use base64::Engine;
@@ -278,7 +279,49 @@ fn try_open_camera(
     None
 }
 
+/// macOS AVFoundation requires an explicit permission prompt before any camera API use.
+#[cfg(target_os = "macos")]
+fn ensure_macos_camera_permission() -> Result<(), String> {
+    static RESULT: OnceLock<Result<(), String>> = OnceLock::new();
+    RESULT
+        .get_or_init(|| {
+            let pair = Arc::new((Mutex::new(None::<bool>), Condvar::new()));
+            let pair_cb = Arc::clone(&pair);
+            nokhwa::nokhwa_initialize(move |granted| {
+                let (lock, cvar) = &*pair_cb;
+                if let Ok(mut slot) = lock.lock() {
+                    *slot = Some(granted);
+                    cvar.notify_one();
+                }
+            });
+            let (lock, cvar) = &*pair;
+            let Ok(mut slot) = lock.lock() else {
+                return Err("Camera permission wait failed (lock poisoned).".into());
+            };
+            while slot.is_none() {
+                slot = cvar
+                    .wait(slot)
+                    .map_err(|_| "Camera permission wait failed (lock poisoned).".to_string())?;
+            }
+            if slot.unwrap_or(false) {
+                Ok(())
+            } else {
+                Err(
+                    "Camera permission was denied. Enable Persistent Sage in System Settings → Privacy & Security → Camera."
+                        .into(),
+                )
+            }
+        })
+        .clone()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn ensure_macos_camera_permission() -> Result<(), String> {
+    Ok(())
+}
+
 fn open_first_working_camera() -> Result<Camera, String> {
+    ensure_macos_camera_permission()?;
     let formats = preview_formats();
 
     for backend in backends_to_try() {
@@ -320,22 +363,25 @@ fn open_first_working_camera() -> Result<Camera, String> {
     Err(camera_hint())
 }
 
-#[tauri::command]
+// `async` keeps these off Tauri's main/UI thread. Each call still waits on the webcam
+// worker for a frame, and `camera.frame()` can block — running that wait on the main
+// thread froze the whole app during normal preview (and hard-deadlocked if frames stop).
+#[tauri::command(async)]
 pub fn webcam_start(service: tauri::State<'_, WebcamService>) -> Result<(), String> {
     service.start()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn webcam_preview(service: tauri::State<'_, WebcamService>) -> Result<WebcamImageResponse, String> {
     service.preview()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn webcam_capture(service: tauri::State<'_, WebcamService>) -> Result<WebcamImageResponse, String> {
     service.capture()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn webcam_stop(service: tauri::State<'_, WebcamService>) -> Result<(), String> {
     service.stop()
 }
