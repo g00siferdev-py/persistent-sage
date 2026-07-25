@@ -9,14 +9,26 @@ type WebcamImageResponse = {
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), ms);
+    let settled = false;
+    const timer = setTimeout(() => {
+      settled = true;
+      // Stop even while start is in-flight so a late open cannot orphan the camera.
+      void stopNativeWebcam();
+      reject(new Error(message));
+    }, ms);
     promise
       .then((value) => {
         clearTimeout(timer);
+        if (settled) {
+          // Timed out in the UI, but native start still succeeded — release the camera.
+          void stopNativeWebcam();
+          return;
+        }
         resolve(value);
       })
       .catch((err) => {
         clearTimeout(timer);
+        if (settled) return;
         reject(err instanceof Error ? err : new Error(String(err)));
       });
   });

@@ -1,15 +1,29 @@
 const CAMERA_TIMEOUT_MS = 20_000;
 
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+  onLateSuccess?: (value: T) => void,
+): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), ms);
+    let settled = false;
+    const timer = setTimeout(() => {
+      settled = true;
+      reject(new Error(message));
+    }, ms);
     promise
       .then((value) => {
         clearTimeout(timer);
+        if (settled) {
+          onLateSuccess?.(value);
+          return;
+        }
         resolve(value);
       })
       .catch((err) => {
         clearTimeout(timer);
+        if (settled) return;
         reject(err instanceof Error ? err : new Error(String(err)));
       });
   });
@@ -33,6 +47,7 @@ export async function requestWebcamStream(): Promise<MediaStream> {
         navigator.mediaDevices.getUserMedia(constraints),
         CAMERA_TIMEOUT_MS,
         "Camera access timed out. In Windows, enable Settings → Privacy → Camera → “Let desktop apps access your camera”. Persistent Sage may not appear in the per-app list — that master toggle covers desktop apps. Close other apps using the webcam and try again.",
+        (stream) => stopMediaStream(stream),
       );
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e));

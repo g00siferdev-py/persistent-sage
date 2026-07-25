@@ -13,6 +13,7 @@ commands.allow = [
   "reveal_data_directory",
   "open_feedback_issue",
   "open_external_url",
+  "open_browser_url",
   "open_share_url",
   "moltbook_status",
   "moltbook_register_agent",
