@@ -5,7 +5,7 @@
 //! URLs are restricted to reduce SSRF; workspace paths are jailed to `{data_dir}/workspace`.
 
 use std::collections::BTreeMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
@@ -438,9 +438,52 @@ pub(crate) fn tool_err(msg: impl Into<String>) -> ProviderError {
     ProviderError::Api(msg.into())
 }
 
-fn blocked_host(host: &str) -> bool {
+fn blocked_ipv4(v4: Ipv4Addr) -> bool {
+    v4.is_private()
+        || v4.is_loopback()
+        || v4.is_link_local()
+        || v4.is_broadcast()
+        || v4.is_unspecified()
+        || v4.is_multicast()
+        // Carrier-grade NAT (RFC 6598)
+        || (v4.octets()[0] == 100 && (v4.octets()[1] & 0b1100_0000) == 0b0100_0000)
+        // Documentation / TEST-NET (RFC 5737)
+        || (v4.octets()[0] == 192 && v4.octets()[1] == 0 && v4.octets()[2] == 2)
+        || (v4.octets()[0] == 198 && v4.octets()[1] == 51 && v4.octets()[2] == 100)
+        || (v4.octets()[0] == 203 && v4.octets()[1] == 0 && v4.octets()[2] == 113)
+        // Benchmarking (RFC 2544)
+        || (v4.octets()[0] == 198 && (v4.octets()[1] & 0xfe) == 18)
+}
+
+fn blocked_ipv6(v6: Ipv6Addr) -> bool {
+    if let Some(v4) = v6.to_ipv4_mapped() {
+        return blocked_ipv4(v4);
+    }
+    v6.is_loopback()
+        || v6.is_unique_local()
+        || v6.is_unspecified()
+        || v6.is_multicast()
+        // Link-local fe80::/10
+        || (v6.segments()[0] & 0xffc0) == 0xfe80
+        // Discard-only 100::/64 (RFC 6666)
+        || (v6.segments()[0] == 0x0100
+            && v6.segments()[1] == 0
+            && v6.segments()[2] == 0
+            && v6.segments()[3] == 0)
+        // Documentation 2001:db8::/32
+        || (v6.segments()[0] == 0x2001 && v6.segments()[1] == 0x0db8)
+}
+
+fn blocked_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => blocked_ipv4(v4),
+        IpAddr::V6(v6) => blocked_ipv6(v6),
+    }
+}
+
+fn blocked_host_name(host: &str) -> bool {
     let h = host.trim().trim_end_matches('.').to_lowercase();
-    if h == "localhost"
+    h == "localhost"
         || h.ends_with(".localhost")
         || h.ends_with(".local")
         || h == "0.0.0.0"
@@ -448,21 +491,70 @@ fn blocked_host(host: &str) -> bool {
         || h == "::1"
         || h == "metadata.google.internal"
         || h == "169.254.169.254"
-    {
+        || h == "localhost.localdomain"
+        || h.ends_with(".localdomain")
+}
+
+fn blocked_host(host: &str) -> bool {
+    if blocked_host_name(host) {
         return true;
     }
-    if let Ok(ip) = h.parse::<IpAddr>() {
-        return match ip {
-            IpAddr::V4(v4) => {
-                v4.is_private() || v4.is_loopback() || v4.is_link_local() || v4.is_broadcast()
-            }
-            IpAddr::V6(v6) => v6.is_loopback() || v6.is_unique_local(),
-        };
+    if let Ok(ip) = host.trim().trim_end_matches('.').parse::<IpAddr>() {
+        return blocked_ip(ip);
     }
     false
 }
 
-/// Only `http:` / `https:` to public-looking hosts (best-effort SSRF guard).
+/// Resolve `host` and reject when any address is loopback/private/link-local/etc.
+/// Catches names like `127.0.0.1.nip.io` that pass string-only host checks.
+fn host_resolves_to_blocked_address(host: &str, port: u16) -> Result<bool, ProviderError> {
+    let host = host.trim().trim_end_matches('.');
+    if host.is_empty() {
+        return Err(tool_err("URL must include a host"));
+    }
+    // Literal IPs are already classified by [`blocked_host`]; skip a redundant lookup.
+    if host.parse::<IpAddr>().is_ok() {
+        return Ok(false);
+    }
+    let addrs = (host, port)
+        .to_socket_addrs()
+        .map_err(|e| tool_err(format!("DNS lookup failed for host `{host}`: {e}")))?;
+    let mut saw_any = false;
+    for addr in addrs {
+        saw_any = true;
+        if blocked_ip(addr.ip()) {
+            return Ok(true);
+        }
+    }
+    if !saw_any {
+        return Err(tool_err(format!(
+            "DNS lookup for host `{host}` returned no addresses"
+        )));
+    }
+    Ok(false)
+}
+
+fn assert_url_host_allowed(u: &Url) -> Result<(), ProviderError> {
+    let host = u
+        .host_str()
+        .ok_or_else(|| tool_err("URL must include a host"))?;
+    if blocked_host(host) {
+        return Err(tool_err(
+            "URL host is not allowed (private or local addresses blocked)",
+        ));
+    }
+    let port = u
+        .port_or_known_default()
+        .ok_or_else(|| tool_err("URL must include a port or use http/https"))?;
+    if host_resolves_to_blocked_address(host, port)? {
+        return Err(tool_err(
+            "URL host resolves to a private or local address (SSRF guard)",
+        ));
+    }
+    Ok(())
+}
+
+/// Only `http:` / `https:` to public hosts (SSRF guard; resolves DNS).
 pub fn validate_fetch_url(raw: &str) -> Result<Url, ProviderError> {
     let raw = raw.trim();
     if raw.len() > 2048 {
@@ -476,14 +568,7 @@ pub fn validate_fetch_url(raw: &str) -> Result<Url, ProviderError> {
     if u.username() != "" || u.password().is_some() {
         return Err(tool_err("URLs with embedded credentials are not allowed"));
     }
-    let host = u
-        .host_str()
-        .ok_or_else(|| tool_err("URL must include a host"))?;
-    if blocked_host(host) {
-        return Err(tool_err(
-            "URL host is not allowed (private or local addresses blocked)",
-        ));
-    }
+    assert_url_host_allowed(&u)?;
     Ok(u)
 }
 
@@ -512,14 +597,7 @@ fn validate_agent_https_url(raw: &str) -> Result<Url, ProviderError> {
             "URLs with embedded credentials are not allowed; put tokens in headers instead",
         ));
     }
-    let host = u
-        .host_str()
-        .ok_or_else(|| tool_err("URL must include a host"))?;
-    if blocked_host(host) {
-        return Err(tool_err(
-            "URL host is not allowed (private or local addresses blocked)",
-        ));
-    }
+    assert_url_host_allowed(&u)?;
     Ok(u)
 }
 
@@ -1476,5 +1554,50 @@ mod tests {
         assert_eq!(lines.len(), 1);
         assert!(lines[0].contains("Example headline"), "{lines:?}");
         assert!(lines[0].contains("https://example.com/page"), "{lines:?}");
+    }
+
+    #[test]
+    fn validate_fetch_url_rejects_loopback_ip_literal() {
+        let err = validate_fetch_url("http://127.0.0.1:9/secret").unwrap_err();
+        assert!(
+            err.to_string().to_lowercase().contains("private")
+                || err.to_string().to_lowercase().contains("local"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn validate_fetch_url_rejects_dns_name_resolving_to_loopback() {
+        // nip.io publishes A records that point at the embedded IPv4; this must not
+        // bypass the SSRF guard just because the hostname string looks public.
+        let err = validate_fetch_url("http://127.0.0.1.nip.io:9/secret").unwrap_err();
+        let msg = err.to_string().to_lowercase();
+        assert!(
+            msg.contains("private") || msg.contains("local") || msg.contains("ssrf"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn validate_fetch_url_rejects_localhost_localdomain() {
+        let err = validate_fetch_url("http://localhost.localdomain:9/").unwrap_err();
+        let msg = err.to_string().to_lowercase();
+        assert!(
+            msg.contains("private") || msg.contains("local") || msg.contains("ssrf"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn validate_fetch_url_allows_public_example_host() {
+        let u = validate_fetch_url("https://example.com/path").expect("example.com should pass");
+        assert_eq!(u.host_str(), Some("example.com"));
+    }
+
+    #[test]
+    fn blocked_ip_classifies_cgnat_and_mapped_loopback() {
+        assert!(blocked_ipv4(Ipv4Addr::new(100, 64, 0, 1)));
+        assert!(blocked_ipv6("::ffff:127.0.0.1".parse().unwrap()));
+        assert!(!blocked_ipv4(Ipv4Addr::new(1, 1, 1, 1)));
     }
 }

@@ -33,6 +33,8 @@ use crate::provider::ProviderError;
 pub const BROWSER_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
 const BROWSER_FETCH_TIMEOUT_SECS: u64 = 120;
+const BROWSER_REDIRECT_PROBE_TIMEOUT_SECS: u64 = 15;
+const BROWSER_REDIRECT_MAX_HOPS: usize = 10;
 const HOST_MIN_INTERVAL_SECS: u64 = 2;
 const ROBOTS_FETCH_TIMEOUT_SECS: u64 = 12;
 const MAX_HEADINGS: usize = 80;
@@ -831,6 +833,51 @@ fn extract_semantic_content(html: &str, base_url: &Url) -> BrowserFetchResult {
     }
 }
 
+/// Follow HTTP redirects with the SSRF URL gate on every hop, then return the final
+/// non-redirect URL for Chromium. Headless Chrome otherwise follows 302s to loopback
+/// after the initial host check and can dump private local pages into the agent.
+async fn resolve_browser_navigation_url(start: Url) -> Result<Url, ProviderError> {
+    let probe = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent(BROWSER_USER_AGENT)
+        .timeout(Duration::from_secs(BROWSER_REDIRECT_PROBE_TIMEOUT_SECS))
+        .build()
+        .map_err(|e| tool_err(format!("browser redirect probe client: {e}")))?;
+
+    let mut current = start;
+    for _ in 0..BROWSER_REDIRECT_MAX_HOPS {
+        // Re-run full validation (scheme/credentials/DNS) on every hop.
+        current = validate_fetch_url(current.as_str())?;
+
+        let res = probe
+            .get(current.as_str())
+            .send()
+            .await
+            .map_err(|e| tool_err(format!("browser redirect probe failed: {e}")))?;
+
+        if !res.status().is_redirection() {
+            return Ok(current);
+        }
+
+        let loc = res
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .ok_or_else(|| tool_err("redirect response missing Location header"))?
+            .to_str()
+            .map_err(|_| tool_err("redirect Location header is not valid ASCII"))?;
+        if loc.trim().is_empty() {
+            return Err(tool_err("redirect Location header is empty"));
+        }
+        current = current
+            .join(loc)
+            .map_err(|e| tool_err(format!("invalid redirect Location `{loc}`: {e}")))?;
+    }
+
+    Err(tool_err(format!(
+        "too many redirects while probing browser URL (max {BROWSER_REDIRECT_MAX_HOPS})"
+    )))
+}
+
 pub async fn fetch_browser_page(
     http: &reqwest::Client,
     data_directory: &Path,
@@ -847,6 +894,8 @@ pub async fn fetch_browser_page(
         return Err(tool_err("fetch_browser: url is empty"));
     }
     let page_url = validate_fetch_url(raw_url)?;
+    // Validate the full redirect chain before launching unrestricted Chromium.
+    let page_url = resolve_browser_navigation_url(page_url).await?;
     let host = page_url
         .host_str()
         .ok_or_else(|| tool_err("URL must include a host"))?
@@ -964,5 +1013,30 @@ mod tests {
         assert!(!r.paragraphs.is_empty());
         assert!(r.links.iter().any(|l| l.href.contains("example.com")));
         assert!(r.images.iter().any(|i| i.src.contains("img.png")));
+    }
+
+    #[test]
+    fn redirect_location_to_loopback_is_rejected_by_url_gate() {
+        // Mimic one hop of resolve_browser_navigation_url: join Location, re-validate.
+        let base = Url::parse("https://example.com/start").unwrap();
+        let next = base.join("http://127.0.0.1:9/secret").unwrap();
+        let err = validate_fetch_url(next.as_str()).unwrap_err();
+        let msg = err.to_string().to_lowercase();
+        assert!(
+            msg.contains("private") || msg.contains("local") || msg.contains("ssrf"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn redirect_location_to_nip_io_loopback_is_rejected_by_url_gate() {
+        let base = Url::parse("https://example.com/start").unwrap();
+        let next = base.join("http://127.0.0.1.nip.io:9/secret").unwrap();
+        let err = validate_fetch_url(next.as_str()).unwrap_err();
+        let msg = err.to_string().to_lowercase();
+        assert!(
+            msg.contains("private") || msg.contains("local") || msg.contains("ssrf"),
+            "{err}"
+        );
     }
 }
