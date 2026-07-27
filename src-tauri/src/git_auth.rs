@@ -140,7 +140,7 @@ pub fn validate_https_git_url(url: &str) -> Result<(), ProviderError> {
             "SSH git URLs are not supported. Use HTTPS (https://github.com/owner/repo.git).",
         ));
     }
-    if !(u.starts_with("https://") || u.starts_with("http://")) {
+    if !u.starts_with("https://") {
         return Err(tool_err("git URL must start with https://"));
     }
     Ok(())
@@ -156,4 +156,16 @@ pub fn reject_force_git_args(args: &[&str]) -> Result<(), ProviderError> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_https_git_url_rejects_plain_http() {
+        assert!(validate_https_git_url("https://github.com/owner/repo.git").is_ok());
+        assert!(validate_https_git_url("http://github.com/owner/repo.git").is_err());
+        assert!(validate_https_git_url("git@github.com:owner/repo.git").is_err());
+    }
 }

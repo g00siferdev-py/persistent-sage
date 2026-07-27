@@ -376,7 +376,78 @@ fn validate_command(command: &str) -> Result<(), ProviderError> {
             ALLOWED_COMMAND_BASES.join(", ")
         )));
     }
+    validate_git_shell_command(&base, &normalized)?;
     Ok(())
+}
+
+fn validate_git_shell_command(base: &str, command: &str) -> Result<(), ProviderError> {
+    if base != "git" {
+        return Ok(());
+    }
+
+    let tokens: Vec<String> = command
+        .split_whitespace()
+        .map(|s| s.trim_matches(['"', '\'']).to_ascii_lowercase())
+        .collect();
+
+    if tokens.iter().any(|t| t == "push") {
+        let refs: Vec<&str> = tokens.iter().map(String::as_str).collect();
+        crate::git_auth::reject_force_git_args(&refs)?;
+        if tokens
+            .iter()
+            .skip_while(|t| t.as_str() != "push")
+            .skip(1)
+            .any(|t| t.starts_with('+'))
+        {
+            return Err(tool_err(
+                "force push is blocked. Remove leading `+` force refspecs from the request.",
+            ));
+        }
+    }
+
+    if tokens.iter().any(|t| t == "config")
+        && tokens
+            .iter()
+            .any(|t| t == "--global" || t == "--system" || t == "--worktree")
+    {
+        return Err(tool_err(
+            "git config must stay repo-local; --global/--system/--worktree are blocked.",
+        ));
+    }
+
+    Ok(())
+}
+
+fn ensure_coding_tool_enabled(
+    name: &str,
+    settings: Option<&crate::settings::SettingsManager>,
+) -> Result<(), ProviderError> {
+    let Some(settings) = settings else {
+        return Err(tool_err("coding tool settings unavailable"));
+    };
+    match name {
+        "coding_grep" | "coding_apply_patch" if !settings.agent_coding_tools_enabled() => Err(
+            tool_err("Coding search/edit tools are disabled in Settings."),
+        ),
+        "coding_run_command" if !settings.agent_coding_shell_enabled() => Err(tool_err(
+            "Run Command is disabled in Settings -> Tools -> Coding mode (v2).",
+        )),
+        "coding_git_status" | "coding_git_diff" | "coding_git_commit"
+            if !settings.agent_coding_git_enabled() =>
+        {
+            Err(tool_err("Local Git tools are disabled in Settings."))
+        }
+        "coding_git_push"
+        | "coding_git_pull"
+        | "coding_git_fetch"
+        | "coding_git_clone"
+        | "coding_github_save_pat"
+            if !settings.agent_coding_git_remote_enabled() =>
+        {
+            Err(tool_err("Remote Git tools are disabled in Settings."))
+        }
+        _ => Ok(()),
+    }
 }
 
 async fn run_git(repo_dir: &Path, args: &[&str]) -> Result<String, ProviderError> {
@@ -780,6 +851,8 @@ pub async fn run_coding_tool(
         ));
     }
 
+    ensure_coding_tool_enabled(name, settings)?;
+
     let repo_dir = workspace_path_for_repo_file(workspace_root, ctx, "")?;
 
     match name {
@@ -1011,5 +1084,25 @@ mod tests {
     #[test]
     fn validate_allows_cargo() {
         assert!(validate_command("cargo test").is_ok());
+    }
+
+    #[test]
+    fn validate_blocks_force_push_via_shell_tool() {
+        assert!(validate_command("git push --force origin main").is_err());
+        assert!(validate_command("git push -f origin main").is_err());
+        assert!(validate_command("git push origin +main").is_err());
+    }
+
+    #[test]
+    fn validate_blocks_global_git_config() {
+        assert!(validate_command("git config --global user.email test@example.com").is_err());
+        assert!(validate_command("git config --system credential.helper store").is_err());
+    }
+
+    #[test]
+    fn coding_tools_fail_closed_without_settings() {
+        assert!(ensure_coding_tool_enabled("coding_grep", None).is_err());
+        assert!(ensure_coding_tool_enabled("coding_run_command", None).is_err());
+        assert!(ensure_coding_tool_enabled("coding_git_push", None).is_err());
     }
 }
