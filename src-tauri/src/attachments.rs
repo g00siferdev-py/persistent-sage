@@ -10,6 +10,21 @@ use crate::provider::ChatTurn;
 
 const MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
 
+fn validate_conversation_path_segment(conversation_id: &str) -> Result<&str, String> {
+    let id = conversation_id.trim();
+    if id.is_empty() {
+        return Err("invalid conversation id for attachment path".into());
+    }
+    if id
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        Ok(id)
+    } else {
+        Err("invalid conversation id for attachment path".into())
+    }
+}
+
 /// MIME types we accept from the composer.
 pub fn normalize_image_mime(mime: &str) -> Option<&'static str> {
     match mime.trim().to_lowercase().as_str() {
@@ -111,13 +126,22 @@ pub fn save_image_attachment(
         ));
     }
 
+    let conversation_id = validate_conversation_path_segment(conversation_id)?;
+    let attachments_root = data_dir.join("attachments");
+    std::fs::create_dir_all(&attachments_root).map_err(|e| e.to_string())?;
+    let canonical_root = attachments_root.canonicalize().map_err(|e| e.to_string())?;
+
     let rel_dir = format!("attachments/{conversation_id}");
-    let dir = data_dir.join(&rel_dir);
+    let dir = attachments_root.join(conversation_id);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let canonical_dir = dir.canonicalize().map_err(|e| e.to_string())?;
+    if !canonical_dir.starts_with(&canonical_root) {
+        return Err("invalid attachment path".into());
+    }
 
     let name = format!("{}.{}", uuid::Uuid::new_v4(), extension_for_mime(mime));
     let rel_path = format!("{rel_dir}/{name}");
-    let abs = data_dir.join(&rel_path);
+    let abs = canonical_dir.join(&name);
     std::fs::write(&abs, &bytes).map_err(|e| e.to_string())?;
 
     Ok((rel_path, mime.to_string()))
@@ -126,10 +150,12 @@ pub fn save_image_attachment(
 pub fn read_image_bytes(data_dir: &Path, rel_path: &str) -> Result<Vec<u8>, String> {
     let rel = rel_path.trim().trim_start_matches('/');
     let abs = data_dir.join(rel);
-    if !abs.starts_with(data_dir) {
+    let canonical_data_dir = data_dir.canonicalize().map_err(|e| e.to_string())?;
+    let canonical_abs = abs.canonicalize().map_err(|e| e.to_string())?;
+    if !canonical_abs.starts_with(canonical_data_dir) {
         return Err("invalid attachment path".into());
     }
-    std::fs::read(&abs).map_err(|e| e.to_string())
+    std::fs::read(&canonical_abs).map_err(|e| e.to_string())
 }
 
 pub fn read_image_base64(data_dir: &Path, rel_path: &str, mime: &str) -> Result<String, String> {
@@ -325,4 +351,62 @@ pub fn chat_turn_from_stored_with_image_policy(
         ollama_message,
         anthropic_message,
     })
+}
+
+#[cfg(test)]
+mod attachment_path_tests {
+    use std::fs;
+    use std::path::PathBuf;
+
+    use super::{read_image_bytes, save_image_attachment};
+
+    fn temp_root(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("{name}-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn save_image_attachment_rejects_traversal_conversation_id_without_writing() {
+        let root = temp_root("persistent-sage-attachment-traversal");
+        let data_dir = root.join("data");
+        fs::create_dir_all(&data_dir).unwrap();
+        let outside = root.join("outside");
+
+        let result = save_image_attachment(&data_dir, "../../outside", "image/png", "AQID");
+
+        assert!(result.is_err());
+        assert!(!outside.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn save_image_attachment_keeps_valid_ids_under_attachment_root() {
+        let root = temp_root("persistent-sage-attachment-valid");
+        let data_dir = root.join("data");
+        fs::create_dir_all(&data_dir).unwrap();
+
+        let (rel_path, mime) =
+            save_image_attachment(&data_dir, "default", "image/png", "AQID").unwrap();
+
+        assert_eq!(mime, "image/png");
+        assert!(rel_path.starts_with("attachments/default/"));
+        assert_eq!(fs::read(data_dir.join(&rel_path)).unwrap(), vec![1, 2, 3]);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn read_image_bytes_rejects_traversal_paths() {
+        let root = temp_root("persistent-sage-attachment-read");
+        let data_dir = root.join("data");
+        let outside = root.join("outside");
+        fs::create_dir_all(data_dir.join("attachments")).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("secret.png"), [1_u8, 2, 3]).unwrap();
+
+        let result = read_image_bytes(&data_dir, "attachments/../../outside/secret.png");
+
+        assert!(result.is_err());
+        let _ = fs::remove_dir_all(root);
+    }
 }
