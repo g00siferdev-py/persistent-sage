@@ -11,7 +11,9 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
-use crate::agent_tools::{assert_path_in_workspace, resolve_workspace_subpath};
+use crate::agent_tools::{
+    assert_path_contained_in, assert_path_in_workspace, resolve_workspace_subpath,
+};
 use crate::provider::ProviderError;
 use crate::settings::SettingsManager;
 
@@ -296,6 +298,7 @@ fn should_skip_tree_entry(name: &str) -> bool {
 
 fn build_repo_tree(
     workspace_root: &Path,
+    repo_root: &Path,
     dir: &Path,
     path_rel: &str,
     depth: usize,
@@ -305,6 +308,7 @@ fn build_repo_tree(
         return Ok(Vec::new());
     }
     assert_path_in_workspace(workspace_root, dir).map_err(|e| e.to_string())?;
+    assert_path_contained_in(repo_root, dir, "repository").map_err(|e| e.to_string())?;
     let mut nodes = Vec::new();
     let mut entries: Vec<_> = std::fs::read_dir(dir)
         .map_err(|e| e.to_string())?
@@ -324,13 +328,20 @@ fn build_repo_tree(
         } else {
             format!("{path_rel}/{name}")
         };
-        let full = resolve_workspace_subpath(workspace_root, &child_rel)
-            .map_err(|e: ProviderError| e.to_string())?;
+        let full = entry.path();
         assert_path_in_workspace(workspace_root, &full).map_err(|e| e.to_string())?;
+        assert_path_contained_in(repo_root, &full, "repository").map_err(|e| e.to_string())?;
         let ft = entry.file_type().map_err(|e| e.to_string())?;
         if ft.is_dir() {
             *budget -= 1;
-            let children = build_repo_tree(workspace_root, &full, &child_rel, depth + 1, budget)?;
+            let children = build_repo_tree(
+                workspace_root,
+                repo_root,
+                &full,
+                &child_rel,
+                depth + 1,
+                budget,
+            )?;
             nodes.push(RepoTreeNode {
                 name,
                 path_rel: child_rel,
@@ -350,19 +361,22 @@ fn build_repo_tree(
     Ok(nodes)
 }
 
-pub fn repo_file_tree(workspace_root: &Path, repo_path_rel: &str) -> Result<Vec<RepoTreeNode>, String> {
+pub fn repo_file_tree(
+    workspace_root: &Path,
+    repo_path_rel: &str,
+) -> Result<Vec<RepoTreeNode>, String> {
     let rel = repo_path_rel.trim();
     if rel.is_empty() {
         return Err("repo path is empty".into());
     }
-    let root = resolve_workspace_subpath(workspace_root, rel)
-        .map_err(|e: ProviderError| e.to_string())?;
+    let root =
+        resolve_workspace_subpath(workspace_root, rel).map_err(|e: ProviderError| e.to_string())?;
     assert_path_in_workspace(workspace_root, &root).map_err(|e| e.to_string())?;
     if !root.is_dir() {
         return Err(format!("repo path is not a directory: {rel}"));
     }
     let mut budget = MAX_TREE_NODES;
-    build_repo_tree(workspace_root, &root, rel, 0, &mut budget)
+    build_repo_tree(workspace_root, &root, &root, "", 0, &mut budget)
 }
 
 /// Resolve a registered repo by id (syncs disk → index first).
@@ -729,6 +743,30 @@ mod tests {
         assert!(repo_dir.join(".gitignore").is_file());
         let view = list_repos_view(&workspace).unwrap();
         assert_eq!(view.active_repo_id.as_deref(), Some("my-new-app"));
+        let _ = std::fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn repo_file_tree_paths_are_repo_relative_and_readable() {
+        let workspace = tmp_workspace();
+        std::fs::create_dir_all(&workspace).unwrap();
+        ensure_repos_tree(&workspace);
+        let meta = create_repository(&workspace, "tree-app", Some("empty")).unwrap();
+
+        let tree = repo_file_tree(&workspace, &meta.path_rel).unwrap();
+        let readme = tree
+            .iter()
+            .find(|node| node.kind == "file" && node.name == "README.md")
+            .expect("README.md should be in generated repo tree");
+        assert_eq!(readme.path_rel, "README.md");
+
+        let (content, _) = crate::coding_tools::read_repo_file_for_ide(
+            &workspace,
+            &meta.path_rel,
+            &readme.path_rel,
+        )
+        .unwrap();
+        assert!(content.contains("tree app"));
         let _ = std::fs::remove_dir_all(&workspace);
     }
 
