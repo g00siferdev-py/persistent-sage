@@ -412,6 +412,32 @@ async fn run_git_with_auth(
     format_command_output(&out)
 }
 
+async fn validate_github_remote(repo_dir: &Path, remote: &str) -> Result<(), ProviderError> {
+    crate::git_auth::validate_git_remote_name(remote)?;
+    if !repo_dir.is_dir() {
+        return Err(tool_err(format!("repo directory not found: {}", repo_dir.display())));
+    }
+    let out = tokio::time::timeout(
+        Duration::from_secs(COMMAND_TIMEOUT_SECS),
+        Command::new("git")
+            .args(["remote", "get-url", remote])
+            .current_dir(repo_dir)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
+            .output(),
+    )
+    .await
+    .map_err(|_| tool_err(format!("git remote get-url timed out after {COMMAND_TIMEOUT_SECS}s")))?
+    .map_err(|e| tool_err(format!("git remote get-url failed: {e}")))?;
+    if !out.status.success() {
+        return Err(tool_err(format!("remote `{remote}` is not configured")));
+    }
+    let url = String::from_utf8_lossy(&out.stdout);
+    let url = url.lines().next().unwrap_or("").trim();
+    crate::git_auth::validate_https_git_url(url)
+}
+
 fn format_command_output(out: &std::process::Output) -> Result<String, ProviderError> {
     let mut text = String::new();
     if !out.stdout.is_empty() {
@@ -838,9 +864,13 @@ pub async fn run_coding_tool(
         }
         "coding_git_push" => {
             let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
-            let pat = crate::git_auth::require_github_pat(settings)?;
             let remote = v["remote"].as_str().unwrap_or("origin").trim();
             let branch = v["branch"].as_str().map(str::trim).filter(|s| !s.is_empty());
+            validate_github_remote(&repo_dir, remote).await?;
+            if let Some(b) = branch {
+                crate::git_auth::validate_git_branch_name(b)?;
+            }
+            let pat = crate::git_auth::require_github_pat(settings)?;
             let mut args = vec!["push", remote];
             if let Some(b) = branch {
                 args.push(b);
@@ -850,9 +880,13 @@ pub async fn run_coding_tool(
         }
         "coding_git_pull" => {
             let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
-            let pat = crate::git_auth::require_github_pat(settings)?;
             let remote = v["remote"].as_str().unwrap_or("origin").trim();
             let branch = v["branch"].as_str().map(str::trim).filter(|s| !s.is_empty());
+            validate_github_remote(&repo_dir, remote).await?;
+            if let Some(b) = branch {
+                crate::git_auth::validate_git_branch_name(b)?;
+            }
+            let pat = crate::git_auth::require_github_pat(settings)?;
             let mut args = vec!["pull", remote];
             if let Some(b) = branch {
                 args.push(b);
@@ -861,8 +895,9 @@ pub async fn run_coding_tool(
         }
         "coding_git_fetch" => {
             let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
-            let pat = crate::git_auth::require_github_pat(settings)?;
             let remote = v["remote"].as_str().unwrap_or("origin").trim();
+            validate_github_remote(&repo_dir, remote).await?;
+            let pat = crate::git_auth::require_github_pat(settings)?;
             run_git_with_auth(
                 &repo_dir,
                 &["fetch", remote],
