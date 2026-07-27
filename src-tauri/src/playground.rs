@@ -5,9 +5,12 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::process::{Child, Command};
 use which::which;
+
+const PLAYGROUND_MAX_OUTPUT_BYTES: usize = 96_000;
+const OUTPUT_TRUNCATED_NOTICE: &str = "\n... [output truncated]";
 
 /// Playground run request from the frontend.
 #[derive(Deserialize, Debug)]
@@ -141,6 +144,97 @@ fn apply_network_sandbox(cmd: &mut Command, allow_network: bool) -> bool {
         .env("https_proxy", dead_proxy)
         .env("all_proxy", dead_proxy);
     true
+}
+
+struct LimitedProcessOutput {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    stdout_truncated: bool,
+    stderr_truncated: bool,
+    status: std::process::ExitStatus,
+}
+
+enum PlaygroundProcessError {
+    Io(std::io::Error),
+    Timeout,
+}
+
+async fn read_limited_output<R>(
+    mut stream: R,
+    max_bytes: usize,
+) -> std::io::Result<(Vec<u8>, bool)>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut output = Vec::with_capacity(max_bytes.min(8 * 1024));
+    let mut buf = [0u8; 8 * 1024];
+    let mut truncated = false;
+    loop {
+        let n = stream.read(&mut buf).await?;
+        if n == 0 {
+            break;
+        }
+        let remaining = max_bytes.saturating_sub(output.len());
+        if remaining == 0 {
+            truncated = true;
+            continue;
+        }
+        let take = remaining.min(n);
+        output.extend_from_slice(&buf[..take]);
+        if take < n {
+            truncated = true;
+        }
+    }
+    Ok((output, truncated))
+}
+
+fn limited_output_text(bytes: &[u8], truncated: bool) -> String {
+    let mut text = String::from_utf8_lossy(bytes).into_owned();
+    if truncated {
+        text.push_str(OUTPUT_TRUNCATED_NOTICE);
+    }
+    text
+}
+
+async fn wait_for_limited_output(
+    child: &mut Child,
+    timeout: tokio::time::Duration,
+) -> Result<LimitedProcessOutput, PlaygroundProcessError> {
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "stdout pipe unavailable"))
+        .map_err(PlaygroundProcessError::Io)?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "stderr pipe unavailable"))
+        .map_err(PlaygroundProcessError::Io)?;
+
+    let output = tokio::time::timeout(timeout, async {
+        let (stdout, stderr, status) = tokio::try_join!(
+            read_limited_output(stdout, PLAYGROUND_MAX_OUTPUT_BYTES),
+            read_limited_output(stderr, PLAYGROUND_MAX_OUTPUT_BYTES),
+            child.wait(),
+        )?;
+        Ok::<LimitedProcessOutput, std::io::Error>(LimitedProcessOutput {
+            stdout: stdout.0,
+            stderr: stderr.0,
+            stdout_truncated: stdout.1,
+            stderr_truncated: stderr.1,
+            status,
+        })
+    })
+    .await;
+
+    match output {
+        Ok(Ok(out)) => Ok(out),
+        Ok(Err(e)) => Err(PlaygroundProcessError::Io(e)),
+        Err(_) => {
+            let _ = child.kill().await;
+            Err(PlaygroundProcessError::Timeout)
+        }
+    }
 }
 
 fn telemetry_dir(base_dir: &Path) -> PathBuf {
@@ -280,6 +374,9 @@ pub async fn coding_playground_run(
     state: tauri::State<'_, crate::NovaState>,
     request: PlaygroundRunRequest,
 ) -> Result<PlaygroundRunResult, String> {
+    if !state.settings.agent_coding_shell_enabled() {
+        return Err(crate::coding_tools::CODING_SHELL_DISABLED_MESSAGE.into());
+    }
     run_playground_request(&state.data_directory, request).await
 }
 
@@ -383,15 +480,16 @@ pub async fn run_playground_request(
         let _ = stdin.shutdown().await;
     }
 
-    let timeout = tokio::time::Duration::from_secs(request.timeout_secs.max(1).min(300));
-    let output = tokio::time::timeout(timeout, child.wait_with_output()).await;
+    let timeout_secs = request.timeout_secs.max(1).min(300);
+    let timeout = tokio::time::Duration::from_secs(timeout_secs);
+    let output = wait_for_limited_output(&mut child, timeout).await;
 
     let elapsed = start.elapsed().as_secs_f64();
 
     let mut result = match output {
-        Ok(Ok(out)) => PlaygroundRunResult {
-            stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+        Ok(out) => PlaygroundRunResult {
+            stdout: limited_output_text(&out.stdout, out.stdout_truncated),
+            stderr: limited_output_text(&out.stderr, out.stderr_truncated),
             exit_code: out.status.code(),
             elapsed_secs: elapsed,
             temp_file_path: Some(file_path.to_string_lossy().into_owned()),
@@ -400,7 +498,7 @@ pub async fn run_playground_request(
             sandbox_applied,
             telemetry_log_path: None,
         },
-        Ok(Err(e)) => PlaygroundRunResult {
+        Err(PlaygroundProcessError::Io(e)) => PlaygroundRunResult {
             stdout: String::new(),
             stderr: String::new(),
             exit_code: None,
@@ -411,13 +509,13 @@ pub async fn run_playground_request(
             sandbox_applied,
             telemetry_log_path: None,
         },
-        Err(_) => PlaygroundRunResult {
+        Err(PlaygroundProcessError::Timeout) => PlaygroundRunResult {
             stdout: String::new(),
             stderr: String::new(),
             exit_code: None,
             elapsed_secs: elapsed,
             temp_file_path: Some(file_path.to_string_lossy().into_owned()),
-            error: Some(format!("killed after {}s timeout", request.timeout_secs)),
+            error: Some(format!("killed after {timeout_secs}s timeout")),
             network_allowed: request.allow_network,
             sandbox_applied,
             telemetry_log_path: None,
@@ -454,14 +552,15 @@ pub async fn run_playground_request(
                 let _ = stdin.shutdown().await;
             }
 
-            let run_timeout = tokio::time::Duration::from_secs(request.timeout_secs.max(1).min(300));
-            let run_output = tokio::time::timeout(run_timeout, run_child.wait_with_output()).await;
+            let run_timeout_secs = request.timeout_secs.max(1).min(300);
+            let run_timeout = tokio::time::Duration::from_secs(run_timeout_secs);
+            let run_output = wait_for_limited_output(&mut run_child, run_timeout).await;
             let run_elapsed = run_start.elapsed().as_secs_f64();
 
             result = match run_output {
-                Ok(Ok(out)) => PlaygroundRunResult {
-                    stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
-                    stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+                Ok(out) => PlaygroundRunResult {
+                    stdout: limited_output_text(&out.stdout, out.stdout_truncated),
+                    stderr: limited_output_text(&out.stderr, out.stderr_truncated),
                     exit_code: out.status.code(),
                     elapsed_secs: run_elapsed,
                     temp_file_path: Some(file_path.to_string_lossy().into_owned()),
@@ -470,7 +569,7 @@ pub async fn run_playground_request(
                     sandbox_applied,
                     telemetry_log_path: None,
                 },
-                Ok(Err(e)) => PlaygroundRunResult {
+                Err(PlaygroundProcessError::Io(e)) => PlaygroundRunResult {
                     stdout: String::new(),
                     stderr: String::new(),
                     exit_code: None,
@@ -481,13 +580,13 @@ pub async fn run_playground_request(
                     sandbox_applied,
                     telemetry_log_path: None,
                 },
-                Err(_) => PlaygroundRunResult {
+                Err(PlaygroundProcessError::Timeout) => PlaygroundRunResult {
                     stdout: String::new(),
                     stderr: String::new(),
                     exit_code: None,
                     elapsed_secs: run_elapsed,
                     temp_file_path: Some(file_path.to_string_lossy().into_owned()),
-                    error: Some(format!("binary killed after {}s timeout", request.timeout_secs)),
+                    error: Some(format!("binary killed after {run_timeout_secs}s timeout")),
                     network_allowed: request.allow_network,
                     sandbox_applied,
                     telemetry_log_path: None,
@@ -548,6 +647,13 @@ mod tests {
         assert!(apply_network_sandbox(&mut cmd, false));
     }
 
+    #[test]
+    fn limited_output_text_marks_truncation() {
+        let text = limited_output_text(b"hello", true);
+        assert_eq!(text, "hello\n... [output truncated]");
+    }
+
+    #[cfg(target_os = "windows")]
     #[test]
     fn wsl_bash_shim_detected_on_windows() {
         assert!(is_wsl_bash_shim(Path::new(r"C:\Windows\System32\bash.exe")));

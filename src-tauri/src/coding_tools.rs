@@ -22,6 +22,8 @@ const COMMAND_BUILD_TIMEOUT_DEFAULT_SECS: u64 = 900;
 const COMMAND_BUILD_TIMEOUT_MAX_SECS: u64 = 1200;
 const COMMAND_MAX_OUTPUT_CHARS: usize = 96_000;
 const PATCH_MAX_FILE_BYTES: u64 = 900_000;
+pub const CODING_SHELL_DISABLED_MESSAGE: &str =
+    "Enable Run Command in Settings > Tools > Coding mode (v2) to run shell commands and playground snippets.";
 
 const SKIP_DIR_NAMES: &[&str] = &[
     ".git",
@@ -756,6 +758,8 @@ pub async fn run_coding_tool(
     let v: Value = serde_json::from_str(arguments_json)
         .map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
 
+    ensure_coding_tool_enabled(name, settings)?;
+
     if name == "coding_notes_list" {
         let list = crate::coding_notes::list_notes(data_directory).map_err(tool_err)?;
         return Ok(serde_json::to_string_pretty(&list).unwrap_or_else(|_| "[]".into()));
@@ -925,6 +929,64 @@ pub async fn run_coding_tool(
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CodingToolGate {
+    Unrestricted,
+    SearchAndPatch,
+    Shell,
+    Git,
+    GitRemote,
+}
+
+fn coding_tool_gate(name: &str) -> CodingToolGate {
+    match name {
+        "coding_grep" | "coding_apply_patch" => CodingToolGate::SearchAndPatch,
+        "coding_run_command" | "coding_playground_run" => CodingToolGate::Shell,
+        "coding_git_status" | "coding_git_diff" | "coding_git_commit" => CodingToolGate::Git,
+        "coding_git_push"
+        | "coding_git_pull"
+        | "coding_git_fetch"
+        | "coding_git_clone"
+        | "coding_github_save_pat" => CodingToolGate::GitRemote,
+        _ => CodingToolGate::Unrestricted,
+    }
+}
+
+fn ensure_coding_tool_enabled(
+    name: &str,
+    settings: Option<&crate::settings::SettingsManager>,
+) -> Result<(), ProviderError> {
+    let gate = coding_tool_gate(name);
+    if gate == CodingToolGate::Unrestricted {
+        return Ok(());
+    }
+    let settings = settings.ok_or_else(|| tool_err("coding tool settings unavailable"))?;
+    let enabled = match gate {
+        CodingToolGate::Unrestricted => true,
+        CodingToolGate::SearchAndPatch => settings.agent_coding_tools_enabled(),
+        CodingToolGate::Shell => settings.agent_coding_shell_enabled(),
+        CodingToolGate::Git => settings.agent_coding_git_enabled(),
+        CodingToolGate::GitRemote => settings.agent_coding_git_remote_enabled(),
+    };
+    if enabled {
+        return Ok(());
+    }
+    let msg = match gate {
+        CodingToolGate::SearchAndPatch => {
+            "Enable Search & Patch in Settings > Tools > Coding mode (v2) to use coding file tools."
+        }
+        CodingToolGate::Shell => CODING_SHELL_DISABLED_MESSAGE,
+        CodingToolGate::Git => {
+            "Enable Git in Settings > Tools > Coding mode (v2) to use local git tools."
+        }
+        CodingToolGate::GitRemote => {
+            "Enable Git Remote in Settings > Tools > Coding mode (v2) to use remote git tools."
+        }
+        CodingToolGate::Unrestricted => unreachable!(),
+    };
+    Err(tool_err(msg))
+}
+
 pub fn playground_tool_definition() -> ToolDefinition {
     ToolDefinition {
         name: "coding_playground_run".into(),
@@ -1011,5 +1073,21 @@ mod tests {
     #[test]
     fn validate_allows_cargo() {
         assert!(validate_command("cargo test").is_ok());
+    }
+
+    #[test]
+    fn playground_uses_shell_gate() {
+        assert_eq!(
+            coding_tool_gate("coding_playground_run"),
+            CodingToolGate::Shell
+        );
+    }
+
+    #[test]
+    fn notes_are_unrestricted() {
+        assert_eq!(
+            coding_tool_gate("coding_notes_read"),
+            CodingToolGate::Unrestricted
+        );
     }
 }
