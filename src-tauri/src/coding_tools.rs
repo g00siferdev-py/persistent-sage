@@ -121,6 +121,32 @@ pub fn run_command_tool_definition() -> ToolDefinition {
     }
 }
 
+pub fn coding_mode_tool_definitions(
+    enable_code_tools: bool,
+    enable_shell: bool,
+    enable_git: bool,
+    enable_git_remote: bool,
+) -> Vec<ToolDefinition> {
+    let mut definitions = vec![repo_create_tool_definition()];
+    if enable_code_tools {
+        definitions.extend(search_and_patch_tool_definitions());
+    }
+    if enable_shell {
+        definitions.push(run_command_tool_definition());
+    }
+    if enable_git {
+        definitions.extend(git_tool_definitions());
+    }
+    if enable_git_remote {
+        definitions.extend(git_remote_tool_definitions());
+    }
+    definitions.extend(coding_notes_tool_definitions());
+    if enable_shell {
+        definitions.push(playground_tool_definition());
+    }
+    definitions
+}
+
 pub fn git_tool_definitions() -> Vec<ToolDefinition> {
     vec![
         ToolDefinition {
@@ -780,6 +806,34 @@ pub async fn run_coding_tool(
         ));
     }
 
+    if name == "coding_playground_run" {
+        let settings = settings.ok_or_else(|| {
+            tool_err(crate::playground::PLAYGROUND_RUN_COMMAND_DISABLED_MESSAGE)
+        })?;
+        crate::playground::ensure_playground_run_allowed(settings).map_err(tool_err)?;
+        let req = PlaygroundRunRequest {
+            language: v["language"].as_str().unwrap_or("").trim().to_string(),
+            code: v["code"].as_str().unwrap_or("").to_string(),
+            args: v["args"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            stdin: v["stdin"].as_str().unwrap_or("").to_string(),
+            timeout_secs: v["timeoutSecs"].as_u64().unwrap_or(30),
+            allow_network: v["allowNetwork"].as_bool().unwrap_or(false),
+        };
+        let res: PlaygroundRunResult =
+            crate::playground::run_playground_request(data_directory, req)
+                .await
+                .map_err(|e| tool_err(format!("playground run failed: {e}")))?;
+        return serde_json::to_string_pretty(&res)
+            .map_err(|e| tool_err(format!("serialize playground result: {e}")));
+    }
+
     let repo_dir = workspace_path_for_repo_file(workspace_root, ctx, "")?;
 
     match name {
@@ -898,29 +952,6 @@ pub async fn run_coding_tool(
             crate::git_auth::save_github_pat(settings, token)?;
             Ok("GitHub PAT saved (encrypted locally).".into())
         }
-        "coding_playground_run" => {
-            let req = PlaygroundRunRequest {
-                language: v["language"].as_str().unwrap_or("").trim().to_string(),
-                code: v["code"].as_str().unwrap_or("").to_string(),
-                args: v["args"]
-                    .as_array()
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|x| x.as_str().map(|s| s.to_string()))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                stdin: v["stdin"].as_str().unwrap_or("").to_string(),
-                timeout_secs: v["timeoutSecs"].as_u64().unwrap_or(30),
-                allow_network: v["allowNetwork"].as_bool().unwrap_or(false),
-            };
-            let res: PlaygroundRunResult =
-                crate::playground::run_playground_request(data_directory, req)
-                    .await
-                    .map_err(|e| tool_err(format!("playground run failed: {e}")))?;
-            serde_json::to_string_pretty(&res)
-                .map_err(|e| tool_err(format!("serialize playground result: {e}")))
-        }
         _ => Err(tool_err(format!("unknown coding tool: {name}"))),
     }
 }
@@ -1003,6 +1034,10 @@ pub fn is_coding_tool_name(name: &str) -> bool {
 mod tests {
     use super::*;
 
+    fn definition_names(definitions: &[ToolDefinition]) -> Vec<&str> {
+        definitions.iter().map(|d| d.name.as_str()).collect()
+    }
+
     #[test]
     fn validate_blocks_rm_rf() {
         assert!(validate_command("rm -rf /").is_err());
@@ -1011,5 +1046,49 @@ mod tests {
     #[test]
     fn validate_allows_cargo() {
         assert!(validate_command("cargo test").is_ok());
+    }
+
+    #[test]
+    fn coding_tool_definitions_omit_playground_without_shell() {
+        let definitions = coding_mode_tool_definitions(true, false, true, true);
+        let names = definition_names(&definitions);
+
+        assert!(!names.contains(&"coding_run_command"));
+        assert!(!names.contains(&"coding_playground_run"));
+        assert!(names.contains(&"coding_grep"));
+        assert!(names.contains(&"coding_git_status"));
+    }
+
+    #[test]
+    fn coding_tool_definitions_include_playground_with_shell() {
+        let definitions = coding_mode_tool_definitions(false, true, false, false);
+        let names = definition_names(&definitions);
+
+        assert!(names.contains(&"coding_run_command"));
+        assert!(names.contains(&"coding_playground_run"));
+        assert!(!names.contains(&"coding_grep"));
+    }
+
+    #[tokio::test]
+    async fn playground_tool_call_requires_settings_gate() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let ctx = CodingTurnContext {
+            repo_id: "test".into(),
+            repo_name: "test".into(),
+            path_rel: ".".into(),
+        };
+        let err = run_coding_tool(
+            workspace_root,
+            &ctx,
+            "coding_playground_run",
+            r#"{"language":"python","code":"print('should not run')"}"#,
+            None,
+            None,
+            workspace_root,
+        )
+        .await
+        .expect_err("playground should require settings permission gate");
+
+        assert!(err.to_string().contains("Run Command"));
     }
 }

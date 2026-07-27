@@ -806,21 +806,12 @@ async fn run_chat_completion(
         tool_definitions.extend(crate::personality_tools::tool_definitions());
     }
     if options.enable_tools && is_coding_turn {
-        tool_definitions.push(crate::coding_tools::repo_create_tool_definition());
-        if state.settings.agent_coding_tools_enabled() {
-            tool_definitions.extend(crate::coding_tools::search_and_patch_tool_definitions());
-        }
-        if state.settings.agent_coding_shell_enabled() {
-            tool_definitions.push(crate::coding_tools::run_command_tool_definition());
-        }
-        if state.settings.agent_coding_git_enabled() {
-            tool_definitions.extend(crate::coding_tools::git_tool_definitions());
-        }
-        if state.settings.agent_coding_git_remote_enabled() {
-            tool_definitions.extend(crate::coding_tools::git_remote_tool_definitions());
-        }
-        tool_definitions.extend(crate::coding_tools::coding_notes_tool_definitions());
-        tool_definitions.push(crate::coding_tools::playground_tool_definition());
+        tool_definitions.extend(crate::coding_tools::coding_mode_tool_definitions(
+            state.settings.agent_coding_tools_enabled(),
+            state.settings.agent_coding_shell_enabled(),
+            state.settings.agent_coding_git_enabled(),
+            state.settings.agent_coding_git_remote_enabled(),
+        ));
         let coding_tools_on = state.settings.agent_coding_tools_enabled()
             || state.settings.agent_coding_shell_enabled()
             || state.settings.agent_coding_git_enabled()
