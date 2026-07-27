@@ -1014,4 +1014,29 @@ mod tests {
         assert!(r.links.iter().any(|l| l.href.contains("example.com")));
         assert!(r.images.iter().any(|i| i.src.contains("img.png")));
     }
+
+    #[test]
+    fn redirect_location_to_loopback_is_rejected_by_url_gate() {
+        // Mimic one hop of resolve_browser_navigation_url: join Location, re-validate.
+        let base = Url::parse("https://example.com/start").unwrap();
+        let next = base.join("http://127.0.0.1:9/secret").unwrap();
+        let err = validate_fetch_url(next.as_str()).unwrap_err();
+        let msg = err.to_string().to_lowercase();
+        assert!(
+            msg.contains("private") || msg.contains("local") || msg.contains("ssrf"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn redirect_location_to_nip_io_loopback_is_rejected_by_url_gate() {
+        let base = Url::parse("https://example.com/start").unwrap();
+        let next = base.join("http://127.0.0.1.nip.io:9/secret").unwrap();
+        let err = validate_fetch_url(next.as_str()).unwrap_err();
+        let msg = err.to_string().to_lowercase();
+        assert!(
+            msg.contains("private") || msg.contains("local") || msg.contains("ssrf"),
+            "{err}"
+        );
+    }
 }
