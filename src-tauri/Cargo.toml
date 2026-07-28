@@ -41,6 +41,7 @@ regex = "1"
 which = "7"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 nokhwa = { version = "0.10", features = ["input-native"] }
+libc = "0.2"
 pdf-extract = "0.12.0"
 pulldown-cmark = "0.13.4"
 

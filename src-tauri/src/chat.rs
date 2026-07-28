@@ -800,8 +800,12 @@ async fn run_chat_completion(
     if database_tools_enabled {
         tool_definitions.extend(crate::database_query::tool_definitions());
     }
-    let personality_edit_enabled =
-        options.enable_tools && !is_coding_turn && state.settings.agent_personality_edit_enabled();
+    // Scheduled Moltbook turns must not advertise personality_update — that tool rewrites the
+    // system persona mid-turn and would re-inject private companion fields into a public session.
+    let personality_edit_enabled = options.enable_tools
+        && !is_coding_turn
+        && options.ephemeral_user_note != EphemeralUserNote::Moltbook
+        && state.settings.agent_personality_edit_enabled();
     if personality_edit_enabled {
         tool_definitions.extend(crate::personality_tools::tool_definitions());
     }
@@ -1214,6 +1218,59 @@ async fn execute_direct_coding_command(
 const CHAT_CONTEXT_RECENT: usize = 32;
 const CHAT_PREP_TIMEOUT: Duration = Duration::from_secs(12);
 
+/// Public-facing stub used instead of `personality.system_prompt_prefix()` for scheduled
+/// Moltbook turns. Companion persona fields (special instructions, relationship style, etc.)
+/// often contain private human context and must not enter a prompt that can be published.
+const MOLTBOOK_PUBLIC_PERSONA: &str = "# Public Moltbook agent\n\n\
+You are an AI agent acting autonomously on Moltbook, a public network for AI agents. \
+This turn intentionally omits the private companion persona (special instructions, \
+relationship details, background, and other local personality fields). \
+Speak only as a public agent — do not invent or disclose details about any human operator.";
+
+/// Persona block prepended to the system prompt for this turn.
+fn system_persona_for_turn<'a>(
+    ephemeral_user_note: EphemeralUserNote,
+    full_persona: &'a str,
+) -> &'a str {
+    if ephemeral_user_note == EphemeralUserNote::Moltbook {
+        MOLTBOOK_PUBLIC_PERSONA
+    } else {
+        full_persona
+    }
+}
+
+#[cfg(test)]
+mod moltbook_persona_tests {
+    use super::{
+        system_persona_for_turn, EphemeralUserNote, MOLTBOOK_PUBLIC_PERSONA,
+    };
+
+    #[test]
+    fn scheduled_moltbook_turns_omit_private_companion_persona() {
+        let private = "# Companion persona\n\n## Special instructions & quirks\n\
+My human Alice lives at 123 Oak Street and prefers I never mention her job at Acme.";
+
+        let moltbook = system_persona_for_turn(EphemeralUserNote::Moltbook, private);
+        assert_eq!(moltbook, MOLTBOOK_PUBLIC_PERSONA);
+        assert!(!moltbook.contains("Alice"));
+        assert!(!moltbook.contains("123 Oak Street"));
+        assert!(!moltbook.contains("Acme"));
+
+        assert_eq!(
+            system_persona_for_turn(EphemeralUserNote::None, private),
+            private
+        );
+        assert_eq!(
+            system_persona_for_turn(EphemeralUserNote::Pulse, private),
+            private
+        );
+        assert_eq!(
+            system_persona_for_turn(EphemeralUserNote::FormSubmission, private),
+            private
+        );
+    }
+}
+
 /// One user turn on an existing conversation — manual chat or background Pulse.
 pub async fn execute_chat_turn(
     app: &AppHandle,
@@ -1436,10 +1493,12 @@ pub async fn execute_chat_turn(
         }
     }
 
-    let persona = state.personality.system_prompt_prefix();
+    let full_persona = state.personality.system_prompt_prefix();
+    // Coding companion-linked turns keep the full persona; scheduled Moltbook turns must not.
+    let persona = system_persona_for_turn(options.ephemeral_user_note, &full_persona);
     let mut system_content = if let Some(ref ctx) = options.coding_context {
         let coding_block = if companion_linked {
-            let p = persona.trim();
+            let p = full_persona.trim();
             if p.is_empty() {
                 CODING_SYSTEM_APPENDIX.to_string()
             } else {
