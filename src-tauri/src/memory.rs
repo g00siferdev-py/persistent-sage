@@ -689,8 +689,8 @@ fn migrate_message_image_columns(conn: &Connection) -> Result<(), MemoryError> {
 
 fn enrich_message_image_paths(msg: &mut StoredMessage, data_dir: &Path) {
     if let Some(ref rel) = msg.image_attachment {
-        let abs = crate::attachments::absolute_attachment_path(data_dir, rel);
-        msg.image_display_path = Some(abs.to_string_lossy().into_owned());
+        msg.image_display_path = crate::attachments::absolute_attachment_path(data_dir, rel)
+            .map(|abs| abs.to_string_lossy().into_owned());
     }
 }
 

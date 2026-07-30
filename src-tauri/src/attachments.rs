@@ -123,13 +123,60 @@ pub fn save_image_attachment(
     Ok((rel_path, mime.to_string()))
 }
 
-pub fn read_image_bytes(data_dir: &Path, rel_path: &str) -> Result<Vec<u8>, String> {
+/// Normalize and validate a stored attachment relative path.
+///
+/// Paths must stay under `{data_dir}/attachments/…`. Lexical `Path::starts_with`
+/// checks are not enough: `data_dir.join("attachments/../../.nova_crypto/ikm")`
+/// still "starts with" `data_dir` before `..` is resolved, so we reject `..`
+/// segments up front and re-check with `canonicalize` after join.
+fn validated_attachment_abs(data_dir: &Path, rel_path: &str) -> Result<PathBuf, String> {
     let rel = rel_path.trim().trim_start_matches('/');
-    let abs = data_dir.join(rel);
-    if !abs.starts_with(data_dir) {
+    if rel.is_empty() || rel.contains('\\') || Path::new(rel).is_absolute() {
         return Err("invalid attachment path".into());
     }
-    std::fs::read(&abs).map_err(|e| e.to_string())
+    let mut segments = rel.split('/');
+    if segments.next() != Some("attachments") {
+        return Err("invalid attachment path".into());
+    }
+    let mut has_rest = false;
+    for seg in segments {
+        if seg.is_empty() || seg == "." || seg == ".." {
+            return Err("invalid attachment path".into());
+        }
+        has_rest = true;
+    }
+    if !has_rest {
+        return Err("invalid attachment path".into());
+    }
+
+    let attachments_root = data_dir.join("attachments");
+    std::fs::create_dir_all(&attachments_root).map_err(|e| e.to_string())?;
+    let canonical_root = attachments_root
+        .canonicalize()
+        .map_err(|e| format!("attachments root: {e}"))?;
+    let abs = data_dir.join(rel);
+    let canonical_abs = abs
+        .canonicalize()
+        .map_err(|_| "invalid attachment path".to_string())?;
+    if !canonical_abs.starts_with(&canonical_root) {
+        return Err("invalid attachment path".into());
+    }
+    if !canonical_abs.is_file() {
+        return Err("attachment path is not a file".into());
+    }
+    Ok(canonical_abs)
+}
+
+pub fn read_image_bytes(data_dir: &Path, rel_path: &str) -> Result<Vec<u8>, String> {
+    let abs = validated_attachment_abs(data_dir, rel_path)?;
+    let bytes = std::fs::read(&abs).map_err(|e| e.to_string())?;
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err(format!(
+            "image too large ({} MB max)",
+            MAX_IMAGE_BYTES / (1024 * 1024)
+        ));
+    }
+    Ok(bytes)
 }
 
 pub fn read_image_base64(data_dir: &Path, rel_path: &str, mime: &str) -> Result<String, String> {
@@ -139,8 +186,13 @@ pub fn read_image_base64(data_dir: &Path, rel_path: &str, mime: &str) -> Result<
 }
 
 /// Absolute path for `convertFileSrc` in the webview.
-pub fn absolute_attachment_path(data_dir: &Path, rel_path: &str) -> PathBuf {
-    data_dir.join(rel_path.trim().trim_start_matches('/'))
+///
+/// Returns `None` when the stored relative path is missing, escapes the
+/// attachments root, or does not resolve to a regular file — so a poisoned
+/// `messages.image_attachment` cannot expose `settings.json` / `.nova_crypto/ikm`
+/// (or arbitrary `$HOME` files via the asset protocol) through chat thumbnails.
+pub fn absolute_attachment_path(data_dir: &Path, rel_path: &str) -> Option<PathBuf> {
+    validated_attachment_abs(data_dir, rel_path).ok()
 }
 
 fn build_openai_user_message(
@@ -325,4 +377,88 @@ pub fn chat_turn_from_stored_with_image_policy(
         ollama_message,
         anthropic_message,
     })
+}
+
+#[cfg(test)]
+mod attachment_read_jail_tests {
+    use std::fs;
+    use std::path::PathBuf;
+
+    use super::{absolute_attachment_path, read_image_bytes, save_image_attachment};
+
+    fn temp_root(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("{name}-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn read_image_bytes_rejects_data_dir_secrets_outside_attachments() {
+        let root = temp_root("persistent-sage-attachment-secrets");
+        let data_dir = root.join("data");
+        fs::create_dir_all(data_dir.join("attachments")).unwrap();
+        fs::create_dir_all(data_dir.join(".nova_crypto")).unwrap();
+        fs::write(data_dir.join(".nova_crypto/ikm"), [9_u8; 32]).unwrap();
+        fs::write(data_dir.join("settings.json"), br#"{"openai_api_key":"secret"}"#).unwrap();
+
+        assert!(read_image_bytes(&data_dir, ".nova_crypto/ikm").is_err());
+        assert!(read_image_bytes(&data_dir, "settings.json").is_err());
+        assert!(absolute_attachment_path(&data_dir, ".nova_crypto/ikm").is_none());
+        assert!(absolute_attachment_path(&data_dir, "settings.json").is_none());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn read_image_bytes_rejects_dotdot_escape_even_when_lexical_prefix_matches() {
+        let root = temp_root("persistent-sage-attachment-dotdot");
+        let data_dir = root.join("data");
+        fs::create_dir_all(data_dir.join("attachments/conv")).unwrap();
+        fs::write(root.join("outside-secret.png"), [1_u8, 2, 3]).unwrap();
+
+        // Lexical join still "starts with" data_dir before .. resolution.
+        let sneaky = "attachments/conv/../../../outside-secret.png";
+        assert!(data_dir.join(sneaky).starts_with(&data_dir));
+        assert!(read_image_bytes(&data_dir, sneaky).is_err());
+        assert!(absolute_attachment_path(&data_dir, sneaky).is_none());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn read_image_bytes_allows_valid_saved_attachment() {
+        let root = temp_root("persistent-sage-attachment-ok");
+        let data_dir = root.join("data");
+        fs::create_dir_all(&data_dir).unwrap();
+
+        let (rel, _mime) =
+            save_image_attachment(&data_dir, "default", "image/png", "AQID").unwrap();
+        let bytes = read_image_bytes(&data_dir, &rel).unwrap();
+        assert_eq!(bytes, vec![1, 2, 3]);
+        let abs = absolute_attachment_path(&data_dir, &rel).expect("display path");
+        assert_eq!(fs::read(abs).unwrap(), vec![1, 2, 3]);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn read_image_bytes_rejects_symlink_escape_from_attachments() {
+        let root = temp_root("persistent-sage-attachment-symlink");
+        let data_dir = root.join("data");
+        let attachments = data_dir.join("attachments/conv");
+        fs::create_dir_all(&attachments).unwrap();
+        fs::create_dir_all(data_dir.join(".nova_crypto")).unwrap();
+        let secret = data_dir.join(".nova_crypto/ikm");
+        fs::write(&secret, [7_u8; 32]).unwrap();
+
+        let link = attachments.join("poison.png");
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&secret, &link).unwrap();
+            assert!(read_image_bytes(&data_dir, "attachments/conv/poison.png").is_err());
+            assert!(absolute_attachment_path(&data_dir, "attachments/conv/poison.png").is_none());
+        }
+
+        let _ = fs::remove_dir_all(root);
+    }
 }
