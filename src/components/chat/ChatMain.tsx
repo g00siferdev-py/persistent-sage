@@ -281,9 +281,9 @@ export function ChatMain({
                   personalityId: next,
                 });
               }}
-              disabled={threadLoading}
+              disabled={threadLoading || sending}
               className="h-9 max-w-[min(18rem,calc(100vw-12rem))] min-w-[11rem] appearance-none rounded-lg border border-indigo-400/40 bg-white/95 dark:bg-slate-950/90 py-1.5 pl-2.5 pr-8 text-xs font-semibold text-slate-900 dark:text-white outline-none transition hover:border-indigo-400/60 focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/30 disabled:opacity-50"
-              title="This companion receives new chats and uses their isolated memory"
+              title="This companion receives new chats and uses their isolated memory. Disabled while a reply is in progress."
             >
               {companionOptions.map((o) => (
                 <option key={o.id} value={o.id}>
