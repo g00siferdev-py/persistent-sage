@@ -80,6 +80,8 @@ export function useChat(options?: {
   const activeConversationIdRef = useRef<string | null>(null);
   /** Mirrors `activePersonalityId` for invoke payloads (always read right before IPC). */
   const activePersonalityIdRef = useRef(activePersonalityId);
+  /** Mirrors `sending` so companion switches from Settings can reject mid-turn. */
+  const sendingRef = useRef(false);
 
   // Keep internal state in sync with the external (lifted) state when it changes.
   useEffect(() => {
@@ -104,6 +106,10 @@ export function useChat(options?: {
   useEffect(() => {
     activePersonalityIdRef.current = activePersonalityId;
   }, [activePersonalityId]);
+
+  useEffect(() => {
+    sendingRef.current = sending;
+  }, [sending]);
 
   const refreshVisionSupported = useCallback(async () => {
     try {
@@ -304,6 +310,12 @@ export function useChat(options?: {
 
   const applyActivePersonality = useCallback(
     async (personalityId: string) => {
+      if (sendingRef.current) {
+        setError(
+          "Wait for the current reply to finish before switching companions. Switching mid-reply can lose the assistant message or mix memory across profiles.",
+        );
+        return [];
+      }
       const id = personalityId.trim() || "default";
       setThreadListHiddenFromSidebar(false);
       try {

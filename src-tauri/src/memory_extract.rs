@@ -324,6 +324,9 @@ async fn extract_and_store_inner(
     })?;
 
     let mut stored = 0usize;
+    let turn_personality = memory
+        .personality_id_for_conversation(conversation_id)
+        .map_err(|e| e.to_string())?;
     for item in parsed.memories {
         let content = item.content.trim();
         if content.chars().count() < 8 {
@@ -341,7 +344,15 @@ async fn extract_and_store_inner(
             Some(conversation_id)
         };
 
-        match memory.upsert_memory_anchor(conv_scope, ty, content, importance) {
+        // Pin ownership to the conversation that triggered extraction so a companion
+        // switch during the async pipeline cannot leak private facts into another profile.
+        match memory.upsert_memory_anchor_owned(
+            conv_scope,
+            &turn_personality,
+            ty,
+            content,
+            importance,
+        ) {
             Ok(id) => {
                 stored += 1;
                 eprintln!(

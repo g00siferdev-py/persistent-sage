@@ -349,6 +349,25 @@ pub trait ConversationMemory: Send + Sync {
     /// Remove a preference row (e.g. after migrating secrets to encrypted settings).
     fn preference_delete(&self, key: &str) -> Result<(), MemoryError>;
 
+    /// Owner personality for a conversation row (ignores the process-wide active profile).
+    ///
+    /// In-flight chat turns and async memory extraction must use this so a mid-turn
+    /// companion switch cannot retarget writes or drop assistant persistence.
+    fn personality_id_for_conversation(
+        &self,
+        conversation_id: &str,
+    ) -> Result<String, MemoryError>;
+
+    /// Upsert an anchor owned by an explicit companion (not necessarily the active one).
+    fn upsert_memory_anchor_owned(
+        &self,
+        conversation_id: Option<&str>,
+        personality_id: &str,
+        anchor_type: AnchorType,
+        content: &str,
+        importance: i32,
+    ) -> Result<String, MemoryError>;
+
     /// Scope subsequent list/create/recall operations to this companion profile id (`default` if empty).
     fn set_active_personality(&self, personality_id: &str);
 
@@ -937,6 +956,22 @@ impl MemoryAnchor {
             .lock()
             .map(|g| g.clone())
             .map_err(|_| MemoryError::LockPoisoned)
+    }
+
+    /// Personality that owns `conversation_id`, regardless of the process-wide active profile.
+    fn conversation_personality_id(&self, conversation_id: &str) -> Result<String, MemoryError> {
+        let conn = self.conn()?;
+        match conn.query_row(
+            "SELECT personality_id FROM conversations WHERE id = ?1",
+            params![conversation_id],
+            |r| r.get::<_, String>(0),
+        ) {
+            Ok(pid) => Ok(pid),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Err(MemoryError::UnknownConversation(
+                conversation_id.to_string(),
+            )),
+            Err(e) => Err(MemoryError::from(e)),
+        }
     }
 
     pub fn open_default() -> Result<Self, MemoryError> {
@@ -2026,8 +2061,9 @@ impl ConversationMemory for MemoryAnchor {
         image_mime: Option<&str>,
         artifact_json: Option<&str>,
     ) -> Result<(), MemoryError> {
-        self.assert_conversation_exists(conversation_id)?;
-        let pid = self.active_personality()?;
+        // Own the write by conversation row — not the mutable global active personality —
+        // so a mid-turn companion switch cannot drop or mis-tag the assistant reply.
+        let pid = self.conversation_personality_id(conversation_id)?;
         let conn = self.conn()?;
         let created_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         conn.execute(
@@ -2056,8 +2092,9 @@ impl ConversationMemory for MemoryAnchor {
         conversation_id: &str,
         limit: usize,
     ) -> Result<Vec<StoredMessage>, MemoryError> {
-        self.assert_conversation_exists(conversation_id)?;
-        let pid = self.active_personality()?;
+        // Scope by the conversation's owner so in-flight turns keep reading their thread
+        // even if the UI flips the global active companion mid-request.
+        let pid = self.conversation_personality_id(conversation_id)?;
         let limit_i: i64 = limit.try_into().unwrap_or(i64::MAX);
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
@@ -2475,8 +2512,41 @@ impl ConversationMemory for MemoryAnchor {
         content: &str,
         importance: i32,
     ) -> Result<String, MemoryError> {
+        let owner = if let Some(cid) = conversation_id {
+            self.conversation_personality_id(cid)?
+        } else {
+            self.active_personality()?
+        };
+        self.upsert_memory_anchor_owned(
+            conversation_id,
+            &owner,
+            anchor_type,
+            content,
+            importance,
+        )
+    }
+
+    fn personality_id_for_conversation(
+        &self,
+        conversation_id: &str,
+    ) -> Result<String, MemoryError> {
+        self.conversation_personality_id(conversation_id)
+    }
+
+    fn upsert_memory_anchor_owned(
+        &self,
+        conversation_id: Option<&str>,
+        personality_id: &str,
+        anchor_type: AnchorType,
+        content: &str,
+        importance: i32,
+    ) -> Result<String, MemoryError> {
         if let Some(cid) = conversation_id {
-            self.assert_conversation_exists(cid)?;
+            // Ensure the conversation exists and matches the claimed owner.
+            let owned = self.conversation_personality_id(cid)?;
+            if owned != personality_id {
+                return Err(MemoryError::UnknownConversation(cid.to_string()));
+            }
         }
         let trimmed = content.trim();
         if trimmed.is_empty() {
@@ -2484,8 +2554,7 @@ impl ConversationMemory for MemoryAnchor {
                 "anchor content is empty".into(),
             ));
         }
-        let active = self.active_personality()?;
-        let (pid, body) = resolve_anchor_personality_and_content(&active, trimmed);
+        let (pid, body) = resolve_anchor_personality_and_content(personality_id, trimmed);
         let conn = self.conn()?;
         if let Some(existing) = Self::anchor_id_for_content(&conn, conversation_id, &body, &pid)? {
             let imp = importance.clamp(1, 5);
@@ -2843,5 +2912,86 @@ mod anchor_storage_tests {
             c.iter().any(|s| s.chars().count() > 512),
             "expected a chunk >512 chars, got {c:?}"
         );
+    }
+
+    #[test]
+    fn store_message_survives_mid_turn_companion_switch() {
+        let dir = std::env::temp_dir().join(format!("nova_mem_mid_turn_{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        let path = dir.join("m.sqlite");
+        let mem = MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
+
+        ConversationMemory::set_active_personality(&mem, "alpha");
+        let conv_a =
+            ConversationMemory::create_conversation(&mem, "alpha-chat").expect("create alpha");
+        ConversationMemory::store_message(
+            &mem,
+            &conv_a,
+            MessageRole::User,
+            "My private alpha secret is sapphire.",
+            None,
+            None,
+            None,
+        )
+        .expect("user under alpha");
+
+        // Simulate the UI flipping companions while the assistant reply is still in flight.
+        ConversationMemory::set_active_personality(&mem, "beta");
+        ConversationMemory::store_message(
+            &mem,
+            &conv_a,
+            MessageRole::Assistant,
+            "Understood — I will remember sapphire for alpha.",
+            None,
+            None,
+            None,
+        )
+        .expect("assistant must persist against conversation owner, not active profile");
+
+        let recent = ConversationMemory::get_recent(&mem, &conv_a, 10).expect("get_recent");
+        assert_eq!(recent.len(), 2);
+        assert_eq!(recent[0].role, MessageRole::User);
+        assert_eq!(recent[1].role, MessageRole::Assistant);
+
+        let owner = ConversationMemory::personality_id_for_conversation(&mem, &conv_a)
+            .expect("owner");
+        assert_eq!(owner, "alpha");
+
+        // Global extract under the original conversation must stay on alpha even while beta is active.
+        ConversationMemory::upsert_memory_anchor_owned(
+            &mem,
+            None,
+            &owner,
+            AnchorType::Fact,
+            "User's private alpha secret is sapphire.",
+            4,
+        )
+        .expect("owned global upsert");
+
+        ConversationMemory::set_active_personality(&mem, "beta");
+        let beta_recall =
+            ConversationMemory::memory_recall(&mem, "sapphire", None, 8, 0, None).expect("beta");
+        assert!(
+            beta_recall
+                .anchors
+                .iter()
+                .all(|a| !a.content.to_lowercase().contains("sapphire")),
+            "beta must not see alpha's global fact after a mid-turn switch: {:?}",
+            beta_recall.anchors
+        );
+
+        ConversationMemory::set_active_personality(&mem, "alpha");
+        let alpha_recall =
+            ConversationMemory::memory_recall(&mem, "sapphire", None, 8, 0, None).expect("alpha");
+        assert!(
+            alpha_recall
+                .anchors
+                .iter()
+                .any(|a| a.content.to_lowercase().contains("sapphire")),
+            "alpha should still own the extracted fact: {:?}",
+            alpha_recall.anchors
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
