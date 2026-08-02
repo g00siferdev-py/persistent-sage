@@ -1033,12 +1033,23 @@ pub fn run() {
             .unwrap_or(false),
     );
 
+    // Resolve + lock the data directory before opening SQLite or creating
+    // settings crypto material. A late lock lets two first-run processes race
+    // `.nova_crypto/{ikm,salt}` against `settings.json` and orphan API keys.
+    let data_dir =
+        paths::resolve_data_directory().expect("failed to resolve Persistent Sage data directory");
+    eprintln!(
+        "persistent-sage: resolved data directory {}",
+        data_dir.display()
+    );
+    if let Err(e) = app_instance::acquire_data_dir_lock(&data_dir) {
+        eprintln!("persistent-sage: {e}");
+        std::process::exit(1);
+    }
+
     let memory: Arc<dyn ConversationMemory + Send + Sync> = Arc::new(
         MemoryAnchor::open_default().expect("failed to open Persistent Sage memory database"),
     );
-
-    let data_dir =
-        paths::resolve_data_directory().expect("failed to resolve Persistent Sage data directory");
     let settings = Arc::new(
         SettingsManager::load(data_dir.clone(), memory.clone()).expect("failed to load settings"),
     );
@@ -1046,10 +1057,6 @@ pub fn run() {
         Arc::new(PersonalityManager::load(&data_dir).expect("failed to load personality store"));
 
     let data_directory = data_dir;
-    eprintln!(
-        "persistent-sage: resolved data directory {}",
-        data_directory.display()
-    );
 
     browser_fetch::ensure_browser_directories(&data_directory);
 
@@ -1074,11 +1081,6 @@ pub fn run() {
         "persistent-sage: update channel {:?} (via Microsoft Store: {})",
         distribution.channel, distribution.updates_via_microsoft_store
     );
-
-    if let Err(e) = app_instance::acquire_data_dir_lock(&data_directory) {
-        eprintln!("persistent-sage: {e}");
-        std::process::exit(1);
-    }
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())

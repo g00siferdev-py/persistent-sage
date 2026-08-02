@@ -626,6 +626,39 @@ fn write_secret_file(path: &Path, data: &[u8]) -> std::io::Result<()> {
     std::fs::write(path, data)
 }
 
+/// Create a secret file only if it does not already exist. On `AlreadyExists`,
+/// returns `Ok(false)` so the caller can read the winner's bytes instead of
+/// clobbering them (double-launch first-run race).
+#[cfg(unix)]
+fn write_secret_file_exclusive(path: &Path, data: &[u8]) -> std::io::Result<bool> {
+    use std::os::unix::fs::OpenOptionsExt;
+    match OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)
+    {
+        Ok(mut f) => {
+            f.write_all(data)?;
+            Ok(true)
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+#[cfg(not(unix))]
+fn write_secret_file_exclusive(path: &Path, data: &[u8]) -> std::io::Result<bool> {
+    match OpenOptions::new().write(true).create_new(true).open(path) {
+        Ok(mut f) => {
+            f.write_all(data)?;
+            Ok(true)
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
 fn read_exact(path: &Path, n: usize) -> Result<Vec<u8>, SettingsError> {
     let v = std::fs::read(path)?;
     if v.len() != n {
@@ -651,8 +684,14 @@ fn load_or_create_salt(data_dir: &Path) -> Result<[u8; 16], SettingsError> {
     let mut s = [0u8; 16];
     rng.fill(&mut s)
         .map_err(|_| SettingsError::Crypto("rng salt".into()))?;
-    write_secret_file(&salt_path, &s)?;
-    Ok(s)
+    if write_secret_file_exclusive(&salt_path, &s)? {
+        return Ok(s);
+    }
+    // Another process created the salt first — use theirs.
+    let v = read_exact(&salt_path, 16)?;
+    let mut existing = [0u8; 16];
+    existing.copy_from_slice(&v);
+    Ok(existing)
 }
 
 /// Load or create the 32-byte IKM. **`ikm` on disk is canonical** so the same
@@ -684,8 +723,13 @@ fn load_or_create_ikm(data_dir: &Path) -> Result<[u8; 32], SettingsError> {
             if bytes.len() == 32 {
                 let mut k = [0u8; 32];
                 k.copy_from_slice(&bytes);
-                write_secret_file(&ikm_path, &k)?;
-                return Ok(k);
+                if write_secret_file_exclusive(&ikm_path, &k)? {
+                    return Ok(k);
+                }
+                let v = read_exact(&ikm_path, 32)?;
+                let mut existing = [0u8; 32];
+                existing.copy_from_slice(&v);
+                return Ok(existing);
             }
         }
     }
@@ -694,7 +738,10 @@ fn load_or_create_ikm(data_dir: &Path) -> Result<[u8; 32], SettingsError> {
     let mut ikm = [0u8; 32];
     rng.fill(&mut ikm)
         .map_err(|_| SettingsError::Crypto("rng ikm".into()))?;
-    write_secret_file(&ikm_path, &ikm)?;
+    if !write_secret_file_exclusive(&ikm_path, &ikm)? {
+        let v = read_exact(&ikm_path, 32)?;
+        ikm.copy_from_slice(&v);
+    }
     if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER) {
         let _ = entry.set_password(&hex::encode(ikm));
     }
@@ -1653,7 +1700,9 @@ fn normalize_key_slot(provider: &str) -> Result<String, SettingsError> {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_key_slot;
+    use super::*;
+    use std::sync::{Arc, Barrier};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn normalizes_api_key_slots_by_provider() {
@@ -1674,6 +1723,60 @@ mod tests {
         for (provider, slot) in cases {
             assert_eq!(normalize_key_slot(provider).unwrap(), slot);
         }
+    }
+
+    fn temp_data_dir(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "persistent_sage_crypto_{label}_{}_{}",
+            std::process::id(),
+            nanos
+        ));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        dir
+    }
+
+    #[test]
+    fn exclusive_ikm_create_does_not_clobber_winner() {
+        let dir = temp_data_dir("ikm_excl");
+        let ikm_path = dir.join(".nova_crypto").join("ikm");
+        std::fs::create_dir_all(ikm_path.parent().unwrap()).unwrap();
+        let winner = [7u8; 32];
+        assert!(write_secret_file_exclusive(&ikm_path, &winner).unwrap());
+        let loser = [9u8; 32];
+        assert!(!write_secret_file_exclusive(&ikm_path, &loser).unwrap());
+        assert_eq!(std::fs::read(&ikm_path).unwrap(), winner);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn concurrent_derive_aes_key_converges_on_disk_material() {
+        let dir = temp_data_dir("derive_race");
+        let barrier = Arc::new(Barrier::new(2));
+        let dir_a = dir.clone();
+        let dir_b = dir.clone();
+        let b1 = barrier.clone();
+        let b2 = barrier;
+        let t1 = std::thread::spawn(move || {
+            b1.wait();
+            derive_aes_key(&dir_a).expect("derive a")
+        });
+        let t2 = std::thread::spawn(move || {
+            b2.wait();
+            derive_aes_key(&dir_b).expect("derive b")
+        });
+        let key_a = t1.join().expect("join a");
+        let key_b = t2.join().expect("join b");
+        assert_eq!(
+            key_a, key_b,
+            "raced first-run derive must converge on one AES key"
+        );
+        let key_reload = derive_aes_key(&dir).expect("reload");
+        assert_eq!(key_a, key_reload);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 
