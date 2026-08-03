@@ -205,6 +205,7 @@ pub async fn run_recipe(
             ephemeral_user_note: crate::chat::EphemeralUserNote::None,
             coding_context: None,
             ui_theme: None,
+            skip_if_busy: false,
         },
     )
     .await

@@ -173,23 +173,40 @@ export function HelpContent() {
           <li>
             A customizable canvas of <strong>movable widgets</strong> — drag a
             widget by its header, resize from the corner, and add or close
-            widgets from the toolbar. Your layout is remembered.
+            widgets from the toolbar. Your layout is remembered. Open{" "}
+            <strong>Settings</strong> from the Productivity top bar anytime.
           </li>
           <li>
-            <strong>Email, Calendar, and Documents</strong> widgets are powered
-            by your Google account (Gmail / Google Calendar / Google Drive).
-            Set up under <strong>Settings → Tools → Google Workspace</strong>,
-            then click <em>Connect Google account</em>.
+            <strong>Email, Calendar, Documents, Contacts, and Tasks</strong> use
+            your Google account. Connect under{" "}
+            <strong>Settings → Tools → Google Workspace</strong>. Official releases
+            support one-click Sign in with Google; self-builds use Advanced OAuth.
+            Optionally connect an <strong>agent&apos;s designated email</strong>. A single
+            global <strong>Email Agent</strong> thread handles that mailbox. Other companions
+            share context through <span className="font-mono">correspondence_sync.md</span>{" "}
+            (structured tool edits only). Inbox watch dirty-checks timestamps so the Email
+            Agent only re-reads the sync file when it changed. While unverified, add both
+            addresses as consent-screen test users.
           </li>
           <li>
-            <strong>Projects</strong> — create and browse collaborative project
-            documents here; continue them conversationally from companion chat.
+            <strong>Pulses</strong> (Settings → General) — multiple independent
+            timers (e.g. custom checks every few minutes). Each has its own
+            instructions and uses your open chat thread.
           </li>
           <li>
-            With <strong>companion agent tools</strong> enabled, you can ask
-            things like &ldquo;any email from Vanessa today?&rdquo;, &ldquo;add a
-            vet appointment Tuesday at 11am&rdquo;, or &ldquo;draft an email with
-            the payoff request from my Drive attached&rdquo; right from chat.
+            <strong>Weather</strong> uses Open-Meteo (no Google setup).{" "}
+            <strong>Clock</strong>, <strong>Quick Links</strong>, and{" "}
+            <strong>Notepad</strong> stay local on this machine.{" "}
+            <strong>Projects</strong> live here; continue them from companion
+            chat.
+          </li>
+          <li>
+            With <strong>companion agent tools</strong> enabled (Settings → Tools →
+            Google Workspace), the companion can use the same Google data as your
+            widgets — email, calendar, Drive, contacts, and tasks — plus{" "}
+            <strong>weather_lookup</strong> for forecasts. Ask things like
+            &ldquo;any email from Vanessa today?&rdquo;, &ldquo;add milk to my
+            tasks&rdquo;, or &ldquo;what&rsquo;s the weather in Boston?&rdquo;
           </li>
         </ul>
       </Section>

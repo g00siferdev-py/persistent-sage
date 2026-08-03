@@ -288,6 +288,7 @@ Full guide: [CODING-MODE.md](./CODING-MODE.md).
 | `ollama` | Ollama (local) | No | `http://127.0.0.1:11434` |
 | `ollama_cloud` | Ollama Cloud | Yes | Ollama cloud endpoint |
 | `anthropic` | Anthropic | Yes | Anthropic API |
+| `openrouter` | OpenRouter | Yes | `https://openrouter.ai/api/v1` |
 
 **Model examples:**
 
@@ -295,10 +296,24 @@ Full guide: [CODING-MODE.md](./CODING-MODE.md).
 - Gemini: `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-2.0-flash`
 - xAI: `grok-4-fast-reasoning`, `grok-4-fast-non-reasoning`, `grok-3`, `grok-3-mini`
 - Ollama local: `llama3.2`, vision models like `llava`
-- Ollama Cloud: `kimi-k2.5:cloud`, `gpt-oss:120b-cloud`
+- Ollama Cloud: `kimi-k2.6` (Ollama retires cloud models often — use **Refresh Models** rather than a hardcoded name)
 - Anthropic: Claude Sonnet/Haiku/Opus model IDs
+- OpenRouter: `author/model` ids such as `openai/gpt-4o-mini` or `anthropic/claude-3.5-sonnet`
 
 Local Ollama and Ollama Cloud have **separate model selectors** in Settings.
+
+**Model lists are capability-filtered.** `Refresh Models` asks the provider what it
+actually offers and drops anything Persistent Sage cannot drive as a chat backend
+(embedding, image-output, transcription, and moderation models; for OpenRouter, any
+model that does not advertise `tools`; for Ollama, anything whose `/api/show`
+capabilities lack `completion`). Once a refresh succeeds the picker shows only those
+entries plus your saved model, so a retired preset cannot be selected again. Each
+entry is annotated with `free`, `tools`, `vision`, and context size where the provider
+reports them.
+
+**Test model** sits under the picker for the provider currently selected for chat. It
+sends one throwaway prompt and reports the reply or the provider's error (HTTP status
+included), so a retired or incompatible model fails in Settings instead of mid-chat.
 
 #### Tools tab
 

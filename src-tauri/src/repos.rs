@@ -297,6 +297,7 @@ fn should_skip_tree_entry(name: &str) -> bool {
 fn build_repo_tree(
     workspace_root: &Path,
     dir: &Path,
+    // Path relative to the repo root (not the workspace), e.g. `src` or ``.
     path_rel: &str,
     depth: usize,
     budget: &mut usize,
@@ -319,13 +320,14 @@ fn build_repo_tree(
         if should_skip_tree_entry(&name) {
             continue;
         }
+        // Repo-relative paths for the IDE (`src/main.rs`), not workspace-relative
+        // (`repos/my-app/src/main.rs`) — coding_read_file joins with the repo prefix.
         let child_rel = if path_rel.is_empty() {
             name.clone()
         } else {
             format!("{path_rel}/{name}")
         };
-        let full = resolve_workspace_subpath(workspace_root, &child_rel)
-            .map_err(|e: ProviderError| e.to_string())?;
+        let full = entry.path();
         assert_path_in_workspace(workspace_root, &full).map_err(|e| e.to_string())?;
         let ft = entry.file_type().map_err(|e| e.to_string())?;
         if ft.is_dir() {
@@ -362,7 +364,8 @@ pub fn repo_file_tree(workspace_root: &Path, repo_path_rel: &str) -> Result<Vec<
         return Err(format!("repo path is not a directory: {rel}"));
     }
     let mut budget = MAX_TREE_NODES;
-    build_repo_tree(workspace_root, &root, rel, 0, &mut budget)
+    // Empty prefix → node.path_rel is repo-relative for coding_read_file / the editor.
+    build_repo_tree(workspace_root, &root, "", 0, &mut budget)
 }
 
 /// Resolve a registered repo by id (syncs disk → index first).
@@ -752,6 +755,51 @@ mod tests {
         assert!(repo_dir.join("requirements.txt").is_file());
         assert!(repo_dir.join("py_demo/main.py").is_file());
         assert!(repo_dir.join(".git").exists());
+        let _ = std::fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn file_tree_paths_are_repo_relative() {
+        let workspace = tmp_workspace();
+        std::fs::create_dir_all(&workspace).unwrap();
+        ensure_repos_tree(&workspace);
+        let meta = create_repository(&workspace, "tree-demo", Some("empty")).unwrap();
+        let nested = workspace.join("repos/tree-demo/src");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("main.rs"), "fn main() {}").unwrap();
+
+        let tree = repo_file_tree(&workspace, &meta.path_rel).unwrap();
+        let readme = tree.iter().find(|n| n.name == "README.md").expect("README");
+        assert_eq!(readme.path_rel, "README.md");
+        assert!(!readme.path_rel.starts_with("repos/"));
+
+        let src = tree.iter().find(|n| n.name == "src").expect("src dir");
+        assert_eq!(src.path_rel, "src");
+        let main = src
+            .children
+            .iter()
+            .find(|n| n.name == "main.rs")
+            .expect("main.rs");
+        assert_eq!(main.path_rel, "src/main.rs");
+
+        // IDE join must resolve to a real file.
+        let joined = crate::coding_tools::resolve_repo_file_path(
+            &workspace,
+            &meta.path_rel,
+            &main.path_rel,
+        )
+        .unwrap();
+        assert!(joined.is_file(), "missing {}", joined.display());
+
+        // Legacy workspace-relative paths still open.
+        let legacy = crate::coding_tools::resolve_repo_file_path(
+            &workspace,
+            &meta.path_rel,
+            "repos/tree-demo/src/main.rs",
+        )
+        .unwrap();
+        assert_eq!(legacy, joined);
+
         let _ = std::fs::remove_dir_all(&workspace);
     }
 }

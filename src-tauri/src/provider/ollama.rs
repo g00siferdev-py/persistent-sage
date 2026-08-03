@@ -9,9 +9,52 @@ use serde_json::{json, Value};
 use super::engine::LLMProviderEngine;
 use super::error::ProviderError;
 use super::types::{
-    CompletionRequest, CompletionResponse, ModelInfo, StreamChunk, ToolCall, ToolDefinition,
+    CompletionRequest, CompletionResponse, ModelCatalogEntry, ModelInfo, StreamChunk, ToolCall,
+    ToolDefinition,
 };
 use crate::settings::SettingsManager;
+
+/// `error_for_status` hides Ollama's JSON error body, which is where the useful message lives.
+async fn ok_or_api_error(
+    res: reqwest::Response,
+    cloud_model: Option<&str>,
+) -> Result<reqwest::Response, ProviderError> {
+    if res.status().is_success() {
+        return Ok(res);
+    }
+    let status = res.status();
+    let body = res.text().await.unwrap_or_default();
+    let body: String = body.trim().chars().take(2000).collect();
+    let mut message = format!("HTTP {status}: {body}");
+    if let Some(hint) = retirement_hint(status, &body, cloud_model) {
+        message.push_str("\n\n");
+        message.push_str(&hint);
+    }
+    Err(ProviderError::Api(message))
+}
+
+/// Ollama retires cloud models without notice, and the raw 404 does not say so.
+fn retirement_hint(
+    status: reqwest::StatusCode,
+    body: &str,
+    cloud_model: Option<&str>,
+) -> Option<String> {
+    let model = cloud_model?;
+    let lower = body.to_ascii_lowercase();
+    let looks_missing = status == reqwest::StatusCode::NOT_FOUND
+        || lower.contains("not found")
+        || lower.contains("does not exist")
+        || lower.contains("unknown model");
+    if !looks_missing {
+        return None;
+    }
+    Some(format!(
+        "`{model}` is not available on your Ollama Cloud account. Ollama retires cloud \
+         models regularly, so this one was most likely withdrawn or renamed. Open \
+         Settings → Provider → Ollama · Cloud and press Refresh Models to pick a model \
+         that is offered today."
+    ))
+}
 
 /// Typical context for recent Ollama models (conservative default).
 const DEFAULT_OLLAMA_CTX: u32 = 128_000;
@@ -66,6 +109,11 @@ impl OllamaProvider {
             Some(t) => req.header("Authorization", format!("Bearer {t}")),
             None => req,
         }
+    }
+
+    /// The model name to blame in a retirement hint — cloud only; local misses are the user's pull.
+    fn cloud_model(&self) -> Option<&str> {
+        self.bearer_token.is_some().then_some(self.model.as_str())
     }
 
     fn build_messages(request: &CompletionRequest) -> Vec<Value> {
@@ -186,8 +234,8 @@ impl LLMProviderEngine for OllamaProvider {
             .authorized(self.client.post(self.chat_url()).json(&body))
             .timeout(Duration::from_secs(300))
             .send()
-            .await?
-            .error_for_status()?;
+            .await?;
+        let res = ok_or_api_error(res, self.cloud_model()).await?;
 
         let v: Value = res.json().await?;
         if let Some(err) = v["error"].as_str() {
@@ -242,8 +290,8 @@ impl LLMProviderEngine for OllamaProvider {
             .authorized(self.client.post(self.chat_url()).json(&body))
             .timeout(Duration::from_secs(300))
             .send()
-            .await?
-            .error_for_status()?;
+            .await?;
+        let res = ok_or_api_error(res, self.cloud_model()).await?;
 
         let mut stream = res.bytes_stream();
         let mut line_buf = String::new();
@@ -297,22 +345,24 @@ impl LLMProviderEngine for OllamaProvider {
     }
 }
 
-/// Lists model names from Ollama Cloud (`GET https://ollama.com/api/tags`) using the encrypted `ollama` API key.
-pub async fn fetch_ollama_cloud_model_tags(
+// --- Model catalogs ----------------------------------------------------------
+
+/// How many `/api/show` probes run at once while building a catalog.
+const SHOW_CONCURRENCY: usize = 4;
+
+async fn fetch_model_tags(
     http: &reqwest::Client,
-    settings: &SettingsManager,
+    base: &str,
+    token: Option<&str>,
 ) -> Result<Vec<String>, ProviderError> {
-    let token = settings
-        .decrypt_api_key("ollama")?
-        .filter(|s| !s.trim().is_empty())
-        .ok_or(ProviderError::MissingApiKey("ollama"))?;
-    let res = http
-        .get("https://ollama.com/api/tags")
-        .header("Authorization", format!("Bearer {}", token.trim()))
-        .timeout(Duration::from_secs(45))
-        .send()
-        .await?
-        .error_for_status()?;
+    let url = format!("{}/api/tags", base.trim_end_matches('/'));
+    let mut req = http.get(&url).timeout(Duration::from_secs(45));
+    if let Some(t) = token {
+        req = req.header("Authorization", format!("Bearer {}", t.trim()));
+    }
+    // Listing tags is not tied to one selected model, so retirement guidance
+    // cannot name a model here.
+    let res = ok_or_api_error(req.send().await?, None).await?;
     let v: Value = res.json().await?;
     if let Some(msg) = v["error"].as_str() {
         return Err(ProviderError::Api(msg.to_string()));
@@ -330,33 +380,165 @@ pub async fn fetch_ollama_cloud_model_tags(
     Ok(names)
 }
 
-/// Lists tags from local Ollama `GET {base}/api/tags` (no API key).
+/// Capabilities reported by `POST {base}/api/show` (`completion`, `tools`, `vision`, …).
+/// `None` means the probe failed or the field was absent.
+async fn fetch_model_capabilities(
+    http: &reqwest::Client,
+    base: &str,
+    model: &str,
+    token: Option<&str>,
+) -> Option<Vec<String>> {
+    let url = format!("{}/api/show", base.trim_end_matches('/'));
+    let mut req = http
+        .post(&url)
+        .json(&json!({ "model": model }))
+        .timeout(Duration::from_secs(30));
+    if let Some(t) = token {
+        req = req.header("Authorization", format!("Bearer {}", t.trim()));
+    }
+    let res = req.send().await.ok()?;
+    if !res.status().is_success() {
+        return None;
+    }
+    let v: Value = res.json().await.ok()?;
+    let caps: Vec<String> = v["capabilities"]
+        .as_array()?
+        .iter()
+        .filter_map(|c| c.as_str())
+        .map(|c| c.to_ascii_lowercase())
+        .collect();
+    if caps.is_empty() {
+        None
+    } else {
+        Some(caps)
+    }
+}
+
+/// Local models with no `capabilities` (older Ollama builds): drop the obvious non-chat ones.
+fn local_name_looks_like_chat_model(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    !(n.contains("embed") || n.contains("rerank") || n.contains("bge") || n.contains("minilm"))
+}
+
+fn name_looks_vision_capable(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    n.contains("llava")
+        || n.contains("vision")
+        || n.contains("bakllava")
+        || n.contains("moondream")
+        || n.contains("minicpm-v")
+        || n.contains("-vl")
+        || n.contains("_vl")
+}
+
+async fn build_ollama_catalog(
+    http: &reqwest::Client,
+    base: &str,
+    token: Option<&str>,
+    local: bool,
+) -> Result<Vec<ModelCatalogEntry>, ProviderError> {
+    let names = fetch_model_tags(http, base, token).await?;
+    let probes = names.into_iter().map(|name| async move {
+        let caps = fetch_model_capabilities(http, base, &name, token).await;
+        (name, caps)
+    });
+    let probed: Vec<(String, Option<Vec<String>>)> = futures_util::stream::iter(probes)
+        .buffer_unordered(SHOW_CONCURRENCY)
+        .collect()
+        .await;
+
+    let mut entries: Vec<ModelCatalogEntry> = Vec::new();
+    for (name, caps) in probed {
+        let entry = match caps {
+            Some(caps) => {
+                let usable = caps.iter().any(|c| c == "completion")
+                    && caps.iter().any(|c| c == "tools");
+                if !usable {
+                    continue;
+                }
+                ModelCatalogEntry {
+                    supports_vision: caps.iter().any(|c| c == "vision"),
+                    label: name.clone(),
+                    id: name,
+                    supports_tools: true,
+                    context_length: None,
+                    is_free: local,
+                }
+            }
+            // Cloud always reports capabilities; a missing answer there means "don't offer it".
+            None if !local || !local_name_looks_like_chat_model(&name) => continue,
+            None => ModelCatalogEntry {
+                supports_vision: name_looks_vision_capable(&name),
+                label: name.clone(),
+                id: name,
+                supports_tools: true,
+                context_length: None,
+                is_free: true,
+            },
+        };
+        entries.push(entry);
+    }
+    entries.sort_by(|a, b| a.id.cmp(&b.id));
+    entries.dedup_by(|a, b| a.id == b.id);
+    Ok(entries)
+}
+
+/// Tool-capable models on Ollama Cloud (`https://ollama.com`) using the encrypted `ollama` API key.
+pub async fn fetch_ollama_cloud_model_tags(
+    http: &reqwest::Client,
+    settings: &SettingsManager,
+) -> Result<Vec<ModelCatalogEntry>, ProviderError> {
+    let token = settings
+        .decrypt_api_key("ollama")?
+        .filter(|s| !s.trim().is_empty())
+        .ok_or(ProviderError::MissingApiKey("ollama"))?;
+    build_ollama_catalog(http, "https://ollama.com", Some(token.trim()), false).await
+}
+
+/// Tool-capable models pulled locally (`{base}/api/tags`, no API key).
 pub async fn fetch_ollama_local_model_tags(
     http: &reqwest::Client,
     settings: &SettingsManager,
-) -> Result<Vec<String>, ProviderError> {
+) -> Result<Vec<ModelCatalogEntry>, ProviderError> {
     let base = settings.ollama_base_url();
-    let base = base.trim_end_matches('/');
-    let url = format!("{}/api/tags", base);
-    let res = http
-        .get(&url)
-        .timeout(Duration::from_secs(45))
-        .send()
-        .await?
-        .error_for_status()?;
-    let v: Value = res.json().await?;
-    if let Some(err) = v["error"].as_str() {
-        return Err(ProviderError::Api(err.to_string()));
+    build_ollama_catalog(http, base.trim_end_matches('/'), None, true).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{local_name_looks_like_chat_model, name_looks_vision_capable, retirement_hint};
+    use reqwest::StatusCode;
+
+    #[test]
+    fn explains_retired_cloud_models() {
+        let hint = retirement_hint(StatusCode::NOT_FOUND, "model not found", Some("kimi-k2.5"))
+            .expect("hint for a missing cloud model");
+        assert!(hint.contains("kimi-k2.5"));
+        assert!(hint.contains("Refresh Models"));
     }
-    let mut names = Vec::new();
-    if let Some(models) = v["models"].as_array() {
-        for m in models {
-            if let Some(n) = m["name"].as_str() {
-                names.push(n.to_string());
-            }
-        }
+
+    #[test]
+    fn leaves_unrelated_cloud_failures_alone() {
+        // Auth and rate-limit problems are not retirements; don't misdirect the user.
+        assert!(retirement_hint(StatusCode::UNAUTHORIZED, "invalid key", Some("kimi-k2.6")).is_none());
+        assert!(
+            retirement_hint(StatusCode::TOO_MANY_REQUESTS, "slow down", Some("kimi-k2.6")).is_none()
+        );
+        // Local Ollama has no cloud model to blame.
+        assert!(retirement_hint(StatusCode::NOT_FOUND, "model not found", None).is_none());
     }
-    names.sort();
-    names.dedup();
-    Ok(names)
+
+    #[test]
+    fn drops_embedding_only_local_models_without_capabilities() {
+        assert!(!local_name_looks_like_chat_model("nomic-embed-text:latest"));
+        assert!(!local_name_looks_like_chat_model("bge-m3"));
+        assert!(local_name_looks_like_chat_model("llama3.2:latest"));
+    }
+
+    #[test]
+    fn detects_vision_models_by_name() {
+        assert!(name_looks_vision_capable("llama3.2-vision:11b"));
+        assert!(name_looks_vision_capable("qwen2.5-vl:7b"));
+        assert!(!name_looks_vision_capable("llama3.2:latest"));
+    }
 }

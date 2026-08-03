@@ -417,43 +417,36 @@ export function GeneralSettingsTab({
       </SettingsSection>
 
       <section className="space-y-3 rounded-lg border border-ps-accent/40 bg-ps-accent-soft p-3 ring-1 ring-ps-accent/25">
-        <div className="flex items-center gap-2">
-          <Activity className="size-4 text-ps-accent" aria-hidden />
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ps-accent/90">Pulse</h3>
-        </div>
-        <p className="text-[11px] leading-relaxed text-ps-faint">
-          On a timer, Persistent Sage runs a <strong className="font-medium text-ps-muted">background check-in</strong> using
-          the chat thread you have open for context. Your Pulse instructions are <strong className="font-medium text-ps-muted">not</strong> shown
-          in chat; the assistant reply appears there as <span className="font-mono text-ps-muted">Pulse Response : [time] - …</span>.
-          A copy also appears below under <strong className="font-medium text-ps-muted">Last result</strong>.
-          Keep that thread selected in the sidebar while Pulse is on. Enable tools under the <strong className="font-medium text-ps-muted">Tools</strong> tab
-          (for example workspace writes to <span className="font-mono text-ps-muted">Journal.md</span> or web fetch) if your Pulse instructions need them.
-        </p>
-        {settings?.pulseConversationId ? (
-          <p className="font-mono text-[10px] text-ps-faint" title={settings.pulseConversationId}>
-            Bound thread:{" "}
-            {settings.pulseConversationId.length > 14
-              ? `${settings.pulseConversationId.slice(0, 12)}…`
-              : settings.pulseConversationId}
-          </p>
-        ) : (
-          <p className="text-[10px] text-amber-400/90">No thread bound — select a conversation in the sidebar.</p>
-        )}
-        <div className="flex items-start gap-3 rounded-lg border border-ps-border/70 bg-ps-elevated dark:bg-ps-canvas px-3 py-2.5">
-          <input
-            id="pulse-enabled"
-            type="checkbox"
-            className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-ps-border accent-ps-accent"
-            checked={settings?.pulseEnabled ?? false}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Activity className="size-4 text-ps-accent" aria-hidden />
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ps-accent/90">Pulses</h3>
+          </div>
+          <button
+            type="button"
+            className="ps-btn px-2 py-1 text-[11px]"
             disabled={!settings}
-            onChange={(e) => {
-              const pulseEnabled = e.target.checked;
-              setSettings((s) => (s ? { ...s, pulseEnabled } : s));
+            onClick={() => {
+              if (!settings) return;
+              const id = `pulse-${Date.now().toString(36)}`;
+              const pulses = [
+                ...(settings.pulses ?? []),
+                {
+                  id,
+                  name: "New Pulse",
+                  enabled: false,
+                  intervalMinutes: 15,
+                  instructions: "",
+                  conversationId: settings.pulseConversationId ?? null,
+                  lastRunAt: null,
+                },
+              ];
+              setSettings((s) => (s ? { ...s, pulses } : s));
               flushDebounce();
               void (async () => {
                 try {
                   setError(null);
-                  const next = await applySettingsPatch({ pulseEnabled });
+                  const next = await applySettingsPatch({ pulses });
                   setSettings(next);
                 } catch (err) {
                   setError(String(err));
@@ -461,90 +454,159 @@ export function GeneralSettingsTab({
                 }
               })();
             }}
-          />
-          <div className="min-w-0 space-y-1">
-            <label htmlFor="pulse-enabled" className="cursor-pointer text-xs font-medium text-ps-muted">
-              Enable Pulse
-            </label>
-            <p className="text-[11px] text-ps-faint">
-              Requires a real provider (not Placeholder). The first tick runs after one full interval from app
-              startup.
-            </p>
-          </div>
+          >
+            Add Pulse
+          </button>
         </div>
-        <div className="space-y-1.5">
-          <label className="block text-xs font-medium text-ps-muted" htmlFor="pulse-interval">
-            Interval (minutes)
-          </label>
-          <input
-            id="pulse-interval"
-            type="number"
-            min={1}
-            max={1440}
-            disabled={!settings}
-            value={settings?.pulseIntervalMinutes ?? 15}
-            onChange={(e) => {
-              const raw = Number.parseInt(e.target.value, 10);
-              const pulseIntervalMinutes = Number.isNaN(raw) ? 15 : Math.min(1440, Math.max(1, raw));
-              setSettings((s) => (s ? { ...s, pulseIntervalMinutes } : s));
-              schedulePatch({ pulseIntervalMinutes });
-            }}
-            className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50 disabled:opacity-50"
-          />
-          <p className="text-[10px] text-ps-muted">1–1440. The background loop picks up changes on the next wait.</p>
-        </div>
-        <div className="space-y-1.5">
-          <label className="block text-xs font-medium text-ps-muted" htmlFor="pulse-instructions">
-            Instructions for each tick
-          </label>
-          <textarea
-            id="pulse-instructions"
-            rows={5}
-            disabled={!settings}
-            value={settings?.pulseInstructions ?? ""}
-            onChange={(e) => {
-              const pulseInstructions = e.target.value;
-              setSettings((s) => (s ? { ...s, pulseInstructions } : s));
-              schedulePatch({ pulseInstructions });
-            }}
-            className="w-full resize-y rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-ps-accent/50 disabled:opacity-50"
-            placeholder="What should the model focus on when Pulse fires?"
-          />
-        </div>
-        <button
-          type="button"
-          disabled={
-            !settings ||
-            pulseNowLoading ||
-            settings.selectedProvider === "placeholder" ||
-            !settings.pulseConversationId?.trim()
-          }
-          onClick={() => {
-            void (async () => {
-              try {
-                setPulseNowLoading(true);
-                setError(null);
-                await invoke("pulse_run_now");
-              } catch (err) {
-                setError(String(err));
-              } finally {
-                setPulseNowLoading(false);
-              }
-            })();
-          }}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-ps-accent/50 bg-ps-accent-soft px-3 py-2 text-xs font-semibold text-ps-accent hover:bg-ps-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {pulseNowLoading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-          Send Pulse now
-        </button>
-        <p className="text-[10px] text-ps-muted">
-          Runs one check-in immediately using the bound thread. Pulse does not need to be enabled. Result appears
-          below.
+        <p className="text-[11px] leading-relaxed text-ps-faint">
+          Each Pulse is an independent background check-in (interval + instructions) on your open chat
+          thread. Example: check Sage&apos;s Gmail every 5 minutes with tools, and scrape a job site every
+          10. Replies appear as <span className="font-mono text-ps-muted">Pulse (name) : [time] - …</span>.
         </p>
+        {settings?.pulseConversationId ? (
+          <p className="font-mono text-[10px] text-ps-faint" title={settings.pulseConversationId}>
+            Default bound thread:{" "}
+            {settings.pulseConversationId.length > 14
+              ? `${settings.pulseConversationId.slice(0, 12)}…`
+              : settings.pulseConversationId}
+          </p>
+        ) : (
+          <p className="text-[10px] text-amber-400/90">No thread bound — select a conversation in the sidebar.</p>
+        )}
+        {(settings?.pulses ?? []).length === 0 ? (
+          <p className="text-[11px] text-ps-faint">No pulses yet — click Add Pulse.</p>
+        ) : null}
+        {(settings?.pulses ?? []).map((pulse, idx) => (
+          <div
+            key={pulse.id}
+            className="space-y-2 rounded-lg border border-ps-border/70 bg-ps-elevated px-3 py-2.5 dark:bg-ps-canvas"
+          >
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                className="size-4 shrink-0 cursor-pointer rounded border-ps-border accent-ps-accent"
+                checked={pulse.enabled}
+                disabled={!settings}
+                onChange={(e) => {
+                  const pulses = (settings?.pulses ?? []).map((p, i) =>
+                    i === idx ? { ...p, enabled: e.target.checked } : p,
+                  );
+                  setSettings((s) => (s ? { ...s, pulses } : s));
+                  schedulePatch({ pulses });
+                }}
+                aria-label={`Enable ${pulse.name}`}
+              />
+              <input
+                className="ps-input min-w-0 flex-1 px-2 py-1 text-xs font-medium"
+                value={pulse.name}
+                disabled={!settings}
+                onChange={(e) => {
+                  const pulses = (settings?.pulses ?? []).map((p, i) =>
+                    i === idx ? { ...p, name: e.target.value } : p,
+                  );
+                  setSettings((s) => (s ? { ...s, pulses } : s));
+                  schedulePatch({ pulses });
+                }}
+                aria-label="Pulse name"
+              />
+              <button
+                type="button"
+                className="ps-btn-ghost p-1 text-ps-danger"
+                title="Delete pulse"
+                onClick={() => {
+                  const pulses = (settings?.pulses ?? []).filter((_, i) => i !== idx);
+                  setSettings((s) => (s ? { ...s, pulses } : s));
+                  flushDebounce();
+                  void (async () => {
+                    try {
+                      const next = await applySettingsPatch({ pulses });
+                      setSettings(next);
+                    } catch (err) {
+                      setError(String(err));
+                      await refreshSettings();
+                    }
+                  })();
+                }}
+              >
+                <Trash2 className="size-3.5" aria-hidden />
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-[10px] text-ps-muted">
+                Every
+                <input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  className="ps-input ml-1 w-16 px-2 py-1 font-mono text-xs"
+                  value={pulse.intervalMinutes}
+                  disabled={!settings}
+                  onChange={(e) => {
+                    const raw = Number.parseInt(e.target.value, 10);
+                    const intervalMinutes = Number.isNaN(raw)
+                      ? 15
+                      : Math.min(1440, Math.max(1, raw));
+                    const pulses = (settings?.pulses ?? []).map((p, i) =>
+                      i === idx ? { ...p, intervalMinutes } : p,
+                    );
+                    setSettings((s) => (s ? { ...s, pulses } : s));
+                    schedulePatch({ pulses });
+                  }}
+                />{" "}
+                min
+              </label>
+              <button
+                type="button"
+                className="ps-btn px-2 py-1 text-[11px]"
+                disabled={
+                  !settings ||
+                  pulseNowLoading ||
+                  settings.selectedProvider === "placeholder" ||
+                  !(pulse.conversationId || settings.pulseConversationId)?.trim()
+                }
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      setPulseNowLoading(true);
+                      setError(null);
+                      await invoke("pulse_run_now", { pulseId: pulse.id });
+                    } catch (err) {
+                      setError(String(err));
+                    } finally {
+                      setPulseNowLoading(false);
+                    }
+                  })();
+                }}
+              >
+                Run now
+              </button>
+            </div>
+            <textarea
+              rows={3}
+              disabled={!settings}
+              value={pulse.instructions}
+              onChange={(e) => {
+                const pulses = (settings?.pulses ?? []).map((p, i) =>
+                  i === idx ? { ...p, instructions: e.target.value } : p,
+                );
+                setSettings((s) => (s ? { ...s, pulses } : s));
+                schedulePatch({ pulses });
+              }}
+              className="w-full resize-y rounded-lg border border-ps-border bg-ps-surface px-3 py-2 text-sm text-ps-ink outline-none focus:border-ps-accent/50 disabled:opacity-50"
+              placeholder="What should this Pulse do? (e.g. check agent unread mail with gmail_search account=agent)"
+            />
+            {pulse.lastRunAt ? (
+              <p className="font-mono text-[10px] text-ps-faint">Last run: {pulse.lastRunAt}</p>
+            ) : null}
+          </div>
+        ))}
         <div className="space-y-1.5 border-t border-ps-border/70 pt-3">
           <p className="text-[11px] font-medium text-ps-muted">Last result (this session)</p>
           {lastPulse ? (
-            <div className="rounded-md border border-ps-border bg-ps-elevated dark:bg-ps-canvas p-2">
+            <div className="rounded-md border border-ps-border bg-ps-elevated p-2 dark:bg-ps-canvas">
+              {lastPulse.pulseName ? (
+                <p className="mb-1 text-[10px] font-medium text-ps-muted">{lastPulse.pulseName}</p>
+              ) : null}
               {lastPulse.conversationId ? (
                 <p className="mb-1 font-mono text-[10px] text-ps-faint" title={lastPulse.conversationId}>
                   Thread:{" "}
@@ -560,12 +622,9 @@ export function GeneralSettingsTab({
               {lastPulse.error ? (
                 <p className="mt-2 text-[11px] text-amber-200/90">{lastPulse.error}</p>
               ) : null}
-              {!lastPulse.ok && !lastPulse.error && !lastPulse.summary ? (
-                <p className="mt-1 text-[11px] text-ps-faint">Empty response.</p>
-              ) : null}
             </div>
           ) : (
-            <p className="text-[11px] text-ps-muted">No tick yet — use Send Pulse now or enable the timer.</p>
+            <p className="text-[11px] text-ps-muted">No tick yet — use Run now or enable a timer.</p>
           )}
         </div>
       </section>

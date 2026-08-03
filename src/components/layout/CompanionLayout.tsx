@@ -26,6 +26,7 @@ type SettingsForHint = {
   hasOllamaApiKey: boolean;
   hasGeminiApiKey: boolean;
   hasXaiApiKey: boolean;
+  hasOpenrouterApiKey: boolean;
   thinkingEffort: "low" | "medium" | "high";
   onboardingCompleted: boolean;
   whatsNewSeenVersion?: string;
@@ -139,6 +140,12 @@ export function CompanionLayout({
       if (p === "xai" && !s.hasXaiApiKey) {
         setBackendHint(
           "xAI Grok is selected but no API key is stored on this machine. Add a key under Settings → Provider → xAI.",
+        );
+        return;
+      }
+      if (p === "openrouter" && !s.hasOpenrouterApiKey) {
+        setBackendHint(
+          "OpenRouter is selected but no API key is stored on this machine. Add a key under Settings → Provider → OpenRouter.",
         );
         return;
       }

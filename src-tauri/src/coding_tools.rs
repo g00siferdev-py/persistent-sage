@@ -263,14 +263,19 @@ fn workspace_path_for_repo_file(
 }
 
 /// Resolve a repo-relative file path under `workspace/repos/{repo}/`.
+///
+/// `file_rel` should be relative to the repo root (e.g. `src/main.rs`). If a caller
+/// accidentally passes a workspace-relative path that already starts with
+/// `repo_path_rel` (legacy tree bug), the duplicate prefix is stripped.
 pub fn resolve_repo_file_path(
     workspace_root: &Path,
     repo_path_rel: &str,
     file_rel: &str,
 ) -> Result<PathBuf, ProviderError> {
-    let rel = file_rel.trim().trim_start_matches('/');
+    let repo = repo_path_rel.trim().trim_end_matches('/');
+    let mut rel = file_rel.trim().trim_start_matches('/').to_string();
     if rel.is_empty() {
-        let path = resolve_workspace_subpath(workspace_root, repo_path_rel.trim())?;
+        let path = resolve_workspace_subpath(workspace_root, repo)?;
         assert_path_in_workspace(workspace_root, &path)?;
         return Ok(path);
     }
@@ -280,7 +285,18 @@ pub fn resolve_repo_file_path(
     if rel.split('/').any(|s| s == "..") {
         return Err(tool_err("path must not contain '..'"));
     }
-    let ws_rel = format!("{}/{}", repo_path_rel.trim_end_matches('/'), rel);
+    // Tolerate workspace-relative paths from older file trees.
+    let prefix = format!("{repo}/");
+    if rel == repo {
+        rel.clear();
+    } else if let Some(stripped) = rel.strip_prefix(&prefix) {
+        rel = stripped.to_string();
+    }
+    let ws_rel = if rel.is_empty() {
+        repo.to_string()
+    } else {
+        format!("{repo}/{rel}")
+    };
     let path = resolve_workspace_subpath(workspace_root, &ws_rel)?;
     assert_path_in_workspace(workspace_root, &path)?;
     Ok(path)

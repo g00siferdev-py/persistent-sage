@@ -15,6 +15,8 @@ export type GoogleStatus = {
   driveEnabled: boolean;
   agentToolsEnabled: boolean;
   agentSendEnabled: boolean;
+  sageConnected: boolean;
+  sageAccountEmail: string;
 };
 
 export type GmailSummary = {

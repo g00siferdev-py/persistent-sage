@@ -16,7 +16,7 @@ pub fn context_window_for_model(provider: &str, model: &str) -> u32 {
     let model_lc = model.to_lowercase();
 
     // OpenAI models
-    if provider_lc == "openai" || provider_lc == "xai" {
+    if provider_lc == "openai" || provider_lc == "xai" || provider_lc == "openrouter" {
         if model_lc.contains("gpt-4o-mini") {
             return 128_000;
         }

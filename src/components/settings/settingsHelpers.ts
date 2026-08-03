@@ -4,6 +4,7 @@ import type {
   AppDataPaths,
   CacheInfo,
   FeedbackKind,
+  ModelCatalogEntry,
   SettingsPatch,
   SettingsView,
 } from "@/components/settings/settingsTypes";
@@ -24,13 +25,15 @@ export const MAX_TOKEN_SELECT_OPTIONS: { value: string; label: string; tokens: n
 export function providerSupportsTools(settings: SettingsView | null): boolean {
   return Boolean(
     settings &&
-      ["openai", "ollama", "ollama_cloud", "anthropic", "xai"].includes(settings.selectedProvider),
+      ["openai", "ollama", "ollama_cloud", "anthropic", "xai", "openrouter"].includes(
+        settings.selectedProvider,
+      ),
   );
 }
 
 export function providerToolsFootnote(settings: SettingsView | null): string | undefined {
   if (providerSupportsTools(settings)) return undefined;
-  return "Switch provider to OpenAI, xAI, Ollama, or Anthropic.";
+  return "Switch provider to OpenAI, OpenRouter, xAI, Ollama, or Anthropic.";
 }
 
 export function settingsPanelWidth(mode: SettingsLayoutMode): string {
@@ -44,32 +47,64 @@ export function settingsPanelWidth(mode: SettingsLayoutMode): string {
   }
 }
 
-export function mergeModelOptions(
+/**
+ * A picker row. `known` is false for fallback presets and hand-typed ids, whose
+ * capabilities the provider has not confirmed, so the UI can skip badges there.
+ */
+export type ModelOption = ModelCatalogEntry & { known: boolean };
+
+function placeholderOption(id: string): ModelOption {
+  return {
+    id,
+    label: id,
+    supportsTools: false,
+    supportsVision: false,
+    contextLength: null,
+    isFree: false,
+    known: false,
+  };
+}
+
+/**
+ * Options for a model picker. Once a refresh returns a catalog we show only those
+ * entries, so retired or incompatible presets cannot be picked again; the saved
+ * model is always kept so a custom id never disappears from the list.
+ */
+export function mergeModelCatalog(
   defaults: readonly string[],
-  fetched: string[] | null | undefined,
+  fetched: ModelCatalogEntry[] | null | undefined,
   current: string,
-): string[] {
+): ModelOption[] {
   const seen = new Set<string>();
-  const out: string[] = [];
-  for (const d of defaults) {
-    if (!seen.has(d)) {
-      seen.add(d);
-      out.push(d);
-    }
-  }
+  const out: ModelOption[] = [];
+  const push = (option: ModelOption) => {
+    if (seen.has(option.id)) return;
+    seen.add(option.id);
+    out.push(option);
+  };
+
   if (fetched) {
-    for (const f of [...fetched].sort((a, b) => a.localeCompare(b))) {
-      if (!seen.has(f)) {
-        seen.add(f);
-        out.push(f);
-      }
+    for (const entry of [...fetched].sort((a, b) => a.label.localeCompare(b.label))) {
+      push({ ...entry, known: true });
     }
+  } else {
+    for (const id of defaults) push(placeholderOption(id));
   }
+
   const cur = current.trim();
-  if (cur && !seen.has(cur)) {
-    out.push(cur);
-  }
+  if (cur) push(placeholderOption(cur));
   return out;
+}
+
+/** Short capability summary shown next to a model id, e.g. `free · tools · vision · 128k`. */
+export function modelOptionSuffix(option: ModelOption): string {
+  if (!option.known) return "";
+  const parts: string[] = [];
+  if (option.isFree) parts.push("free");
+  if (option.supportsTools) parts.push("tools");
+  if (option.supportsVision) parts.push("vision");
+  if (option.contextLength) parts.push(`${Math.round(option.contextLength / 1000)}k ctx`);
+  return parts.length ? ` — ${parts.join(" · ")}` : "";
 }
 
 export function maxTokensSelectValue(settings: SettingsView | null): string {
@@ -108,6 +143,8 @@ export function modelForProvider(settings: SettingsView | null): string {
       return settings.geminiModel || "unknown";
     case "xai":
       return settings.xaiModel || "unknown";
+    case "openrouter":
+      return settings.openrouterModel || "unknown";
     default:
       return "n/a";
   }

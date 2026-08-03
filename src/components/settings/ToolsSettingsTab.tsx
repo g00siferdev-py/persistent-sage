@@ -194,7 +194,6 @@ export function ToolsSettingsTab({
   const [submoltsError, setSubmoltsError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!settings?.googleEnabled) return;
     void (async () => {
       try {
         const s = await invoke<{ hasBuiltinClient: boolean }>("google_status");
@@ -203,7 +202,7 @@ export function ToolsSettingsTab({
         setGoogleHasBuiltin(false);
       }
     })();
-  }, [settings?.googleEnabled]);
+  }, [settings?.googleEnabled, settings?.googleClientId]);
 
   useEffect(() => {
     setPreferSubmolt(Boolean(settings?.moltbookDefaultSubmolt?.trim()));
@@ -1323,10 +1322,13 @@ export function ToolsSettingsTab({
         className="rounded-lg border border-ps-border bg-ps-elevated p-3"
         description={
           <>
-            Gmail, Google Calendar, and Google Drive — powers the Productivity-mode widgets and
-            (optionally) companion agent tools like &ldquo;did I get an email from…&rdquo; or
-            &ldquo;add a vet appointment Tuesday at 11&rdquo;. Tokens are stored encrypted on this
-            machine; nothing is shared with Persistent Sage servers (there are none).
+            Gmail, Google Calendar, Google Drive, Contacts, and Tasks — powers the
+            Productivity-mode widgets and (optionally) companion agent tools like
+            &ldquo;did I get an email from…&rdquo;, &ldquo;what&rsquo;s on my task
+            list?&rdquo;, or &ldquo;add a vet appointment Tuesday at 11&rdquo;.
+            Weather is available to the companion separately (no Google setup).
+            Tokens are stored encrypted on this machine; nothing is shared with
+            Persistent Sage servers (there are none).
           </>
         }
       >
@@ -1334,7 +1336,7 @@ export function ToolsSettingsTab({
           id="google-enabled"
           title="Enable Google Workspace integration"
           compact
-          description="Master switch. Official builds include the Persistent Sage Google app — after enabling, just click Sign in with Google below. Self-builds can supply their own OAuth client under Advanced."
+          description="Master switch (optional — Sign in with Google also turns this on). Official builds include one-click sign-in; no Client ID or secret for normal users."
           checked={settings?.googleEnabled ?? false}
           onChange={(googleEnabled) => {
             setSettings((s) => (s ? { ...s, googleEnabled } : s));
@@ -1351,10 +1353,10 @@ export function ToolsSettingsTab({
             })();
           }}
         />
-        {settings?.googleEnabled ? (
+        {settings?.googleEnabled || googleHasBuiltin ? (
           <>
             <div className="ml-0 space-y-2 rounded-md border border-ps-border bg-ps-surface px-3 py-3">
-              <p className="ps-label">Account</p>
+              <p className="ps-label">Your Google</p>
               {settings?.googleConnected && settings?.googleAccountEmail ? (
                 <p className="text-[11px] text-ps-success">
                   Connected as {settings.googleAccountEmail}
@@ -1362,10 +1364,46 @@ export function ToolsSettingsTab({
               ) : (
                 <p className="text-[11px] leading-relaxed text-ps-faint">
                   {googleHasBuiltin
-                    ? "This build includes the Persistent Sage Google app — no setup needed, just sign in."
+                    ? "Click Sign in with Google — browser opens, you approve, done. No Cloud Console setup."
                     : "This build has no built-in Google app credentials. Add your own OAuth client under Advanced below, then sign in."}
                 </p>
               )}
+              {settings?.googleClientId ? (
+                <div className="rounded-md border border-ps-border bg-ps-panel/50 px-2.5 py-2">
+                  <p className="text-[10px] leading-relaxed text-ps-muted">
+                    A custom OAuth Client ID is saved and overrides the built-in app. Clear it to use
+                    one-click Sign in with Google again.
+                  </p>
+                  <button
+                    type="button"
+                    className="ps-btn mt-1.5 px-2 py-1 text-[11px]"
+                    onClick={() => {
+                      flushDebounce();
+                      void (async () => {
+                        try {
+                          setError(null);
+                          const next = await applySettingsPatch({ googleClientId: "" });
+                          setSettings(next);
+                          try {
+                            await invoke("settings_save_api_key", {
+                              provider: "google_client_secret",
+                              apiKey: "",
+                            });
+                          } catch {
+                            /* clearing secret is best-effort */
+                          }
+                          setGoogleMsg("Custom OAuth cleared — using built-in Google app.");
+                          await refreshSettings();
+                        } catch (err) {
+                          setError(String(err));
+                        }
+                      })();
+                    }}
+                  >
+                    Use built-in Sign in with Google
+                  </button>
+                </div>
+              ) : null}
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1376,8 +1414,8 @@ export function ToolsSettingsTab({
                     void (async () => {
                       try {
                         setError(null);
-                        await invoke("google_auth_start");
-                        setGoogleMsg("Google account connected.");
+                        await invoke("google_auth_start", { account: "user" });
+                        setGoogleMsg("Your Google account connected.");
                         await refreshSettings();
                       } catch (err) {
                         setError(String(err));
@@ -1400,7 +1438,7 @@ export function ToolsSettingsTab({
                     onClick={() => {
                       void (async () => {
                         try {
-                          await invoke("google_disconnect");
+                          await invoke("google_disconnect", { account: "user" });
                           setGoogleMsg("Disconnected.");
                           await refreshSettings();
                         } catch (err) {
@@ -1414,16 +1452,229 @@ export function ToolsSettingsTab({
                   </button>
                 ) : null}
               </div>
+            </div>
+            <div className="ml-0 space-y-2 rounded-md border border-ps-border bg-ps-surface px-3 py-3">
+              <p className="ps-label">Agent&apos;s designated email</p>
+              <p className="text-[11px] leading-relaxed text-ps-faint">
+                Optional mailbox for agent correspondence — separate from your primary Google
+                account. Create a Gmail specifically for your companion (any name you choose), then
+                sign it in here. Tools use <span className="font-mono">account=agent</span>. While
+                the OAuth app is in Testing, add that address as a consent-screen test user.
+              </p>
+              {settings?.googleSageConnected && settings?.googleSageAccountEmail ? (
+                <p className="text-[11px] text-ps-success">
+                  Connected as {settings.googleSageAccountEmail}
+                </p>
+              ) : (
+                <p className="text-[11px] text-ps-faint">Not connected.</p>
+              )}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={googleBusy || (!googleHasBuiltin && !settings?.googleClientId)}
+                  onClick={() => {
+                    setGoogleBusy(true);
+                    setGoogleMsg(null);
+                    void (async () => {
+                      try {
+                        setError(null);
+                        await invoke("google_auth_start", { account: "agent" });
+                        setGoogleMsg("Agent email account connected.");
+                        await refreshSettings();
+                      } catch (err) {
+                        setError(String(err));
+                      } finally {
+                        setGoogleBusy(false);
+                      }
+                    })();
+                  }}
+                  className="ps-btn-primary px-3 py-2"
+                >
+                  {googleBusy
+                    ? "Waiting for browser…"
+                    : settings?.googleSageConnected
+                      ? "Reconnect agent email"
+                      : "Connect agent email"}
+                </button>
+                {settings?.googleSageConnected ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          await invoke("google_disconnect", { account: "agent" });
+                          setGoogleMsg("Agent email disconnected.");
+                          await refreshSettings();
+                        } catch (err) {
+                          setError(String(err));
+                        }
+                      })();
+                    }}
+                    className="ps-btn px-3 py-2"
+                  >
+                    Disconnect
+                  </button>
+                ) : null}
+              </div>
+              {settings?.googleSageConnected ? (
+                <div className="space-y-2 border-t border-ps-border pt-2">
+                  <div className="space-y-1.5 rounded-md border border-ps-border bg-ps-panel/40 px-2.5 py-2">
+                    <p className="text-[11px] font-medium text-ps-ink">Global Email Agent</p>
+                    <p className="text-[10px] leading-relaxed text-ps-muted">
+                      One dedicated chat handles all agent-mailbox mail. Continuity lives in{" "}
+                      <span className="font-mono">correspondence_sync.md</span>; every companion can
+                      update it via the <span className="font-mono">correspondence_sync</span> tool.
+                      On each inbox wake the Email Agent dirty-checks timestamps and only re-reads
+                      the full sync file when it changed.
+                    </p>
+                    {settings.googleEmailAgentConversationId ? (
+                      <p
+                        className="font-mono text-[10px] text-ps-faint"
+                        title={settings.googleEmailAgentConversationId}
+                      >
+                        Thread:{" "}
+                        {settings.googleEmailAgentConversationId.length > 18
+                          ? `${settings.googleEmailAgentConversationId.slice(0, 16)}…`
+                          : settings.googleEmailAgentConversationId}
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-ps-faint">
+                        Created automatically on the first inbox check (or use the button below).
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="ps-btn-primary px-2 py-1 text-[11px]"
+                        disabled={!settings}
+                        onClick={() => {
+                          void (async () => {
+                            try {
+                              setError(null);
+                              // Ensure exists by running a bound check path: bind current chat as the
+                              // global Email Agent if the user wants an explicit thread, otherwise
+                              // Check now will auto-create "Email Agent".
+                              const googleEmailAgentConversationId =
+                                settings?.pulseConversationId?.trim() || null;
+                              if (!googleEmailAgentConversationId) {
+                                setError(
+                                  "Open any companion chat first to seed the Email Agent thread id, or turn on Watch / Check now to auto-create it.",
+                                );
+                                return;
+                              }
+                              setSettings((s) =>
+                                s ? { ...s, googleEmailAgentConversationId } : s,
+                              );
+                              schedulePatch({ googleEmailAgentConversationId });
+                              setGoogleMsg(
+                                "Current chat bound as the global Email Agent (or rename it to Email Agent in the sidebar).",
+                              );
+                              await refreshSettings();
+                            } catch (err) {
+                              setError(String(err));
+                            }
+                          })();
+                        }}
+                      >
+                        Use this chat as Email Agent
+                      </button>
+                      {settings.googleEmailAgentConversationId ? (
+                        <button
+                          type="button"
+                          className="ps-btn px-2 py-1 text-[11px]"
+                          onClick={() => {
+                            setSettings((s) =>
+                              s ? { ...s, googleEmailAgentConversationId: null } : s,
+                            );
+                            schedulePatch({ googleEmailAgentConversationId: null });
+                            setGoogleMsg(
+                              "Cleared. Next inbox check will recreate the global Email Agent thread.",
+                            );
+                          }}
+                        >
+                          Reset thread
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <SettingsToggleCard
+                    id="agent-email-watch"
+                    title="Watch agent inbox"
+                    compact
+                    description="Timer wakes the global Email Agent only. It dirty-checks correspondence_sync, then reads/replies on the agent mailbox."
+                    checked={settings?.googleAgentEmailWatchEnabled ?? false}
+                    onChange={(googleAgentEmailWatchEnabled) => {
+                      setSettings((s) => (s ? { ...s, googleAgentEmailWatchEnabled } : s));
+                      schedulePatch({ googleAgentEmailWatchEnabled });
+                    }}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="text-[10px] text-ps-muted">
+                      Every
+                      <input
+                        type="number"
+                        min={1}
+                        max={1440}
+                        className="ps-input ml-1 w-16 px-2 py-1 font-mono text-xs"
+                        value={settings?.googleAgentEmailWatchIntervalMinutes ?? 3}
+                        disabled={!settings}
+                        onChange={(e) => {
+                          const raw = Number.parseInt(e.target.value, 10);
+                          const googleAgentEmailWatchIntervalMinutes = Number.isNaN(raw)
+                            ? 3
+                            : Math.min(1440, Math.max(1, raw));
+                          setSettings((s) =>
+                            s ? { ...s, googleAgentEmailWatchIntervalMinutes } : s,
+                          );
+                          schedulePatch({ googleAgentEmailWatchIntervalMinutes });
+                        }}
+                      />{" "}
+                      min
+                    </label>
+                    <button
+                      type="button"
+                      className="ps-btn px-2 py-1 text-[11px]"
+                      disabled={!settings || settings.selectedProvider === "placeholder"}
+                      onClick={() => {
+                        void (async () => {
+                          try {
+                            setError(null);
+                            await invoke("agent_email_watch_run_now");
+                            setGoogleMsg("Email Agent inbox checked.");
+                            await refreshSettings();
+                          } catch (err) {
+                            setError(String(err));
+                          }
+                        })();
+                      }}
+                    >
+                      Check now
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-ps-faint">
+                    Requires Google agent tools. Sync file:{" "}
+                    <span className="font-mono">workspace/correspondence_sync.md</span>.
+                  </p>
+                </div>
+              ) : null}
               {googleMsg ? <p className="text-[11px] text-ps-success">{googleMsg}</p> : null}
+            </div>
               <details className="pt-1">
                 <summary className="cursor-pointer select-none text-[11px] font-medium text-ps-muted hover:text-ps-ink">
                   Advanced — use your own OAuth client
                 </summary>
                 <div className="mt-2 space-y-2">
                   <p className="text-[11px] leading-relaxed text-ps-faint">
-                    For self-builds or development: create a <strong>Desktop app</strong> client in
-                    Google Cloud Console (APIs &amp; Services → Credentials) with the Gmail,
-                    Calendar, and Drive APIs enabled. A saved Client ID overrides the built-in app.
+                    For self-builds or development: create a <strong>Desktop app</strong> client
+                    (not Web) in Google Cloud Console → APIs &amp; Services → Credentials. Enable
+                    Gmail, Calendar, Drive, People, and Tasks APIs. Sign-in uses a temporary
+                    loopback URL (<span className="font-mono">http://127.0.0.1:&lt;port&gt;</span>
+                    ) — keep Persistent Sage open until the browser shows “connected”. Paste{" "}
+                    <strong>both</strong> Client ID and Client secret from the downloaded JSON. A
+                    saved Client ID overrides the built-in app. Official releases bake in the
+                    publisher client via GitHub secrets{" "}
+                    <span className="font-mono">PS_GOOGLE_CLIENT_ID</span> /{" "}
+                    <span className="font-mono">PS_GOOGLE_CLIENT_SECRET</span>.
                   </p>
                   <p className="text-[11px] leading-relaxed text-ps-faint">
                     Client ID:{" "}
@@ -1528,7 +1779,6 @@ export function ToolsSettingsTab({
                   ) : null}
                 </div>
               </details>
-            </div>
 
             <SettingsToggleCard
               id="google-gmail"
@@ -1567,7 +1817,7 @@ export function ToolsSettingsTab({
               id="google-agent-tools"
               title="Companion agent tools"
               compact
-              description="Lets your companion answer questions like “any email from Vanessa today?”, add calendar events, and draft emails with Drive attachments during chat."
+              description="Lets your companion use Gmail, Calendar, Drive, Contacts, and Tasks during chat. Use account=agent for the designated agent mailbox (read + reply)."
               checked={settings?.googleAgentToolsEnabled ?? false}
               onChange={(googleAgentToolsEnabled) => {
                 setSettings((s) => (s ? { ...s, googleAgentToolsEnabled } : s));

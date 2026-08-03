@@ -218,6 +218,7 @@ export function useChat(options?: {
     let unlistenStream: (() => void) | undefined;
     let unlistenErr: (() => void) | undefined;
     let unlistenPulse: (() => void) | undefined;
+    let unlistenEmail: (() => void) | undefined;
 
     void listen<ChatStreamStart>("chat:stream-start", (e) => {
       if (e.payload.conversationId !== activeConversationIdRef.current) return;
@@ -270,11 +271,34 @@ export function useChat(options?: {
       unlistenPulse = fn;
     });
 
+    type AgentEmailWatchPayload = {
+      ok: boolean;
+      at: string;
+      newCount?: number;
+      conversationId?: string;
+      summary?: string;
+      error?: string;
+    };
+
+    void listen<AgentEmailWatchPayload>("agent-email:watch", (e) => {
+      const cid = e.payload.conversationId;
+      if (!cid || cid !== activeConversationIdRef.current) return;
+      setStreamAssistant(null);
+      if (e.payload.ok) {
+        void loadActiveThread(cid);
+      } else if (e.payload.error) {
+        setError(e.payload.error);
+      }
+    }).then((fn) => {
+      unlistenEmail = fn;
+    });
+
     return () => {
       unlistenStart?.();
       unlistenStream?.();
       unlistenErr?.();
       unlistenPulse?.();
+      unlistenEmail?.();
     };
   }, [loadActiveThread]);
 

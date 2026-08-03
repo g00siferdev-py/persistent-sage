@@ -10,12 +10,14 @@
 
 mod agent_stream;
 mod agent_tools;
+mod agent_email_watch;
 mod app_instance;
 mod artifacts;
 mod attachments;
 mod browser_fetch;
 mod cache;
 mod chat;
+mod correspondence_sync;
 mod git_auth;
 mod coding;
 mod coding_ide;
@@ -45,11 +47,13 @@ mod settings;
 mod store_updates;
 mod token_counter;
 mod tool_stream;
+mod weather;
 mod webview_media;
 mod webcam;
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use memory::{
     AnchorType, ConversationMemory, MemoryAnchor, MemoryRecallBundle, MessageRole, SqliteProfile,
@@ -58,15 +62,14 @@ use memory::{
 use personality::{PersonalityFile, PersonalityManager, PersonalitySnapshot};
 use provider::{
     build_engine, fetch_anthropic_model_ids, fetch_gemini_model_ids, fetch_ollama_cloud_model_tags,
-    fetch_ollama_local_model_tags, fetch_openai_model_ids, fetch_xai_model_ids,
-    list_provider_descriptors, LLMProviderEngine, PlaceholderEngine, ProviderDescriptor,
-    ProviderError,
+    fetch_ollama_local_model_tags, fetch_openai_model_ids, fetch_openrouter_model_catalog,
+    fetch_xai_model_ids, list_provider_descriptors, ChatTurn, CompletionRequest, LLMProviderEngine,
+    ModelCatalogEntry, PlaceholderEngine, ProviderDescriptor, ProviderError,
 };
 use serde::Serialize;
 use settings::{SettingsManager, SettingsUpdatePayload, SettingsView};
 use token_counter::TokenContextInfo;
 use webcam::WebcamService;
-use std::time::Duration;
 use tauri::{Manager, State};
 
 // --- App state ----------------------------------------------------------------
@@ -81,6 +84,8 @@ pub struct NovaState {
     pub(crate) workspace_root: PathBuf,
     /// Canonical Persistent Sage data directory (same resolution as MemoryAnchor: `PERSISTENT_SAGE_DATA_DIR`, portable `data/`, or OS app data).
     pub(crate) data_directory: PathBuf,
+    /// Serializes companion LLM turns. Background Pulse / agent-email watch use `try_lock` and skip when busy.
+    pub(crate) companion_turn: tokio::sync::Mutex<()>,
 }
 
 impl NovaState {
@@ -113,6 +118,7 @@ impl NovaState {
             personality,
             workspace_root,
             data_directory,
+            companion_turn: tokio::sync::Mutex::new(()),
         }
     }
 }
@@ -501,46 +507,125 @@ fn provider_list_available() -> Vec<ProviderDescriptor> {
     list_provider_descriptors()
 }
 
+/// Bridge for providers whose fetchers still return bare ids (no capability data yet).
+fn ids_as_catalog(
+    provider_id: &str,
+    ids: Vec<String>,
+    supports_tools: bool,
+) -> Vec<ModelCatalogEntry> {
+    ids.into_iter()
+        .map(|id| ModelCatalogEntry {
+            supports_tools,
+            supports_vision: attachments::model_supports_vision(provider_id, &id),
+            context_length: None,
+            is_free: false,
+            label: id.clone(),
+            id,
+        })
+        .collect()
+}
+
 #[tauri::command]
-async fn ollama_cloud_list_models(state: State<'_, NovaState>) -> Result<Vec<String>, String> {
+async fn ollama_cloud_list_models(
+    state: State<'_, NovaState>,
+) -> Result<Vec<ModelCatalogEntry>, String> {
     fetch_ollama_cloud_model_tags(&state.http, &state.settings)
         .await
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn openai_list_models(state: State<'_, NovaState>) -> Result<Vec<String>, String> {
+async fn openai_list_models(state: State<'_, NovaState>) -> Result<Vec<ModelCatalogEntry>, String> {
     fetch_openai_model_ids(&state.http, &state.settings)
         .await
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn ollama_list_local_models(state: State<'_, NovaState>) -> Result<Vec<String>, String> {
+async fn ollama_list_local_models(
+    state: State<'_, NovaState>,
+) -> Result<Vec<ModelCatalogEntry>, String> {
     fetch_ollama_local_model_tags(&state.http, &state.settings)
         .await
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn anthropic_list_models(state: State<'_, NovaState>) -> Result<Vec<String>, String> {
+async fn anthropic_list_models(
+    state: State<'_, NovaState>,
+) -> Result<Vec<ModelCatalogEntry>, String> {
     fetch_anthropic_model_ids(&state.http, &state.settings)
         .await
+        .map(|ids| ids_as_catalog("anthropic", ids, true))
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn gemini_list_models(state: State<'_, NovaState>) -> Result<Vec<String>, String> {
+async fn gemini_list_models(state: State<'_, NovaState>) -> Result<Vec<ModelCatalogEntry>, String> {
     fetch_gemini_model_ids(&state.http, &state.settings)
         .await
+        .map(|ids| ids_as_catalog("gemini", ids, false))
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn xai_list_models(state: State<'_, NovaState>) -> Result<Vec<String>, String> {
+async fn xai_list_models(state: State<'_, NovaState>) -> Result<Vec<ModelCatalogEntry>, String> {
     fetch_xai_model_ids(&state.http, &state.settings)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn openrouter_list_models(
+    state: State<'_, NovaState>,
+) -> Result<Vec<ModelCatalogEntry>, String> {
+    fetch_openrouter_model_catalog(&state.http, &state.settings)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Outcome of a one-shot round trip against the selected provider + model.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ModelProbeResult {
+    ok: bool,
+    provider_id: String,
+    model_id: String,
+    /// Reply preview when `ok`, otherwise the provider error (status codes included).
+    detail: String,
+}
+
+/// Send a throwaway prompt so a retired or incompatible model fails here, not mid-chat.
+#[tauri::command]
+async fn provider_test_active_model(
+    state: State<'_, NovaState>,
+) -> Result<ModelProbeResult, String> {
+    let engine = build_engine(&state.http, &state.settings).map_err(|e| e.to_string())?;
+    let info = engine.model_info();
+    let request = CompletionRequest {
+        messages: vec![ChatTurn::text("user", "Reply with the single word: ok")],
+        max_tokens: Some(16),
+        temperature: Some(0.0),
+        ..Default::default()
+    };
+    let (ok, detail) = match engine.complete(&request).await {
+        Ok(res) => {
+            let preview: String = res.content.trim().chars().take(120).collect();
+            let preview = if preview.is_empty() {
+                "empty reply".to_string()
+            } else {
+                preview
+            };
+            (true, preview)
+        }
+        Err(e) => (false, e.to_string()),
+    };
+    Ok(ModelProbeResult {
+        ok,
+        provider_id: info.provider_id,
+        model_id: info.model_id,
+        detail,
+    })
 }
 
 #[tauri::command]
@@ -873,6 +958,7 @@ fn memory_get_token_context(
         "ollama_cloud" => &settings.ollama_cloud_model,
         "gemini" => &settings.gemini_model,
         "xai" => &settings.xai_model,
+        "openrouter" => &settings.openrouter_model,
         _ => "gpt-4o",
     };
 
@@ -1094,6 +1180,9 @@ pub fn run() {
     }
     workspace_root = paths::user_facing_path(std::fs::canonicalize(&workspace_root).unwrap_or(workspace_root));
     ensure_workspace_guide(&workspace_root);
+    if let Err(e) = correspondence_sync::ensure_files(&workspace_root) {
+        eprintln!("persistent-sage: warning: correspondence sync bootstrap: {e}");
+    }
     projects::ensure_projects_tree(&workspace_root);
     repos::ensure_repos_tree(&workspace_root);
     eprintln!(
@@ -1142,6 +1231,7 @@ pub fn run() {
                 webview_media::allow_webview_camera_permissions(&handle);
             });
             pulse::spawn_pulse_loop(app.handle().clone());
+            agent_email_watch::spawn_agent_email_watch_loop(app.handle().clone());
             moltbook_scheduler::spawn_moltbook_scheduler_loop(app.handle().clone());
             Ok(())
         })
@@ -1180,6 +1270,13 @@ pub fn run() {
             google::google_calendar_create_event,
             google::google_calendar_delete_event,
             google::google_drive_list,
+            google::google_contacts_list,
+            google::google_tasks_list,
+            google::google_tasks_add,
+            google::google_tasks_set_completed,
+            weather::weather_geocode,
+            weather::weather_forecast,
+            agent_email_watch::agent_email_watch_run_now,
             provider_info,
             provider_list_available,
             ollama_cloud_list_models,
@@ -1188,6 +1285,8 @@ pub fn run() {
             anthropic_list_models,
             gemini_list_models,
             xai_list_models,
+            openrouter_list_models,
+            provider_test_active_model,
             provider_switch,
             settings_get,
             settings_update,

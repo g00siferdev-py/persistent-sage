@@ -38,6 +38,37 @@ mod vision_tests {
     fn kimi_cloud_is_vision_capable() {
         assert!(model_supports_vision("ollama_cloud", "kimi-k2.5:cloud"));
     }
+
+    #[test]
+    fn openrouter_ids_use_the_upstream_model_name() {
+        assert!(model_supports_vision("openrouter", "openai/gpt-4o-mini"));
+        assert!(model_supports_vision(
+            "openrouter",
+            "anthropic/claude-3.5-sonnet"
+        ));
+        assert!(!model_supports_vision(
+            "openrouter",
+            "mistralai/mistral-small"
+        ));
+    }
+}
+
+fn openai_style_vision(m: &str) -> bool {
+    m.contains("gpt-4o")
+        || m.contains("gpt-4-turbo")
+        || m.contains("gpt-4.1")
+        || m.contains("gpt-5")
+        || m.contains("o1")
+        || m.contains("o3")
+        || m.contains("o4")
+        || (m.contains("gpt-4") && m.contains("vision"))
+}
+
+fn anthropic_style_vision(m: &str) -> bool {
+    m.contains("claude-3")
+        || m.contains("claude-sonnet-4")
+        || m.contains("claude-opus-4")
+        || m.contains("claude-haiku-4")
 }
 
 /// Whether the active provider + model id likely supports image input.
@@ -47,21 +78,17 @@ pub fn model_supports_vision(provider_id: &str, model_id: &str) -> bool {
     let m = model_id.trim().to_lowercase();
     match p.as_str() {
         "placeholder" => false,
-        "openai" => {
-            m.contains("gpt-4o")
-                || m.contains("gpt-4-turbo")
-                || m.contains("gpt-4.1")
-                || m.contains("o1")
-                || m.contains("o3")
-                || m.contains("o4")
-                || (m.contains("gpt-4") && m.contains("vision"))
+        "openai" => openai_style_vision(&m),
+        // OpenRouter ids are `author/model`; the model half follows upstream naming.
+        "openrouter" => {
+            let bare = m.split('/').next_back().unwrap_or(&m);
+            openai_style_vision(bare)
+                || anthropic_style_vision(bare)
+                || bare.contains("gemini")
+                || bare.contains("vision")
+                || bare.contains("-vl")
         }
-        "anthropic" => {
-            m.contains("claude-3")
-                || m.contains("claude-sonnet-4")
-                || m.contains("claude-opus-4")
-                || m.contains("claude-haiku-4")
-        }
+        "anthropic" => anthropic_style_vision(&m),
         "ollama" | "ollama_cloud" => {
             m.contains("llava")
                 || m.contains("vision")
@@ -298,7 +325,7 @@ pub fn chat_turn_from_stored_with_image_policy(
         .unwrap_or("image/jpeg");
 
     let (openai_message, ollama_message, anthropic_message) = match provider_id {
-        "openai" => (
+        "openai" | "openrouter" => (
             Some(build_openai_user_message(&m.content, data_dir, rel, mime)?),
             None,
             None,

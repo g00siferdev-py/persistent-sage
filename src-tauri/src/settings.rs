@@ -81,6 +81,10 @@ pub struct SettingsFile {
     pub xai_model: String,
     #[serde(default = "default_xai_base_url")]
     pub xai_base_url: String,
+    #[serde(default = "default_openrouter_model")]
+    pub openrouter_model: String,
+    #[serde(default = "default_openrouter_base_url")]
+    pub openrouter_base_url: String,
     #[serde(default = "default_thinking_effort")]
     pub thinking_effort: String,
     #[serde(default = "default_temperature")]
@@ -219,6 +223,39 @@ pub struct SettingsFile {
     /// Connected Google account email (display only — tokens are encrypted separately).
     #[serde(default)]
     pub google_account_email: String,
+    /// Sage companion Gmail (agent designated email) — tokens in `google_tokens_sage`.
+    #[serde(default)]
+    pub google_sage_account_email: String,
+    /// When true, poll the agent's designated inbox and prompt the Email Agent to read/reply.
+    #[serde(default)]
+    pub google_agent_email_watch_enabled: bool,
+    #[serde(default = "default_agent_email_watch_interval")]
+    pub google_agent_email_watch_interval_minutes: u32,
+    /// Message ids already delivered to a companion watch turn (keep recent).
+    #[serde(default)]
+    pub google_agent_email_seen_ids: Vec<String>,
+    /// Dedicated chat thread for the Email Agent (exclusive agent-mailbox send + inbox watch).
+    #[serde(default)]
+    pub google_email_agent_conversation_id: Option<String>,
+    /// Multiple background Pulse jobs. Migrated from legacy single-pulse fields when empty.
+    #[serde(default)]
+    pub pulses: Vec<PulseEntry>,
+}
+
+/// One scheduled Pulse check-in (companion background turn with tools).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PulseEntry {
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub interval_minutes: u32,
+    pub instructions: String,
+    #[serde(default)]
+    pub conversation_id: Option<String>,
+    /// RFC3339 timestamp of last successful/attempted run.
+    #[serde(default)]
+    pub last_run_at: Option<String>,
 }
 
 fn default_moltbook_interact_interval_minutes() -> u32 {
@@ -337,6 +374,10 @@ fn default_pulse_instructions() -> String {
     "Briefly check in: any reminders, open loops, or a short note the user might appreciate. Keep it to a few sentences unless they ask for more detail.".into()
 }
 
+fn default_agent_email_watch_interval() -> u32 {
+    3
+}
+
 fn default_version() -> u32 {
     SETTINGS_VERSION
 }
@@ -354,7 +395,7 @@ fn default_gemini_model() -> String {
 }
 
 fn default_ollama_cloud_model() -> String {
-    "gpt-oss:120b-cloud".into()
+    "kimi-k2.6".into()
 }
 
 fn default_gemini_base_url() -> String {
@@ -367,6 +408,14 @@ fn default_xai_model() -> String {
 
 fn default_xai_base_url() -> String {
     "https://api.x.ai/v1".into()
+}
+
+fn default_openrouter_model() -> String {
+    "openai/gpt-4o-mini".into()
+}
+
+fn default_openrouter_base_url() -> String {
+    "https://openrouter.ai/api/v1".into()
 }
 
 impl Default for SettingsFile {
@@ -384,6 +433,8 @@ impl Default for SettingsFile {
             gemini_base_url: default_gemini_base_url(),
             xai_model: default_xai_model(),
             xai_base_url: default_xai_base_url(),
+            openrouter_model: default_openrouter_model(),
+            openrouter_base_url: default_openrouter_base_url(),
             thinking_effort: default_thinking_effort(),
             temperature: 0.7,
             max_tokens: None,
@@ -438,6 +489,12 @@ impl Default for SettingsFile {
             google_agent_tools_enabled: false,
             google_agent_send_enabled: false,
             google_account_email: String::new(),
+            google_sage_account_email: String::new(),
+            google_agent_email_watch_enabled: false,
+            google_agent_email_watch_interval_minutes: default_agent_email_watch_interval(),
+            google_agent_email_seen_ids: Vec::new(),
+            google_email_agent_conversation_id: None,
+            pulses: Vec::new(),
         }
     }
 }
@@ -457,6 +514,8 @@ pub struct SettingsView {
     pub gemini_base_url: String,
     pub xai_model: String,
     pub xai_base_url: String,
+    pub openrouter_model: String,
+    pub openrouter_base_url: String,
     pub thinking_effort: String,
     pub temperature: f32,
     pub max_tokens: Option<u32>,
@@ -484,6 +543,7 @@ pub struct SettingsView {
     pub has_ollama_api_key: bool,
     pub has_gemini_api_key: bool,
     pub has_xai_api_key: bool,
+    pub has_openrouter_api_key: bool,
     pub has_github_pat: bool,
     pub has_moltbook_api_key: bool,
     pub onboarding_completed: bool,
@@ -518,6 +578,12 @@ pub struct SettingsView {
     pub google_account_email: String,
     pub has_google_client_secret: bool,
     pub google_connected: bool,
+    pub google_sage_account_email: String,
+    pub google_sage_connected: bool,
+    pub google_agent_email_watch_enabled: bool,
+    pub google_agent_email_watch_interval_minutes: u32,
+    pub google_email_agent_conversation_id: Option<String>,
+    pub pulses: Vec<PulseEntry>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -534,6 +600,8 @@ pub struct SettingsUpdatePayload {
     pub gemini_base_url: Option<String>,
     pub xai_model: Option<String>,
     pub xai_base_url: Option<String>,
+    pub openrouter_model: Option<String>,
+    pub openrouter_base_url: Option<String>,
     pub thinking_effort: Option<String>,
     pub temperature: Option<f32>,
     /// Omitted = no change. JSON `null` = clear cap. Number = set cap (`Option<Option<u32>>`
@@ -555,6 +623,7 @@ pub struct SettingsUpdatePayload {
     pub pulse_interval_minutes: Option<u32>,
     pub pulse_instructions: Option<String>,
     pub pulse_conversation_id: Option<JsonValue>,
+    pub pulses: Option<Vec<PulseEntry>>,
     pub memory_llm_extraction_enabled: Option<bool>,
     pub memory_semantic_enabled: Option<bool>,
     pub embedding_model: Option<String>,
@@ -587,6 +656,10 @@ pub struct SettingsUpdatePayload {
     pub google_drive_enabled: Option<bool>,
     pub google_agent_tools_enabled: Option<bool>,
     pub google_agent_send_enabled: Option<bool>,
+    pub google_agent_email_watch_enabled: Option<bool>,
+    pub google_agent_email_watch_interval_minutes: Option<u32>,
+    /// `null` clears; string sets the dedicated Email Agent conversation id.
+    pub google_email_agent_conversation_id: Option<JsonValue>,
 }
 
 // --- Crypto ------------------------------------------------------------------
@@ -784,7 +857,9 @@ impl SettingsManager {
         let path = data_dir.join("settings.json");
         let file = if path.exists() {
             let raw = std::fs::read_to_string(&path)?;
-            serde_json::from_str(&raw)?
+            let mut file: SettingsFile = serde_json::from_str(&raw)?;
+            migrate_pulses_if_needed(&mut file);
+            file
         } else {
             let mut s = SettingsFile::default();
             migrate_sqlite_into_file(&memory, &mut s)?;
@@ -859,6 +934,14 @@ impl SettingsManager {
             .preference_set("persistent_sage.xai.model", inner.xai_model.trim())?;
         self.memory
             .preference_set("persistent_sage.xai.base_url", inner.xai_base_url.trim())?;
+        self.memory.preference_set(
+            "persistent_sage.openrouter.model",
+            inner.openrouter_model.trim(),
+        )?;
+        self.memory.preference_set(
+            "persistent_sage.openrouter.base_url",
+            inner.openrouter_base_url.trim(),
+        )?;
         self.memory.preference_set(
             "persistent_sage.thinking_effort",
             inner.thinking_effort.trim(),
@@ -952,11 +1035,122 @@ impl SettingsManager {
         self.persist()
     }
 
+    pub fn set_google_sage_account_email(&self, email: &str) -> Result<(), SettingsError> {
+        {
+            let mut inner = self
+                .inner
+                .write()
+                .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
+            inner.google_sage_account_email = email.trim().to_string();
+        }
+        self.persist()
+    }
+
     pub fn google_account_email(&self) -> String {
         self.inner
             .read()
             .map(|g| g.google_account_email.clone())
             .unwrap_or_default()
+    }
+
+    /// Update `last_run_at` for a pulse by id (scheduler).
+    pub fn touch_pulse_last_run(&self, pulse_id: &str, at_rfc3339: &str) -> Result<(), SettingsError> {
+        {
+            let mut inner = self
+                .inner
+                .write()
+                .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
+            if let Some(p) = inner.pulses.iter_mut().find(|p| p.id == pulse_id) {
+                p.last_run_at = Some(at_rfc3339.to_string());
+            }
+        }
+        self.persist()
+    }
+
+    pub fn google_agent_email_watch_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.google_agent_email_watch_enabled)
+            .unwrap_or(false)
+    }
+
+    pub fn google_agent_email_watch_interval_minutes(&self) -> u32 {
+        self.inner
+            .read()
+            .map(|g| g.google_agent_email_watch_interval_minutes.clamp(1, 24 * 60))
+            .unwrap_or(3)
+    }
+
+    pub fn google_agent_email_seen_ids(&self) -> Vec<String> {
+        self.inner
+            .read()
+            .map(|g| g.google_agent_email_seen_ids.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn google_email_agent_conversation_id(&self) -> Option<String> {
+        self.inner
+            .read()
+            .ok()
+            .and_then(|g| g.google_email_agent_conversation_id.clone())
+            .filter(|s| !s.trim().is_empty())
+    }
+
+    /// True when `conversation_id` is the dedicated Email Agent thread.
+    pub fn is_email_agent_conversation(&self, conversation_id: &str) -> bool {
+        let cid = conversation_id.trim();
+        if cid.is_empty() {
+            return false;
+        }
+        self.google_email_agent_conversation_id()
+            .map(|bound| bound == cid)
+            .unwrap_or(false)
+    }
+
+    pub fn set_google_email_agent_conversation_id(
+        &self,
+        conversation_id: Option<String>,
+    ) -> Result<(), SettingsError> {
+        {
+            let mut inner = self
+                .inner
+                .write()
+                .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
+            inner.google_email_agent_conversation_id =
+                conversation_id.and_then(|s| {
+                    let t = s.trim().to_string();
+                    if t.is_empty() {
+                        None
+                    } else {
+                        Some(t)
+                    }
+                });
+        }
+        self.persist()
+    }
+
+    /// Remember message ids already handed to a companion watch turn (cap 80).
+    pub fn mark_agent_email_seen(&self, ids: &[String]) -> Result<(), SettingsError> {
+        {
+            let mut inner = self
+                .inner
+                .write()
+                .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
+            for id in ids {
+                let t = id.trim();
+                if t.is_empty() {
+                    continue;
+                }
+                if !inner.google_agent_email_seen_ids.iter().any(|x| x == t) {
+                    inner.google_agent_email_seen_ids.push(t.to_string());
+                }
+            }
+            let len = inner.google_agent_email_seen_ids.len();
+            if len > 80 {
+                inner.google_agent_email_seen_ids.drain(0..len - 80);
+            }
+        }
+        self.persist()
     }
 
     /// Store an arbitrary secret string under a raw slot name (used for Google OAuth tokens).
@@ -998,6 +1192,8 @@ impl SettingsManager {
             gemini_base_url: inner.gemini_base_url.clone(),
             xai_model: inner.xai_model.clone(),
             xai_base_url: inner.xai_base_url.clone(),
+            openrouter_model: inner.openrouter_model.clone(),
+            openrouter_base_url: inner.openrouter_base_url.clone(),
             thinking_effort: inner.thinking_effort.clone(),
             temperature: inner.temperature,
             max_tokens: inner.max_tokens,
@@ -1039,6 +1235,10 @@ impl SettingsManager {
             has_xai_api_key: can_decrypt_api_blob(
                 &self.aes_key,
                 inner.encrypted_api_keys.get("xai"),
+            ),
+            has_openrouter_api_key: can_decrypt_api_blob(
+                &self.aes_key,
+                inner.encrypted_api_keys.get("openrouter"),
             ),
             has_github_pat: can_decrypt_api_blob(
                 &self.aes_key,
@@ -1086,6 +1286,17 @@ impl SettingsManager {
                 &self.aes_key,
                 inner.encrypted_api_keys.get("google_tokens"),
             ),
+            google_sage_account_email: inner.google_sage_account_email.clone(),
+            google_sage_connected: can_decrypt_api_blob(
+                &self.aes_key,
+                inner.encrypted_api_keys.get("google_tokens_sage"),
+            ),
+            google_agent_email_watch_enabled: inner.google_agent_email_watch_enabled,
+            google_agent_email_watch_interval_minutes: inner
+                .google_agent_email_watch_interval_minutes
+                .clamp(1, 24 * 60),
+            google_email_agent_conversation_id: inner.google_email_agent_conversation_id.clone(),
+            pulses: inner.pulses.clone(),
         })
     }
 
@@ -1449,6 +1660,24 @@ impl SettingsManager {
             .unwrap_or_else(|_| default_xai_base_url())
     }
 
+    pub fn openrouter_model(&self) -> String {
+        self.inner
+            .read()
+            .map(|g| g.openrouter_model.clone())
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(default_openrouter_model)
+    }
+
+    pub fn openrouter_base_url(&self) -> String {
+        self.inner
+            .read()
+            .map(|g| g.openrouter_base_url.clone())
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(default_openrouter_base_url)
+    }
+
     pub fn memory_llm_extraction_enabled(&self) -> bool {
         self.inner
             .read()
@@ -1558,6 +1787,12 @@ impl SettingsManager {
         if let Some(s) = patch.xai_base_url {
             inner.xai_base_url = s.trim_end_matches('/').to_string();
         }
+        if let Some(s) = patch.openrouter_model {
+            inner.openrouter_model = s;
+        }
+        if let Some(s) = patch.openrouter_base_url {
+            inner.openrouter_base_url = s.trim_end_matches('/').to_string();
+        }
         if let Some(s) = patch.thinking_effort {
             inner.thinking_effort = normalize_thinking_effort(&s);
         }
@@ -1620,12 +1855,15 @@ impl SettingsManager {
         }
         if let Some(b) = patch.pulse_enabled {
             inner.pulse_enabled = b;
+            sync_legacy_pulse_into_list(&mut inner);
         }
         if let Some(m) = patch.pulse_interval_minutes {
             inner.pulse_interval_minutes = m.clamp(1, 24 * 60);
+            sync_legacy_pulse_into_list(&mut inner);
         }
         if let Some(s) = patch.pulse_instructions {
             inner.pulse_instructions = s;
+            sync_legacy_pulse_into_list(&mut inner);
         }
         if let Some(v) = patch.pulse_conversation_id {
             inner.pulse_conversation_id = match v {
@@ -1644,6 +1882,49 @@ impl SettingsManager {
                     ));
                 }
             };
+            // Bind any pulse missing a conversation to the active chat thread.
+            let bind_cid = inner.pulse_conversation_id.clone();
+            if let Some(cid) = bind_cid {
+                for p in &mut inner.pulses {
+                    if p.conversation_id.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+                        p.conversation_id = Some(cid.clone());
+                    }
+                }
+            }
+            sync_legacy_pulse_into_list(&mut inner);
+        }
+        if let Some(list) = patch.pulses {
+            inner.pulses = list
+                .into_iter()
+                .map(|mut p| {
+                    p.id = if p.id.trim().is_empty() {
+                        format!("pulse-{}", uuid_simple())
+                    } else {
+                        p.id.trim().to_string()
+                    };
+                    p.name = p.name.trim().to_string();
+                    if p.name.is_empty() {
+                        p.name = "Pulse".into();
+                    }
+                    p.interval_minutes = p.interval_minutes.clamp(1, 24 * 60);
+                    p
+                })
+                .collect();
+            // Mirror first pulse into legacy fields for older readers.
+            let mirror = inner.pulses.first().map(|first| {
+                (
+                    first.enabled,
+                    first.interval_minutes,
+                    first.instructions.clone(),
+                    first.conversation_id.clone(),
+                )
+            });
+            if let Some((enabled, interval, instructions, conversation_id)) = mirror {
+                inner.pulse_enabled = enabled;
+                inner.pulse_interval_minutes = interval;
+                inner.pulse_instructions = instructions;
+                inner.pulse_conversation_id = conversation_id;
+            }
         }
         if let Some(b) = patch.memory_llm_extraction_enabled {
             inner.memory_llm_extraction_enabled = b;
@@ -1747,6 +2028,30 @@ impl SettingsManager {
         if let Some(b) = patch.google_agent_send_enabled {
             inner.google_agent_send_enabled = b;
         }
+        if let Some(b) = patch.google_agent_email_watch_enabled {
+            inner.google_agent_email_watch_enabled = b;
+        }
+        if let Some(m) = patch.google_agent_email_watch_interval_minutes {
+            inner.google_agent_email_watch_interval_minutes = m.clamp(1, 24 * 60);
+        }
+        if let Some(v) = patch.google_email_agent_conversation_id {
+            inner.google_email_agent_conversation_id = match v {
+                JsonValue::Null => None,
+                JsonValue::String(s) => {
+                    let t = s.trim();
+                    if t.is_empty() {
+                        None
+                    } else {
+                        Some(t.to_string())
+                    }
+                }
+                _ => {
+                    return Err(SettingsError::Crypto(
+                        "google_email_agent_conversation_id must be null or a string".into(),
+                    ));
+                }
+            };
+        }
         inner.version = SETTINGS_VERSION;
         drop(inner);
         self.persist()
@@ -1817,6 +2122,7 @@ fn normalize_key_slot(provider: &str) -> Result<String, SettingsError> {
         "ollama" | "ollama_cloud" => Ok("ollama".into()),
         "gemini" | "google" => Ok("gemini".into()),
         "xai" | "grok" => Ok("xai".into()),
+        "openrouter" => Ok("openrouter".into()),
         "github" | "github_pat" => Ok("github".into()),
         "moltbook" => Ok("moltbook".into()),
         "google_client_secret" => Ok("google_client_secret".into()),
@@ -1826,7 +2132,12 @@ fn normalize_key_slot(provider: &str) -> Result<String, SettingsError> {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_key_slot;
+    use super::{default_ollama_cloud_model, normalize_key_slot};
+
+    #[test]
+    fn ollama_cloud_defaults_to_a_supported_cloud_model() {
+        assert_eq!(default_ollama_cloud_model(), "kimi-k2.6");
+    }
 
     #[test]
     fn normalizes_api_key_slots_by_provider() {
@@ -1840,6 +2151,8 @@ mod tests {
             ("google", "gemini"),
             ("xai", "xai"),
             ("grok", "xai"),
+            ("openrouter", "openrouter"),
+            (" OpenRouter ", "openrouter"),
             ("github", "github"),
             ("github_pat", "github"),
         ];
@@ -1855,6 +2168,64 @@ fn normalize_thinking_effort(raw: &str) -> String {
         "low" => "low".into(),
         "high" => "high".into(),
         _ => "medium".into(),
+    }
+}
+
+fn uuid_simple() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!("{nanos:x}")
+}
+
+fn migrate_pulses_if_needed(file: &mut SettingsFile) {
+    if !file.pulses.is_empty() {
+        return;
+    }
+    let has_legacy = file.pulse_enabled
+        || file.pulse_conversation_id.is_some()
+        || !file.pulse_instructions.trim().is_empty();
+    if !has_legacy {
+        return;
+    }
+    file.pulses.push(PulseEntry {
+        id: format!("pulse-{}", uuid_simple()),
+        name: "Default Pulse".into(),
+        enabled: file.pulse_enabled,
+        interval_minutes: file.pulse_interval_minutes.clamp(1, 24 * 60),
+        instructions: file.pulse_instructions.clone(),
+        conversation_id: file.pulse_conversation_id.clone(),
+        last_run_at: None,
+    });
+}
+
+fn sync_legacy_pulse_into_list(file: &mut SettingsFile) {
+    if file.pulses.is_empty() {
+        file.pulses.push(PulseEntry {
+            id: format!("pulse-{}", uuid_simple()),
+            name: "Default Pulse".into(),
+            enabled: file.pulse_enabled,
+            interval_minutes: file.pulse_interval_minutes.clamp(1, 24 * 60),
+            instructions: file.pulse_instructions.clone(),
+            conversation_id: file.pulse_conversation_id.clone(),
+            last_run_at: None,
+        });
+        return;
+    }
+    if let Some(first) = file.pulses.first_mut() {
+        first.enabled = file.pulse_enabled;
+        first.interval_minutes = file.pulse_interval_minutes.clamp(1, 24 * 60);
+        first.instructions = file.pulse_instructions.clone();
+        if first
+            .conversation_id
+            .as_ref()
+            .map(|s| s.trim().is_empty())
+            .unwrap_or(true)
+        {
+            first.conversation_id = file.pulse_conversation_id.clone();
+        }
     }
 }
 

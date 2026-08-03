@@ -23,6 +23,8 @@ export type SettingsView = {
   geminiBaseUrl: string;
   xaiModel: string;
   xaiBaseUrl: string;
+  openrouterModel: string;
+  openrouterBaseUrl: string;
   thinkingEffort: "low" | "medium" | "high";
   temperature: number;
   /** Omitted in JSON when unset (Rust `None`) — treat like `null` (model default). */
@@ -57,6 +59,7 @@ export type SettingsView = {
   hasOllamaApiKey: boolean;
   hasGeminiApiKey: boolean;
   hasXaiApiKey: boolean;
+  hasOpenrouterApiKey: boolean;
   hasGithubPat: boolean;
   hasMoltbookApiKey: boolean;
   onboardingCompleted: boolean;
@@ -90,6 +93,22 @@ export type SettingsView = {
   googleAccountEmail: string;
   hasGoogleClientSecret: boolean;
   googleConnected: boolean;
+  googleSageAccountEmail: string;
+  googleSageConnected: boolean;
+  googleAgentEmailWatchEnabled: boolean;
+  googleAgentEmailWatchIntervalMinutes: number;
+  googleEmailAgentConversationId?: string | null;
+  pulses: PulseEntry[];
+};
+
+export type PulseEntry = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  intervalMinutes: number;
+  instructions: string;
+  conversationId?: string | null;
+  lastRunAt?: string | null;
 };
 
 export type SettingsPatch = {
@@ -104,6 +123,8 @@ export type SettingsPatch = {
   geminiBaseUrl?: string;
   xaiModel?: string;
   xaiBaseUrl?: string;
+  openrouterModel?: string;
+  openrouterBaseUrl?: string;
   thinkingEffort?: "low" | "medium" | "high";
   temperature?: number;
   /** Omit = unchanged; null = clear cap */
@@ -123,6 +144,8 @@ export type SettingsPatch = {
   pulseEnabled?: boolean;
   pulseIntervalMinutes?: number;
   pulseInstructions?: string;
+  pulseConversationId?: string | null;
+  pulses?: PulseEntry[];
   memoryLlmExtractionEnabled?: boolean;
   memorySemanticEnabled?: boolean;
   embeddingModel?: string;
@@ -154,6 +177,9 @@ export type SettingsPatch = {
   googleDriveEnabled?: boolean;
   googleAgentToolsEnabled?: boolean;
   googleAgentSendEnabled?: boolean;
+  googleAgentEmailWatchEnabled?: boolean;
+  googleAgentEmailWatchIntervalMinutes?: number;
+  googleEmailAgentConversationId?: string | null;
 };
 
 export type ProviderDescriptor = {
@@ -163,11 +189,23 @@ export type ProviderDescriptor = {
   requiresApiKey: boolean;
 };
 
+/** One model a provider offers, already filtered by the backend to chat-capable entries. */
+export type ModelCatalogEntry = {
+  id: string;
+  label: string;
+  supportsTools: boolean;
+  supportsVision: boolean;
+  contextLength?: number | null;
+  isFree: boolean;
+};
+
 export type SettingsTab = "companion" | "provider" | "tools" | "general";
 
 export type PulseTickPayload = {
   ok: boolean;
   at: string;
+  pulseId?: string;
+  pulseName?: string;
   conversationId?: string;
   summary?: string;
   error?: string;

@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Cpu, KeyRound, Loader2 } from "lucide-react";
+import { CheckCircle2, Cpu, KeyRound, Loader2, XCircle } from "lucide-react";
 import {
   applySettingsPatch,
   MAX_TOKEN_SELECT_OPTIONS,
   maxTokensSelectValue,
-  mergeModelOptions,
+  mergeModelCatalog,
+  modelOptionSuffix,
+  type ModelOption,
 } from "@/components/settings/settingsHelpers";
 import type {
+  ModelCatalogEntry,
   ProviderDescriptor,
   SettingsPatch,
   SettingsView,
@@ -18,7 +21,9 @@ const TEMPERATURE_INFO =
 
 const OLLAMA_CLOUD_KEYS_URL = "https://ollama.com/settings/keys";
 
-const OLLAMA_CLOUD_MODEL_PLACEHOLDER = "kimi-k2.5:cloud or gpt-oss:120b-cloud";
+const OPENROUTER_KEYS_URL = "https://openrouter.ai/keys";
+
+const OLLAMA_CLOUD_MODEL_PLACEHOLDER = "kimi-k2.6";
 
 const DEFAULT_OPENAI_MODELS = [
   "gpt-4o",
@@ -33,7 +38,17 @@ const DEFAULT_OPENAI_MODELS = [
 
 const DEFAULT_OLLAMA_LOCAL_MODELS = ["llama3.2", "mistral", "phi3", "codellama", "llama3.1"] as const;
 
-const DEFAULT_OLLAMA_CLOUD_MODELS = ["gpt-oss:120b-cloud", "kimi-k2.5:cloud"] as const;
+/**
+ * Ollama retires cloud models often, so keep a single current fallback and let
+ * `Refresh Models` supply the real list rather than shipping stale presets.
+ */
+const DEFAULT_OLLAMA_CLOUD_MODELS = ["kimi-k2.6"] as const;
+
+const DEFAULT_OPENROUTER_MODELS = [
+  "openai/gpt-4o-mini",
+  "anthropic/claude-3.5-sonnet",
+  "google/gemini-2.5-flash",
+] as const;
 
 const DEFAULT_ANTHROPIC_MODELS = [
   "claude-3-5-sonnet-20241022",
@@ -59,30 +74,46 @@ const DEFAULT_XAI_MODELS = [
   "grok-2-vision-1212",
 ] as const;
 
+/** Result of `provider_test_active_model`: one real round trip to the selected model. */
+type ModelProbe = {
+  ok: boolean;
+  providerId: string;
+  modelId: string;
+  detail: string;
+};
+
 type ModelPickRowProps = {
   htmlFor: string;
   label: string;
   value: string;
-  optionIds: string[];
+  options: ModelOption[];
   disabled?: boolean;
   loading: boolean;
   onChangeModel: (v: string) => void;
   onRefresh: () => void | Promise<void>;
   refreshLabel: string;
+  /** Present a "Test model" button for the provider currently selected for chat. */
+  onTestModel?: () => void | Promise<void>;
+  testing?: boolean;
+  testResult?: ModelProbe | null;
 };
 
 function ModelPickRow({
   htmlFor,
   label,
   value,
-  optionIds,
+  options,
   disabled,
   loading,
   onChangeModel,
   onRefresh,
   refreshLabel,
+  onTestModel,
+  testing,
+  testResult,
 }: ModelPickRowProps) {
-  const safeValue = optionIds.includes(value) ? value : optionIds[0] ?? "";
+  const safeValue = options.some((o) => o.id === value) ? value : options[0]?.id ?? "";
+  const refreshed = options.some((o) => o.known);
   return (
     <>
       <label className="block text-xs font-medium text-ps-muted" htmlFor={htmlFor}>
@@ -94,12 +125,13 @@ function ModelPickRow({
           title="Select model…"
           className="ps-select min-w-0 flex-1 py-2 pl-3 pr-2 text-sm"
           value={safeValue}
-          disabled={disabled || optionIds.length === 0}
+          disabled={disabled || options.length === 0}
           onChange={(e) => onChangeModel(e.target.value)}
         >
-          {optionIds.map((id) => (
-            <option key={id} value={id} className="bg-ps-elevated dark:bg-ps-elevated">
-              {id}
+          {options.map((o) => (
+            <option key={o.id} value={o.id} className="bg-ps-elevated dark:bg-ps-elevated">
+              {o.label}
+              {modelOptionSuffix(o)}
             </option>
           ))}
         </select>
@@ -115,6 +147,44 @@ function ModelPickRow({
           <span className="whitespace-nowrap">{refreshLabel}</span>
         </button>
       </div>
+      {refreshed ? (
+        <p className="text-[11px] leading-relaxed text-ps-faint">
+          Showing only models this provider reports as usable for chat in Persistent Sage.
+        </p>
+      ) : null}
+      {onTestModel ? (
+        <div className="space-y-1.5">
+          <button
+            type="button"
+            disabled={disabled || testing || !safeValue}
+            onClick={() => void onTestModel()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-2.5 py-1.5 text-[11px] font-semibold text-ps-ink hover:bg-ps-elevated dark:bg-ps-surface disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {testing ? (
+              <Loader2 className="size-3.5 shrink-0 animate-spin text-ps-muted" aria-hidden />
+            ) : null}
+            <span className="whitespace-nowrap">Test model</span>
+          </button>
+          {testResult ? (
+            <p
+              className={`flex items-start gap-1.5 text-[11px] leading-relaxed ${
+                testResult.ok ? "text-emerald-400/90" : "text-amber-400/90"
+              }`}
+            >
+              {testResult.ok ? (
+                <CheckCircle2 className="mt-px size-3.5 shrink-0" aria-hidden />
+              ) : (
+                <XCircle className="mt-px size-3.5 shrink-0" aria-hidden />
+              )}
+              <span className="min-w-0 break-words">
+                {testResult.ok
+                  ? `${testResult.modelId} replied: ${testResult.detail}`
+                  : `${testResult.modelId} failed: ${testResult.detail}`}
+              </span>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </>
   );
 }
@@ -142,18 +212,27 @@ export function ProviderSettingsTab({
   const [ollamaKeyInput, setOllamaKeyInput] = useState("");
   const [geminiKeyInput, setGeminiKeyInput] = useState("");
   const [xaiKeyInput, setXaiKeyInput] = useState("");
-  const [cloudModelTags, setCloudModelTags] = useState<string[] | null>(null);
+  const [openrouterKeyInput, setOpenrouterKeyInput] = useState("");
+  const [cloudModelTags, setCloudModelTags] = useState<ModelCatalogEntry[] | null>(null);
   const [cloudTagsLoading, setCloudTagsLoading] = useState(false);
-  const [openaiFetchedModels, setOpenaiFetchedModels] = useState<string[] | null>(null);
+  const [openaiFetchedModels, setOpenaiFetchedModels] = useState<ModelCatalogEntry[] | null>(null);
   const [openaiModelsLoading, setOpenaiModelsLoading] = useState(false);
-  const [localOllamaTags, setLocalOllamaTags] = useState<string[] | null>(null);
+  const [localOllamaTags, setLocalOllamaTags] = useState<ModelCatalogEntry[] | null>(null);
   const [localOllamaTagsLoading, setLocalOllamaTagsLoading] = useState(false);
-  const [anthropicFetchedModels, setAnthropicFetchedModels] = useState<string[] | null>(null);
+  const [anthropicFetchedModels, setAnthropicFetchedModels] = useState<ModelCatalogEntry[] | null>(
+    null,
+  );
   const [anthropicModelsLoading, setAnthropicModelsLoading] = useState(false);
-  const [geminiFetchedModels, setGeminiFetchedModels] = useState<string[] | null>(null);
+  const [geminiFetchedModels, setGeminiFetchedModels] = useState<ModelCatalogEntry[] | null>(null);
   const [geminiModelsLoading, setGeminiModelsLoading] = useState(false);
-  const [xaiFetchedModels, setXaiFetchedModels] = useState<string[] | null>(null);
+  const [xaiFetchedModels, setXaiFetchedModels] = useState<ModelCatalogEntry[] | null>(null);
   const [xaiModelsLoading, setXaiModelsLoading] = useState(false);
+  const [openrouterFetchedModels, setOpenrouterFetchedModels] = useState<
+    ModelCatalogEntry[] | null
+  >(null);
+  const [openrouterModelsLoading, setOpenrouterModelsLoading] = useState(false);
+  const [modelProbe, setModelProbe] = useState<ModelProbe | null>(null);
+  const [modelProbeLoading, setModelProbeLoading] = useState(false);
 
   const loadProviders = useCallback(async () => {
     try {
@@ -172,17 +251,25 @@ export function ProviderSettingsTab({
     if (settings?.selectedProvider !== "ollama_cloud") {
       setCloudModelTags(null);
     }
+    setModelProbe(null);
   }, [settings?.selectedProvider]);
 
   const applyModelPatchImmediate = useCallback(
     async (
       patch: Pick<
         SettingsPatch,
-        "openaiModel" | "ollamaModel" | "ollamaCloudModel" | "anthropicModel" | "geminiModel" | "xaiModel"
+        | "openaiModel"
+        | "ollamaModel"
+        | "ollamaCloudModel"
+        | "anthropicModel"
+        | "geminiModel"
+        | "xaiModel"
+        | "openrouterModel"
       >,
     ) => {
       try {
         setError(null);
+        setModelProbe(null);
         flushDebounce();
         const next = await applySettingsPatch(patch);
         setSettings(next);
@@ -194,36 +281,67 @@ export function ProviderSettingsTab({
     [flushDebounce, refreshSettings, setError, setSettings],
   );
 
+  const testActiveModel = useCallback(async () => {
+    try {
+      setModelProbeLoading(true);
+      setError(null);
+      flushDebounce();
+      setModelProbe(await invoke<ModelProbe>("provider_test_active_model"));
+    } catch (e) {
+      setModelProbe(null);
+      setError(String(e));
+    } finally {
+      setModelProbeLoading(false);
+    }
+  }, [flushDebounce, setError]);
+
   const openaiModelOptions = useMemo(
-    () => mergeModelOptions(DEFAULT_OPENAI_MODELS, openaiFetchedModels, settings?.openaiModel ?? ""),
+    () => mergeModelCatalog(DEFAULT_OPENAI_MODELS, openaiFetchedModels, settings?.openaiModel ?? ""),
     [openaiFetchedModels, settings?.openaiModel],
   );
 
   const localOllamaModelOptions = useMemo(
-    () => mergeModelOptions(DEFAULT_OLLAMA_LOCAL_MODELS, localOllamaTags, settings?.ollamaModel ?? ""),
+    () => mergeModelCatalog(DEFAULT_OLLAMA_LOCAL_MODELS, localOllamaTags, settings?.ollamaModel ?? ""),
     [localOllamaTags, settings?.ollamaModel],
   );
 
   const cloudOllamaModelOptions = useMemo(
     () =>
-      mergeModelOptions(DEFAULT_OLLAMA_CLOUD_MODELS, cloudModelTags, settings?.ollamaCloudModel ?? ""),
+      mergeModelCatalog(DEFAULT_OLLAMA_CLOUD_MODELS, cloudModelTags, settings?.ollamaCloudModel ?? ""),
     [cloudModelTags, settings?.ollamaCloudModel],
   );
 
   const anthropicModelOptions = useMemo(
     () =>
-      mergeModelOptions(DEFAULT_ANTHROPIC_MODELS, anthropicFetchedModels, settings?.anthropicModel ?? ""),
+      mergeModelCatalog(DEFAULT_ANTHROPIC_MODELS, anthropicFetchedModels, settings?.anthropicModel ?? ""),
     [anthropicFetchedModels, settings?.anthropicModel],
   );
 
   const geminiModelOptions = useMemo(
-    () => mergeModelOptions(DEFAULT_GEMINI_MODELS, geminiFetchedModels, settings?.geminiModel ?? ""),
+    () => mergeModelCatalog(DEFAULT_GEMINI_MODELS, geminiFetchedModels, settings?.geminiModel ?? ""),
     [geminiFetchedModels, settings?.geminiModel],
   );
 
   const xaiModelOptions = useMemo(
-    () => mergeModelOptions(DEFAULT_XAI_MODELS, xaiFetchedModels, settings?.xaiModel ?? ""),
+    () => mergeModelCatalog(DEFAULT_XAI_MODELS, xaiFetchedModels, settings?.xaiModel ?? ""),
     [xaiFetchedModels, settings?.xaiModel],
+  );
+
+  const openrouterModelOptions = useMemo(
+    () =>
+      mergeModelCatalog(
+        DEFAULT_OPENROUTER_MODELS,
+        openrouterFetchedModels,
+        settings?.openrouterModel ?? "",
+      ),
+    [openrouterFetchedModels, settings?.openrouterModel],
+  );
+
+  /** Only the provider selected for chat can be probed, so gate the button on it. */
+  const probeFor = useCallback(
+    (providerId: string) =>
+      settings?.selectedProvider === providerId ? testActiveModel : undefined,
+    [settings?.selectedProvider, testActiveModel],
   );
 
   const saveOpenaiKey = async () => {
@@ -285,8 +403,7 @@ export function ProviderSettingsTab({
     try {
       setCloudTagsLoading(true);
       setError(null);
-      const tags = await invoke<string[]>("ollama_cloud_list_models");
-      setCloudModelTags(tags);
+      setCloudModelTags(await invoke<ModelCatalogEntry[]>("ollama_cloud_list_models"));
     } catch (e) {
       setCloudModelTags(null);
       setError(String(e));
@@ -299,8 +416,7 @@ export function ProviderSettingsTab({
     try {
       setOpenaiModelsLoading(true);
       setError(null);
-      const ids = await invoke<string[]>("openai_list_models");
-      setOpenaiFetchedModels(ids);
+      setOpenaiFetchedModels(await invoke<ModelCatalogEntry[]>("openai_list_models"));
     } catch (e) {
       setOpenaiFetchedModels(null);
       setError(String(e));
@@ -313,8 +429,7 @@ export function ProviderSettingsTab({
     try {
       setLocalOllamaTagsLoading(true);
       setError(null);
-      const tags = await invoke<string[]>("ollama_list_local_models");
-      setLocalOllamaTags(tags);
+      setLocalOllamaTags(await invoke<ModelCatalogEntry[]>("ollama_list_local_models"));
     } catch (e) {
       setLocalOllamaTags(null);
       setError(String(e));
@@ -327,8 +442,7 @@ export function ProviderSettingsTab({
     try {
       setAnthropicModelsLoading(true);
       setError(null);
-      const ids = await invoke<string[]>("anthropic_list_models");
-      setAnthropicFetchedModels(ids);
+      setAnthropicFetchedModels(await invoke<ModelCatalogEntry[]>("anthropic_list_models"));
     } catch (e) {
       setAnthropicFetchedModels(null);
       setError(String(e));
@@ -341,8 +455,7 @@ export function ProviderSettingsTab({
     try {
       setGeminiModelsLoading(true);
       setError(null);
-      const ids = await invoke<string[]>("gemini_list_models");
-      setGeminiFetchedModels(ids);
+      setGeminiFetchedModels(await invoke<ModelCatalogEntry[]>("gemini_list_models"));
     } catch (e) {
       setGeminiFetchedModels(null);
       setError(String(e));
@@ -355,8 +468,7 @@ export function ProviderSettingsTab({
     try {
       setXaiModelsLoading(true);
       setError(null);
-      const ids = await invoke<string[]>("xai_list_models");
-      setXaiFetchedModels(ids);
+      setXaiFetchedModels(await invoke<ModelCatalogEntry[]>("xai_list_models"));
     } catch (e) {
       setXaiFetchedModels(null);
       setError(String(e));
@@ -364,6 +476,33 @@ export function ProviderSettingsTab({
       setXaiModelsLoading(false);
     }
   }, [setError]);
+
+  const refreshOpenrouterModels = useCallback(async () => {
+    try {
+      setOpenrouterModelsLoading(true);
+      setError(null);
+      setOpenrouterFetchedModels(await invoke<ModelCatalogEntry[]>("openrouter_list_models"));
+    } catch (e) {
+      setOpenrouterFetchedModels(null);
+      setError(String(e));
+    } finally {
+      setOpenrouterModelsLoading(false);
+    }
+  }, [setError]);
+
+  const saveOpenrouterKey = async () => {
+    try {
+      setError(null);
+      await invoke("settings_save_api_key", {
+        provider: "openrouter",
+        apiKey: openrouterKeyInput,
+      });
+      setOpenrouterKeyInput("");
+      await refreshSettings();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
 
   const onProviderChange = async (id: string) => {
     try {
@@ -451,12 +590,15 @@ export function ProviderSettingsTab({
           htmlFor="openai-model"
           label="Model"
           value={settings?.openaiModel ?? ""}
-          optionIds={openaiModelOptions}
+          options={openaiModelOptions}
           disabled={!settings}
           loading={openaiModelsLoading}
           onChangeModel={(v) => void applyModelPatchImmediate({ openaiModel: v })}
           onRefresh={refreshOpenaiModels}
           refreshLabel="Refresh Models"
+          onTestModel={probeFor("openai")}
+          testing={modelProbeLoading}
+          testResult={modelProbe}
         />
         <details className="mt-2 rounded-md border border-ps-border bg-ps-elevated px-2 py-2">
           <summary className="cursor-pointer text-[11px] text-ps-faint">Type model name…</summary>
@@ -539,12 +681,15 @@ export function ProviderSettingsTab({
                 htmlFor="ollama-model-local"
                 label="Model"
                 value={settings?.ollamaModel ?? ""}
-                optionIds={localOllamaModelOptions}
+                options={localOllamaModelOptions}
                 disabled={!settings}
                 loading={localOllamaTagsLoading}
                 onChangeModel={(v) => void applyModelPatchImmediate({ ollamaModel: v })}
                 onRefresh={refreshLocalOllamaModels}
                 refreshLabel="Refresh Models"
+                onTestModel={probeFor("ollama")}
+                testing={modelProbeLoading}
+                testResult={modelProbe}
               />
               <details className="mt-2 rounded-md border border-ps-border bg-ps-elevated px-2 py-2">
                 <summary className="cursor-pointer text-[11px] text-ps-faint">Type model name…</summary>
@@ -588,20 +733,23 @@ export function ProviderSettingsTab({
               </p>
               <p className="text-[11px] leading-relaxed text-ps-faint">
                 <span className="font-mono text-ps-muted">Refresh Models</span> loads cloud tags from{" "}
-                <span className="font-mono text-ps-muted">https://ollama.com/api/tags</span>. Preset{" "}
-                <span className="font-mono text-ps-muted">{OLLAMA_CLOUD_MODEL_PLACEHOLDER}</span> entries stay
-                available without a refresh.
+                <span className="font-mono text-ps-muted">https://ollama.com/api/tags</span> and keeps
+                only chat-capable ones. Ollama retires cloud models often, so refresh after a failure
+                instead of trusting the preset.
               </p>
               <ModelPickRow
                 htmlFor="ollama-cloud-model"
                 label="Model"
                 value={settings?.ollamaCloudModel ?? ""}
-                optionIds={cloudOllamaModelOptions}
+                options={cloudOllamaModelOptions}
                 disabled={!settings}
                 loading={cloudTagsLoading}
                 onChangeModel={(v) => void applyModelPatchImmediate({ ollamaCloudModel: v })}
                 onRefresh={refreshOllamaCloudModels}
                 refreshLabel="Refresh Models"
+                onTestModel={probeFor("ollama_cloud")}
+                testing={modelProbeLoading}
+                testResult={modelProbe}
               />
               <details className="mt-2 rounded-md border border-ps-border bg-ps-elevated px-2 py-2">
                 <summary className="cursor-pointer text-[11px] text-ps-faint">Type model name…</summary>
@@ -672,12 +820,15 @@ export function ProviderSettingsTab({
           htmlFor="anthropic-model"
           label="Model"
           value={settings?.anthropicModel ?? ""}
-          optionIds={anthropicModelOptions}
+          options={anthropicModelOptions}
           disabled={!settings}
           loading={anthropicModelsLoading}
           onChangeModel={(v) => void applyModelPatchImmediate({ anthropicModel: v })}
           onRefresh={refreshAnthropicModels}
           refreshLabel="Refresh Models"
+          onTestModel={probeFor("anthropic")}
+          testing={modelProbeLoading}
+          testResult={modelProbe}
         />
         <details className="mt-2 rounded-md border border-ps-border bg-ps-elevated px-2 py-2">
           <summary className="cursor-pointer text-[11px] text-ps-faint">Type model name…</summary>
@@ -745,12 +896,15 @@ export function ProviderSettingsTab({
           htmlFor="gemini-model"
           label="Model"
           value={settings?.geminiModel ?? ""}
-          optionIds={geminiModelOptions}
+          options={geminiModelOptions}
           disabled={!settings}
           loading={geminiModelsLoading}
           onChangeModel={(v) => void applyModelPatchImmediate({ geminiModel: v })}
           onRefresh={refreshGeminiModels}
           refreshLabel="Refresh Models"
+          onTestModel={probeFor("gemini")}
+          testing={modelProbeLoading}
+          testResult={modelProbe}
         />
         <details className="mt-2 rounded-md border border-ps-border bg-ps-elevated px-2 py-2">
           <summary className="cursor-pointer text-[11px] text-ps-faint">Type model name…</summary>
@@ -818,12 +972,15 @@ export function ProviderSettingsTab({
           htmlFor="xai-model"
           label="Model"
           value={settings?.xaiModel ?? ""}
-          optionIds={xaiModelOptions}
+          options={xaiModelOptions}
           disabled={!settings}
           loading={xaiModelsLoading}
           onChangeModel={(v) => void applyModelPatchImmediate({ xaiModel: v })}
           onRefresh={refreshXaiModels}
           refreshLabel="Refresh Models"
+          onTestModel={probeFor("xai")}
+          testing={modelProbeLoading}
+          testResult={modelProbe}
         />
         <details className="mt-2 rounded-md border border-ps-border bg-ps-elevated px-2 py-2">
           <summary className="cursor-pointer text-[11px] text-ps-faint">Type model name…</summary>
@@ -865,6 +1022,95 @@ export function ProviderSettingsTab({
           className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-3 py-2 text-xs font-semibold text-ps-ink hover:bg-ps-elevated dark:bg-ps-surface"
         >
           Save xAI API key
+        </button>
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-ps-border bg-ps-elevated p-3">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ps-faint">
+          OpenRouter
+        </h3>
+        <p className="text-[11px] leading-relaxed text-ps-faint">
+          One key reaches models from many labs. Get a key at{" "}
+          <a
+            href={OPENROUTER_KEYS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-ps-accent underline-offset-2 hover:underline"
+          >
+            openrouter.ai/keys
+          </a>
+          . <span className="font-mono text-ps-muted">Refresh Models</span> lists only the
+          tool-capable chat models your account can reach, so nothing in the picker is a dead end.
+        </p>
+        <label className="block text-xs font-medium text-ps-muted" htmlFor="openrouter-base">
+          Base URL
+        </label>
+        <input
+          id="openrouter-base"
+          type="url"
+          value={settings?.openrouterBaseUrl ?? ""}
+          disabled={!settings}
+          onChange={(e) => {
+            const v = e.target.value;
+            setSettings((s) => (s ? { ...s, openrouterBaseUrl: v } : s));
+            schedulePatch({ openrouterBaseUrl: v });
+          }}
+          className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 text-sm text-ps-ink outline-none focus:border-ps-accent/50"
+        />
+        <ModelPickRow
+          htmlFor="openrouter-model"
+          label="Model"
+          value={settings?.openrouterModel ?? ""}
+          options={openrouterModelOptions}
+          disabled={!settings}
+          loading={openrouterModelsLoading}
+          onChangeModel={(v) => void applyModelPatchImmediate({ openrouterModel: v })}
+          onRefresh={refreshOpenrouterModels}
+          refreshLabel="Refresh Models"
+          onTestModel={probeFor("openrouter")}
+          testing={modelProbeLoading}
+          testResult={modelProbe}
+        />
+        <details className="mt-2 rounded-md border border-ps-border bg-ps-elevated px-2 py-2">
+          <summary className="cursor-pointer text-[11px] text-ps-faint">Type model name…</summary>
+          <input
+            type="text"
+            placeholder="e.g. openai/gpt-4o-mini"
+            value={settings?.openrouterModel ?? ""}
+            disabled={!settings}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSettings((s) => (s ? { ...s, openrouterModel: v } : s));
+              schedulePatch({ openrouterModel: v });
+            }}
+            className="mt-2 w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
+          />
+        </details>
+        <div className="flex items-center gap-2 text-xs text-ps-faint">
+          <KeyRound className="size-3.5 shrink-0" aria-hidden />
+          <span>
+            API key:{" "}
+            {settings?.hasOpenrouterApiKey ? (
+              <span className="text-emerald-400/90">saved (encrypted)</span>
+            ) : (
+              <span className="text-amber-400/90">not set</span>
+            )}
+          </span>
+        </div>
+        <input
+          type="password"
+          autoComplete="off"
+          placeholder="sk-or-…"
+          value={openrouterKeyInput}
+          onChange={(e) => setOpenrouterKeyInput(e.target.value)}
+          className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
+        />
+        <button
+          type="button"
+          onClick={() => void saveOpenrouterKey()}
+          className="w-full rounded-lg border border-ps-border bg-ps-elevated dark:bg-ps-elevated px-3 py-2 text-xs font-semibold text-ps-ink hover:bg-ps-elevated dark:bg-ps-surface"
+        >
+          Save OpenRouter API key
         </button>
       </section>
 

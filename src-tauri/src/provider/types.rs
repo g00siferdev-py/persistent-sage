@@ -105,6 +105,18 @@ pub struct ProviderDescriptor {
     pub requires_api_key: bool,
 }
 
+/// One selectable model in a provider's picker, with the capabilities the UI filters on.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelCatalogEntry {
+    pub id: String,
+    pub label: String,
+    pub supports_tools: bool,
+    pub supports_vision: bool,
+    pub context_length: Option<u32>,
+    pub is_free: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatSendResult {

@@ -2,27 +2,47 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Calendar,
+  CheckSquare,
+  Clock,
+  CloudSun,
+  Contact,
   FileText,
   FolderKanban,
   LayoutGrid,
+  Link2,
   LogOut,
+  LogIn,
   Mail,
   Plus,
+  SlidersHorizontal,
   StickyNote,
 } from "lucide-react";
 import { AppModeSwitcher } from "@/components/layout/AppModeSwitcher";
 import { AppHelpButton } from "@/components/help/AppHelpButton";
 import { DonateFooter } from "@/components/support/DonateFooter";
+import { SettingsPanel } from "@/components/settings/SettingsPanel";
 import { WidgetFrame } from "@/components/productivity/WidgetFrame";
 import { EmailWidget } from "@/components/productivity/EmailWidget";
 import { CalendarWidget } from "@/components/productivity/CalendarWidget";
 import { DocumentsWidget } from "@/components/productivity/DocumentsWidget";
 import { NotepadWidget } from "@/components/productivity/NotepadWidget";
 import { ProjectsWidget } from "@/components/productivity/ProjectsWidget";
+import { WeatherWidget } from "@/components/productivity/WeatherWidget";
+import { ContactsWidget } from "@/components/productivity/ContactsWidget";
+import { TasksWidget } from "@/components/productivity/TasksWidget";
+import { ClockWidget } from "@/components/productivity/ClockWidget";
+import { QuickLinksWidget } from "@/components/productivity/QuickLinksWidget";
 import { GoogleConnectCard } from "@/components/productivity/GoogleConnectCard";
 import type { GoogleStatus } from "@/lib/googleTypes";
 import type { AppMode } from "@/lib/appMode";
 import {
+  cycleSettingsLayoutMode,
+  loadSettingsLayoutMode,
+  saveSettingsLayoutMode,
+  type SettingsLayoutMode,
+} from "@/lib/settingsLayout";
+import {
+  ALL_WIDGET_KINDS,
   defaultLayout,
   loadLayout,
   nextZ,
@@ -43,17 +63,31 @@ const WIDGET_ICONS: Record<WidgetKind, React.ReactNode> = {
   documents: <FileText className="size-3.5" aria-hidden />,
   notepad: <StickyNote className="size-3.5" aria-hidden />,
   projects: <FolderKanban className="size-3.5" aria-hidden />,
+  weather: <CloudSun className="size-3.5" aria-hidden />,
+  contacts: <Contact className="size-3.5" aria-hidden />,
+  tasks: <CheckSquare className="size-3.5" aria-hidden />,
+  clock: <Clock className="size-3.5" aria-hidden />,
+  links: <Link2 className="size-3.5" aria-hidden />,
 };
 
-const ALL_WIDGETS: WidgetKind[] = ["email", "calendar", "documents", "notepad", "projects"];
-
-/** Productivity mode — a customizable canvas of movable widgets backed by
- *  Google Workspace (Gmail / Calendar / Drive) plus local notepad and projects. */
+/** Productivity mode — customizable canvas of movable widgets. */
 export function ProductivityLayout({ onModeChange }: Props) {
   const [layout, setLayout] = useState<WidgetLayout>(() => loadLayout());
   const [googleStatus, setGoogleStatus] = useState<GoogleStatus | null>(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
+  const [settingsLayoutMode, setSettingsLayoutMode] = useState<SettingsLayoutMode>(() =>
+    loadSettingsLayoutMode(),
+  );
+
+  const setSettingsLayout = useCallback((mode: SettingsLayoutMode) => {
+    setSettingsLayoutMode(mode);
+    saveSettingsLayoutMode(mode);
+  }, []);
+
+  const cycleSettingsLayout = useCallback(() => {
+    setSettingsLayout(cycleSettingsLayoutMode(settingsLayoutMode));
+  }, [settingsLayoutMode, setSettingsLayout]);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -83,26 +117,26 @@ export function ProductivityLayout({ onModeChange }: Props) {
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [addMenuOpen]);
 
-  const updatePlacement = useCallback((kind: WidgetKind, patch: Partial<{ x: number; y: number; w: number; h: number; z: number }>) => {
-    setLayout((prev) => {
-      const current = prev[kind];
-      if (!current) return prev;
-      return { ...prev, [kind]: { ...current, ...patch } };
-    });
-  }, []);
-
-  const focusWidget = useCallback(
-    (kind: WidgetKind) => {
+  const updatePlacement = useCallback(
+    (kind: WidgetKind, patch: Partial<{ x: number; y: number; w: number; h: number; z: number }>) => {
       setLayout((prev) => {
         const current = prev[kind];
         if (!current) return prev;
-        const top = nextZ(prev);
-        if (current.z >= top - 1) return prev;
-        return { ...prev, [kind]: { ...current, z: top } };
+        return { ...prev, [kind]: { ...current, ...patch } };
       });
     },
     [],
   );
+
+  const focusWidget = useCallback((kind: WidgetKind) => {
+    setLayout((prev) => {
+      const current = prev[kind];
+      if (!current) return prev;
+      const top = nextZ(prev);
+      if (current.z >= top - 1) return prev;
+      return { ...prev, [kind]: { ...current, z: top } };
+    });
+  }, []);
 
   const closeWidget = useCallback((kind: WidgetKind) => {
     setLayout((prev) => {
@@ -126,17 +160,26 @@ export function ProductivityLayout({ onModeChange }: Props) {
 
   const disconnect = useCallback(async () => {
     try {
-      const s = await invoke<GoogleStatus>("google_disconnect");
+      const s = await invoke<GoogleStatus>("google_disconnect", { account: "user" });
       setGoogleStatus(s);
     } catch {
       /* ignore */
     }
   }, []);
 
-  const openWidgets = ALL_WIDGETS.filter((k) => layout[k]);
-  const closedWidgets = ALL_WIDGETS.filter((k) => !layout[k]);
-  const showConnectHero =
-    googleStatus != null && (!googleStatus.connected || !googleStatus.enabled) && openWidgets.length === 0;
+  const openWidgets = ALL_WIDGET_KINDS.filter((k) => layout[k]);
+  const closedWidgets = ALL_WIDGET_KINDS.filter((k) => !layout[k]);
+  const needsGoogle = googleStatus != null && !googleStatus.connected;
+  const showConnectHero = needsGoogle && openWidgets.length === 0;
+
+  const signIn = useCallback(async () => {
+    try {
+      const s = await invoke<GoogleStatus>("google_auth_start", { account: "user" });
+      setGoogleStatus(s);
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
 
   const renderWidget = (kind: WidgetKind) => {
     switch (kind) {
@@ -150,6 +193,16 @@ export function ProductivityLayout({ onModeChange }: Props) {
         return <NotepadWidget />;
       case "projects":
         return <ProjectsWidget />;
+      case "weather":
+        return <WeatherWidget />;
+      case "contacts":
+        return <ContactsWidget status={googleStatus} onStatusChange={setGoogleStatus} />;
+      case "tasks":
+        return <TasksWidget status={googleStatus} onStatusChange={setGoogleStatus} />;
+      case "clock":
+        return <ClockWidget />;
+      case "links":
+        return <QuickLinksWidget />;
     }
   };
 
@@ -163,17 +216,32 @@ export function ProductivityLayout({ onModeChange }: Props) {
             <p className="truncate text-xs text-ps-muted">
               {googleStatus?.connected
                 ? `Google · ${googleStatus.accountEmail || "connected"}`
-                : "Email, calendar, documents, and projects — arranged your way."}
+                : "Widgets for email, calendar, weather, tasks, and more — arranged your way."}
             </p>
           </div>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2 self-center">
           {googleStatus?.connected ? (
-            <button type="button" onClick={() => void disconnect()} className="ps-btn-ghost" title={`Disconnect ${googleStatus.accountEmail}`}>
+            <button
+              type="button"
+              onClick={() => void disconnect()}
+              className="ps-btn-ghost"
+              title={`Disconnect ${googleStatus.accountEmail}`}
+            >
               <LogOut className="size-3.5" aria-hidden />
               <span className="hidden lg:inline">Disconnect Google</span>
             </button>
-          ) : null}
+          ) : (
+            <button
+              type="button"
+              onClick={() => void signIn()}
+              className="ps-btn-primary"
+              title="Sign in with Google for Productivity widgets"
+            >
+              <LogIn className="size-3.5" aria-hidden />
+              <span className="hidden sm:inline">Sign in with Google</span>
+            </button>
+          )}
           <div className="relative" ref={addMenuRef}>
             <button
               type="button"
@@ -188,9 +256,15 @@ export function ProductivityLayout({ onModeChange }: Props) {
               Add widget
             </button>
             {addMenuOpen && closedWidgets.length ? (
-              <div role="menu" className="ps-menu absolute right-0 top-full mt-1">
+              <div role="menu" className="ps-menu absolute right-0 top-full mt-1 max-h-72 overflow-y-auto">
                 {closedWidgets.map((kind) => (
-                  <button key={kind} type="button" role="menuitem" className="ps-menu-item" onClick={() => addWidget(kind)}>
+                  <button
+                    key={kind}
+                    type="button"
+                    role="menuitem"
+                    className="ps-menu-item"
+                    onClick={() => addWidget(kind)}
+                  >
                     <span className="text-ps-accent">{WIDGET_ICONS[kind]}</span>
                     {WIDGET_LABELS[kind]}
                   </button>
@@ -210,42 +284,58 @@ export function ProductivityLayout({ onModeChange }: Props) {
             <span className="hidden lg:inline">Reset layout</span>
           </button>
           <AppHelpButton />
+          <button
+            type="button"
+            onClick={() => void cycleSettingsLayout()}
+            aria-expanded={settingsLayoutMode !== "hidden"}
+            aria-controls="nova-settings-panel"
+            title={`Settings: ${settingsLayoutMode === "hidden" ? "Hidden" : settingsLayoutMode === "compact" ? "Compact" : "Full"} — click to cycle`}
+            className="ps-btn"
+          >
+            <SlidersHorizontal className="size-3.5" aria-hidden />
+            Settings
+          </button>
         </div>
       </header>
 
-      <div className="relative min-h-0 flex-1 overflow-auto">
-        {showConnectHero ? (
-          <div className="mx-auto mt-16 max-w-md">
-            <div className="ps-panel">
-              <GoogleConnectCard status={googleStatus} onStatusChange={setGoogleStatus} />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="relative min-h-0 min-w-0 flex-1 overflow-auto">
+          {showConnectHero ? (
+            <div className="mx-auto mt-16 max-w-md">
+              <div className="ps-panel">
+                <GoogleConnectCard status={googleStatus} onStatusChange={setGoogleStatus} />
+              </div>
             </div>
+          ) : null}
+          {openWidgets.length === 0 && !showConnectHero ? (
+            <div className="flex h-full items-center justify-center">
+              <p className="max-w-sm text-center text-sm text-ps-faint">
+                The canvas is empty. Use <strong className="text-ps-muted">Add widget</strong> to
+                lay out email, calendar, weather, tasks, and more however you like.
+              </p>
+            </div>
+          ) : null}
+          <div className="relative h-[1600px] w-[2400px]">
+            {openWidgets.map((kind) => (
+              <WidgetFrame
+                key={kind}
+                placement={layout[kind]}
+                title={WIDGET_LABELS[kind]}
+                icon={WIDGET_ICONS[kind]}
+                onMove={(x, y) => updatePlacement(kind, { x, y })}
+                onResize={(w, h) => updatePlacement(kind, { w, h })}
+                onFocus={() => focusWidget(kind)}
+                onClose={() => closeWidget(kind)}
+              >
+                {renderWidget(kind)}
+              </WidgetFrame>
+            ))}
           </div>
-        ) : null}
-        {openWidgets.length === 0 && !showConnectHero ? (
-          <div className="flex h-full items-center justify-center">
-            <p className="max-w-sm text-center text-sm text-ps-faint">
-              The canvas is empty. Use <strong className="text-ps-muted">Add widget</strong> to
-              lay out email, calendar, documents, notepad, or projects however you like.
-            </p>
-          </div>
-        ) : null}
-        {/* Canvas is larger than the viewport so widgets can spread out. */}
-        <div className="relative h-[1600px] w-[2400px]">
-          {openWidgets.map((kind) => (
-            <WidgetFrame
-              key={kind}
-              placement={layout[kind]}
-              title={WIDGET_LABELS[kind]}
-              icon={WIDGET_ICONS[kind]}
-              onMove={(x, y) => updatePlacement(kind, { x, y })}
-              onResize={(w, h) => updatePlacement(kind, { w, h })}
-              onFocus={() => focusWidget(kind)}
-              onClose={() => closeWidget(kind)}
-            >
-              {renderWidget(kind)}
-            </WidgetFrame>
-          ))}
         </div>
+        <SettingsPanel
+          layoutMode={settingsLayoutMode}
+          onLayoutModeChange={setSettingsLayout}
+        />
       </div>
       <DonateFooter />
     </div>

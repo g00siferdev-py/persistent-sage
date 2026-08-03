@@ -219,7 +219,26 @@ If it fails:
 
 ### Ollama Cloud
 
-Requires an Ollama API key. Models may use names like `gpt-oss:120b-cloud` or `kimi-k2.5:cloud`.
+Requires an Ollama API key. Ollama retires cloud models frequently, so treat any model
+name in this guide as an example only and press **Refresh Models** to see what the
+account can actually reach today (the default is `kimi-k2.6`). If a model that used to
+work starts failing, it was most likely retired — refresh and pick a current one.
+
+Newer cloud tags drop the `:cloud` suffix; both spellings are accepted.
+
+### OpenRouter
+
+Requires an API key from [openrouter.ai/keys](https://openrouter.ai/keys). Model ids are
+`author/model`, e.g. `openai/gpt-4o-mini`.
+
+**Refresh Models** returns only models that advertise tool support, so every entry works
+with Persistent Sage's agent tools.
+
+If it fails:
+
+- Confirm the key is active and has credit (free models still need an account).
+- Use **Test model** to see the provider's exact error, including HTTP status.
+- Confirm the model id includes the author prefix.
 
 ### Google Gemini
 

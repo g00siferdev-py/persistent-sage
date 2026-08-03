@@ -385,4 +385,26 @@ impl PersonalityManager {
         }
         self.persist_unlocked()
     }
+
+    /// Re-read `personality.json` from disk (e.g. after LAN merge wrote the file).
+    pub fn reload_from_disk(&self) -> Result<(), PersonalityError> {
+        if !self.path.exists() {
+            return Ok(());
+        }
+        let raw = std::fs::read_to_string(&self.path)?;
+        let mut f: PersonalityFile = serde_json::from_str(&raw)?;
+        if f.profiles.is_empty() {
+            f.profiles.push(PersonalityProfile::default());
+        }
+        if !f.profiles.iter().any(|p| p.id == f.active_profile_id) {
+            f.active_profile_id = f.profiles[0].id.clone();
+        }
+        f.version = FILE_VERSION;
+        let mut inner = self
+            .inner
+            .write()
+            .map_err(|_| PersonalityError::Invalid("lock poisoned".into()))?;
+        *inner = f;
+        Ok(())
+    }
 }

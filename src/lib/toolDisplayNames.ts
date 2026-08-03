@@ -12,6 +12,8 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   personality_get: "View Personality",
   personality_update: "Update Personality",
   memory_search: "Memory Search",
+  memory_search_all: "Memory Search All Agents",
+  correspondence_sync: "Correspondence Sync",
   coding_grep: "Code Search",
   coding_apply_patch: "Apply Patch",
   coding_run_command: "Run Command",

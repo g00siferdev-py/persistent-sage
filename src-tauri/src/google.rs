@@ -9,7 +9,7 @@
 //! (companion chat: "did I get an email from X?", "add a vet appointment…").
 
 use std::io::{Read as _, Write as _};
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 
 use base64::Engine as _;
@@ -21,13 +21,54 @@ use crate::provider::{ProviderError, ToolDefinition};
 use crate::settings::SettingsManager;
 use crate::NovaState;
 
-const TOKEN_SLOT: &str = "google_tokens";
+/// Which Google identity tokens/API calls use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GoogleAccount {
+    User,
+    Sage,
+}
+
+impl GoogleAccount {
+    pub fn parse(s: &str) -> Self {
+        let t = s.trim();
+        if t.eq_ignore_ascii_case("sage") || t.eq_ignore_ascii_case("agent") {
+            Self::Sage
+        } else {
+            Self::User
+        }
+    }
+
+    fn token_slot(self) -> &'static str {
+        match self {
+            Self::User => "google_tokens",
+            Self::Sage => "google_tokens_sage",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::User => "your Google account",
+            Self::Sage => "the agent's designated email account",
+        }
+    }
+
+    /// Tool/API string: `user` or `agent` (legacy `sage` still accepted by parse).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Sage => "agent",
+        }
+    }
+}
+
 const TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
 const AUTH_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const USERINFO_ENDPOINT: &str = "https://openidconnect.googleapis.com/v1/userinfo";
 const GMAIL_BASE: &str = "https://gmail.googleapis.com/gmail/v1/users/me";
 const CALENDAR_BASE: &str = "https://www.googleapis.com/calendar/v3";
 const DRIVE_BASE: &str = "https://www.googleapis.com/drive/v3";
+const PEOPLE_BASE: &str = "https://people.googleapis.com/v1";
+const TASKS_BASE: &str = "https://tasks.googleapis.com/tasks/v1";
 /// Refresh access tokens this many seconds before expiry.
 const REFRESH_SKEW_SECS: i64 = 60;
 /// How long we wait for the user to finish the browser consent flow.
@@ -38,11 +79,35 @@ fn tool_err(msg: impl Into<String>) -> ProviderError {
 }
 
 /// Built-in app OAuth client, baked in at compile time for official builds:
-/// `PS_GOOGLE_CLIENT_ID` / `PS_GOOGLE_CLIENT_SECRET` env vars during `cargo build`.
-/// Users never need Google Cloud Console when these are present; a client ID
-/// saved in Settings always overrides the built-in one (for self-builds/testing).
+/// `PS_GOOGLE_CLIENT_ID` / `PS_GOOGLE_CLIENT_SECRET` env vars during `cargo build`
+/// (CI secrets, or a local `src-tauri/.env`). Users never need Google Cloud Console
+/// when these are present; a client ID saved in Settings always overrides the built-in
+/// one (for self-builds/testing).
 const BUILTIN_CLIENT_ID: Option<&str> = option_env!("PS_GOOGLE_CLIENT_ID");
 const BUILTIN_CLIENT_SECRET: Option<&str> = option_env!("PS_GOOGLE_CLIENT_SECRET");
+
+fn builtin_client_id() -> String {
+    let compiled = BUILTIN_CLIENT_ID.unwrap_or("").trim();
+    if !compiled.is_empty() {
+        return compiled.to_string();
+    }
+    // Runtime fallback for packaged launches that inject env without rebuild.
+    std::env::var("PS_GOOGLE_CLIENT_ID")
+        .unwrap_or_default()
+        .trim()
+        .to_string()
+}
+
+fn builtin_client_secret() -> String {
+    let compiled = BUILTIN_CLIENT_SECRET.unwrap_or("").trim();
+    if !compiled.is_empty() {
+        return compiled.to_string();
+    }
+    std::env::var("PS_GOOGLE_CLIENT_SECRET")
+        .unwrap_or_default()
+        .trim()
+        .to_string()
+}
 
 /// Effective OAuth client id: user override from Settings, else built-in.
 fn effective_client_id(settings: &SettingsManager) -> String {
@@ -50,7 +115,7 @@ fn effective_client_id(settings: &SettingsManager) -> String {
     if !user.trim().is_empty() {
         return user.trim().to_string();
     }
-    BUILTIN_CLIENT_ID.unwrap_or("").trim().to_string()
+    builtin_client_id()
 }
 
 /// Effective OAuth client secret: user secret when a user client id is in use,
@@ -63,7 +128,7 @@ fn effective_client_secret(settings: &SettingsManager) -> Result<String, Provide
             .map_err(|e| tool_err(e.to_string()))?
             .unwrap_or_default());
     }
-    Ok(BUILTIN_CLIENT_SECRET.unwrap_or("").trim().to_string())
+    Ok(builtin_client_secret())
 }
 
 // --- Token storage -------------------------------------------------------------
@@ -79,9 +144,12 @@ struct StoredTokens {
     scopes: Vec<String>,
 }
 
-fn load_tokens(settings: &SettingsManager) -> Result<Option<StoredTokens>, ProviderError> {
+fn load_tokens(
+    settings: &SettingsManager,
+    account: GoogleAccount,
+) -> Result<Option<StoredTokens>, ProviderError> {
     let raw = settings
-        .decrypt_api_key(TOKEN_SLOT)
+        .decrypt_api_key(account.token_slot())
         .map_err(|e| tool_err(format!("read Google tokens: {e}")))?;
     match raw {
         None => Ok(None),
@@ -91,10 +159,14 @@ fn load_tokens(settings: &SettingsManager) -> Result<Option<StoredTokens>, Provi
     }
 }
 
-fn store_tokens(settings: &SettingsManager, tokens: &StoredTokens) -> Result<(), ProviderError> {
+fn store_tokens(
+    settings: &SettingsManager,
+    account: GoogleAccount,
+    tokens: &StoredTokens,
+) -> Result<(), ProviderError> {
     let raw = serde_json::to_string(tokens).map_err(|e| tool_err(e.to_string()))?;
     settings
-        .save_secret_slot(TOKEN_SLOT, &raw)
+        .save_secret_slot(account.token_slot(), &raw)
         .map_err(|e| tool_err(format!("store Google tokens: {e}")))
 }
 
@@ -133,6 +205,9 @@ fn requested_scopes(settings: &SettingsManager) -> Vec<&'static str> {
     if settings.google_drive_enabled() {
         scopes.push("https://www.googleapis.com/auth/drive.readonly");
     }
+    // Contacts + Tasks widgets (no separate Settings toggles).
+    scopes.push("https://www.googleapis.com/auth/contacts.readonly");
+    scopes.push("https://www.googleapis.com/auth/tasks");
     scopes
 }
 
@@ -153,11 +228,13 @@ pub struct GoogleStatus {
     pub drive_enabled: bool,
     pub agent_tools_enabled: bool,
     pub agent_send_enabled: bool,
+    pub sage_connected: bool,
+    pub sage_account_email: String,
 }
 
 fn status_from_settings(settings: &SettingsManager) -> Result<GoogleStatus, String> {
     let view = settings.view().map_err(|e| e.to_string())?;
-    let has_builtin = BUILTIN_CLIENT_ID.map(|s| !s.trim().is_empty()).unwrap_or(false);
+    let has_builtin = !builtin_client_id().is_empty();
     let user_id_set = !view.google_client_id.trim().is_empty();
     Ok(GoogleStatus {
         enabled: view.google_enabled,
@@ -172,70 +249,133 @@ fn status_from_settings(settings: &SettingsManager) -> Result<GoogleStatus, Stri
         drive_enabled: view.google_drive_enabled,
         agent_tools_enabled: view.google_agent_tools_enabled,
         agent_send_enabled: view.google_agent_send_enabled,
+        sage_connected: view.google_sage_connected,
+        sage_account_email: view.google_sage_account_email,
     })
 }
 
-/// Waits (blocking, on a dedicated thread) for the single OAuth redirect and
-/// returns the `code` query parameter.
-fn wait_for_redirect(listener: TcpListener) -> Result<String, String> {
-    listener
-        .set_nonblocking(false)
-        .map_err(|e| format!("listener: {e}"))?;
+/// Bind IPv4 loopback (and IPv6 when available) so the browser can reach us whether
+/// Google/Chrome uses `127.0.0.1` or resolves `localhost` to `::1`.
+fn bind_oauth_loopback() -> Result<(TcpListener, Option<TcpListener>, u16), String> {
+    let v4 = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("bind loopback: {e}"))?;
+    let port = v4
+        .local_addr()
+        .map_err(|e| format!("local addr: {e}"))?
+        .port();
+    // Best-effort IPv6 twin on the same port (may fail if IPv6 is disabled).
+    let v6 = TcpListener::bind(("::1", port)).ok();
+    for listener in std::iter::once(&v4).chain(v6.as_ref()) {
+        listener
+            .set_nonblocking(true)
+            .map_err(|e| format!("listener: {e}"))?;
+    }
+    Ok((v4, v6, port))
+}
+
+/// Redirect URI must match what we bind. Prefer `127.0.0.1` (Google's recommended
+/// loopback form) so the browser does not depend on `localhost` → IPv6 resolution.
+fn oauth_redirect_uri(port: u16) -> String {
+    format!("http://127.0.0.1:{port}")
+}
+
+fn write_oauth_html(stream: &mut TcpStream, ok: bool) {
+    let body = if ok {
+        "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Connected</title></head><body style=\"font-family:sans-serif;background:#f1efeb;color:#161513;display:flex;align-items:center;justify-content:center;height:100vh;margin:0\"><div style=\"text-align:center\"><h2>Persistent Sage is connected</h2><p>You can close this window and return to the app.</p></div></body></html>"
+    } else {
+        "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Sign-in</title></head><body style=\"font-family:sans-serif;background:#f1efeb;color:#161513;display:flex;align-items:center;justify-content:center;height:100vh;margin:0\"><div style=\"text-align:center\"><h2>Sign-in was not completed</h2><p>You can close this window and try again from Persistent Sage.</p></div></body></html>"
+    };
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    let _ = stream.write_all(response.as_bytes());
+    let _ = stream.flush();
+}
+
+/// Handle one accepted TCP connection; returns Some(code) when OAuth finished.
+fn handle_oauth_http(mut stream: TcpStream) -> Result<Option<String>, String> {
+    // Accept from a non-blocking listener leaves the client socket non-blocking on
+    // some platforms; switch to blocking so we reliably read the full redirect.
+    stream.set_nonblocking(false).ok();
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+        .ok();
+    let mut buf = [0u8; 8192];
+    let n = match stream.read(&mut buf) {
+        Ok(0) => return Ok(None),
+        Ok(n) => n,
+        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(None),
+        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => return Ok(None),
+        Err(e) => return Err(format!("read: {e}")),
+    };
+    let request = String::from_utf8_lossy(&buf[..n]);
+    let first_line = request.lines().next().unwrap_or_default();
+    // "GET /?code=...&scope=... HTTP/1.1"
+    let path = first_line.split_whitespace().nth(1).unwrap_or_default();
+    let query = path.split_once('?').map(|(_, q)| q).unwrap_or_default();
+    let mut code: Option<String> = None;
+    let mut error: Option<String> = None;
+    for pair in query.split('&') {
+        let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+        let decoded = urldecode(v);
+        match k {
+            "code" => code = Some(decoded),
+            "error" => error = Some(decoded),
+            _ => {}
+        }
+    }
+    write_oauth_html(&mut stream, code.is_some() && error.is_none());
+    if let Some(err) = error {
+        return Err(format!("Google returned an error: {err}"));
+    }
+    Ok(code)
+}
+
+/// Waits (blocking) for the OAuth redirect on any bound loopback listener.
+fn wait_for_redirect(
+    listeners: Vec<TcpListener>,
+    ready: Option<std::sync::mpsc::Sender<()>>,
+) -> Result<String, String> {
+    if let Some(tx) = ready {
+        let _ = tx.send(());
+    }
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(AUTH_TIMEOUT_SECS);
-    listener
-        .set_nonblocking(true)
-        .map_err(|e| format!("listener: {e}"))?;
     loop {
         if std::time::Instant::now() > deadline {
-            return Err("timed out waiting for Google sign-in (5 minutes)".into());
+            return Err(
+                "timed out waiting for Google sign-in (5 minutes). Keep Persistent Sage open \
+                 while the browser finishes, then try Sign in again."
+                    .into(),
+            );
         }
-        match listener.accept() {
-            Ok((mut stream, _)) => {
-                stream
-                    .set_read_timeout(Some(std::time::Duration::from_secs(10)))
-                    .ok();
-                let mut buf = [0u8; 8192];
-                let n = stream.read(&mut buf).map_err(|e| format!("read: {e}"))?;
-                let request = String::from_utf8_lossy(&buf[..n]);
-                let first_line = request.lines().next().unwrap_or_default();
-                // "GET /?code=...&scope=... HTTP/1.1"
-                let path = first_line.split_whitespace().nth(1).unwrap_or_default();
-                let query = path.split_once('?').map(|(_, q)| q).unwrap_or_default();
-                let mut code: Option<String> = None;
-                let mut error: Option<String> = None;
-                for pair in query.split('&') {
-                    let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
-                    let decoded = urldecode(v);
-                    match k {
-                        "code" => code = Some(decoded),
-                        "error" => error = Some(decoded),
-                        _ => {}
+        let mut progress = false;
+        for listener in &listeners {
+            match listener.accept() {
+                Ok((stream, _)) => {
+                    progress = true;
+                    match handle_oauth_http(stream) {
+                        Ok(Some(code)) => return Ok(code),
+                        Ok(None) => {
+                            // Favicon / empty / incomplete — keep waiting.
+                        }
+                        Err(e) => return Err(e),
                     }
                 }
-                let body = if code.is_some() {
-                    "<html><body style=\"font-family:sans-serif;background:#f1efeb;color:#161513;display:flex;align-items:center;justify-content:center;height:100vh\"><div style=\"text-align:center\"><h2>Persistent Sage is connected</h2><p>You can close this window and return to the app.</p></div></body></html>"
-                } else {
-                    "<html><body style=\"font-family:sans-serif;background:#f1efeb;color:#161513;display:flex;align-items:center;justify-content:center;height:100vh\"><div style=\"text-align:center\"><h2>Sign-in was not completed</h2><p>You can close this window and try again from Persistent Sage.</p></div></body></html>"
-                };
-                let response = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                    body.len(),
-                    body
-                );
-                stream.write_all(response.as_bytes()).ok();
-                stream.flush().ok();
-                if let Some(err) = error {
-                    return Err(format!("Google returned an error: {err}"));
+                Err(ref e)
+                    if e.kind() == std::io::ErrorKind::WouldBlock
+                        || e.kind() == std::io::ErrorKind::Interrupted =>
+                {
+                    // idle
                 }
-                if let Some(code) = code {
-                    return Ok(code);
+                Err(e) => {
+                    // Do not abort the whole flow on a single transient accept error.
+                    eprintln!("[google oauth] accept: {e}");
                 }
-                // Ignore stray requests (e.g. favicon) and keep waiting.
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                std::thread::sleep(std::time::Duration::from_millis(150));
-            }
-            Err(e) => return Err(format!("accept: {e}")),
+        }
+        if !progress {
+            std::thread::sleep(std::time::Duration::from_millis(50));
         }
     }
 }
@@ -298,48 +438,100 @@ async fn exchange_token(
     serde_json::from_str::<TokenResponse>(&body).map_err(|e| format!("token JSON: {e}"))
 }
 
-/// Runs the full interactive OAuth consent flow. Returns the connected account email.
+fn scopes_for_account(settings: &SettingsManager, account: GoogleAccount) -> Vec<&'static str> {
+    match account {
+        GoogleAccount::User => requested_scopes(settings),
+        GoogleAccount::Sage => vec![
+            "openid",
+            "email",
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/gmail.compose",
+        ],
+    }
+}
+
+/// Runs the full interactive OAuth consent flow for `account` (user or sage).
 pub async fn auth_start(
     http: &reqwest::Client,
     settings: &Arc<SettingsManager>,
+    account: GoogleAccount,
 ) -> Result<GoogleStatus, String> {
+    // One-click Productivity path: enable Workspace when the user signs in.
+    if !settings.google_enabled() {
+        settings
+            .apply_update(crate::settings::SettingsUpdatePayload {
+                google_enabled: Some(true),
+                google_gmail_enabled: Some(true),
+                google_calendar_enabled: Some(true),
+                google_drive_enabled: Some(true),
+                ..Default::default()
+            })
+            .map_err(|e| e.to_string())?;
+    }
+
     let client_id = effective_client_id(settings);
     if client_id.is_empty() {
         return Err(
             "This build has no built-in Google app credentials. Either use an official release, \
-             or add your own OAuth Client ID (Settings → Tools → Google Workspace) from a Desktop \
+             or add your own OAuth Client ID (Settings → Tools → Google Workspace → Advanced) from a Desktop \
              app client at console.cloud.google.com → APIs & Services → Credentials."
                 .into(),
         );
     }
     let client_secret = effective_client_secret(settings).map_err(|e| e.to_string())?;
+    if !settings.google_client_id().trim().is_empty() && client_secret.trim().is_empty() {
+        return Err(
+            "Your custom Google OAuth Client ID is set, but the Client secret is missing. \
+             Paste both from the Desktop app JSON (Settings → Tools → Google → Advanced), \
+             then try Sign in again."
+                .into(),
+        );
+    }
 
-    let listener =
-        TcpListener::bind("127.0.0.1:0").map_err(|e| format!("bind loopback: {e}"))?;
-    let port = listener
-        .local_addr()
-        .map_err(|e| format!("local addr: {e}"))?
-        .port();
-    let redirect_uri = format!("http://127.0.0.1:{port}");
+    let (v4, v6, port) = bind_oauth_loopback()?;
+    let redirect_uri = oauth_redirect_uri(port);
+    let mut listeners = vec![v4];
+    if let Some(v6) = v6 {
+        listeners.push(v6);
+    }
 
     let verifier = random_verifier();
     let challenge = pkce_challenge(&verifier);
-    let scopes = requested_scopes(settings).join(" ");
+    let scopes = scopes_for_account(settings, account).join(" ");
+
+    let login_hint = "";
 
     let auth_url = format!(
-        "{AUTH_ENDPOINT}?response_type=code&client_id={}&redirect_uri={}&scope={}&code_challenge={}&code_challenge_method=S256&access_type=offline&prompt=consent",
+        "{AUTH_ENDPOINT}?response_type=code&client_id={}&redirect_uri={}&scope={}&code_challenge={}&code_challenge_method=S256&access_type=offline&prompt=select_account+consent{login_hint}",
         urlencode(&client_id),
         urlencode(&redirect_uri),
         urlencode(&scopes),
         urlencode(&challenge),
     );
 
-    opener::open(&auth_url).map_err(|e| format!("open browser: {e}"))?;
+    // Start accepting before the browser opens so the redirect never hits a dead port.
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel::<()>();
+    let wait = tokio::task::spawn_blocking(move || wait_for_redirect(listeners, Some(ready_tx)));
+    match ready_rx.recv_timeout(std::time::Duration::from_secs(5)) {
+        Ok(()) => {}
+        Err(_) => {
+            return Err(
+                "Google sign-in callback server failed to start. Try again, or check that \
+                 nothing is blocking loopback (127.0.0.1) connections."
+                    .into(),
+            );
+        }
+    }
 
-    // Blocking accept loop on a plain thread; await it from async.
-    let code = tokio::task::spawn_blocking(move || wait_for_redirect(listener))
-        .await
-        .map_err(|e| format!("join: {e}"))??;
+    // Prefer opening the system browser; if that fails, keep waiting so the user can
+    // paste the auth URL manually while the loopback callback is still live.
+    if let Err(e) = opener::open(&auth_url) {
+        eprintln!(
+            "[google oauth] could not open browser ({e}); waiting on {redirect_uri} — auth URL:\n{auth_url}"
+        );
+    }
+
+    let code = wait.await.map_err(|e| format!("join: {e}"))??;
 
     let mut params: Vec<(&str, &str)> = vec![
         ("code", code.as_str()),
@@ -364,9 +556,8 @@ pub async fn auth_start(
             .map(str::to_string)
             .collect(),
     };
-    store_tokens(settings, &stored).map_err(|e| e.to_string())?;
+    store_tokens(settings, account, &stored).map_err(|e| e.to_string())?;
 
-    // Best-effort: resolve the account email for display.
     if let Ok(resp) = http
         .get(USERINFO_ENDPOINT)
         .bearer_auth(&token.access_token)
@@ -375,9 +566,18 @@ pub async fn auth_start(
     {
         if let Ok(v) = resp.json::<Value>().await {
             if let Some(email) = v.get("email").and_then(Value::as_str) {
-                settings
-                    .set_google_account_email(email)
-                    .map_err(|e| e.to_string())?;
+                match account {
+                    GoogleAccount::User => {
+                        settings
+                            .set_google_account_email(email)
+                            .map_err(|e| e.to_string())?;
+                    }
+                    GoogleAccount::Sage => {
+                        settings
+                            .set_google_sage_account_email(email)
+                            .map_err(|e| e.to_string())?;
+                    }
+                }
             }
         }
     }
@@ -385,13 +585,25 @@ pub async fn auth_start(
     status_from_settings(settings)
 }
 
-pub fn disconnect(settings: &Arc<SettingsManager>) -> Result<GoogleStatus, String> {
+pub fn disconnect(
+    settings: &Arc<SettingsManager>,
+    account: GoogleAccount,
+) -> Result<GoogleStatus, String> {
     settings
-        .save_secret_slot(TOKEN_SLOT, "")
+        .save_secret_slot(account.token_slot(), "")
         .map_err(|e| e.to_string())?;
-    settings
-        .set_google_account_email("")
-        .map_err(|e| e.to_string())?;
+    match account {
+        GoogleAccount::User => {
+            settings
+                .set_google_account_email("")
+                .map_err(|e| e.to_string())?;
+        }
+        GoogleAccount::Sage => {
+            settings
+                .set_google_sage_account_email("")
+                .map_err(|e| e.to_string())?;
+        }
+    }
     status_from_settings(settings)
 }
 
@@ -412,19 +624,22 @@ fn urlencode(s: &str) -> String {
 async fn access_token(
     http: &reqwest::Client,
     settings: &SettingsManager,
+    account: GoogleAccount,
 ) -> Result<String, ProviderError> {
-    let Some(mut tokens) = load_tokens(settings)? else {
-        return Err(tool_err(
-            "Google account is not connected. Connect it in Productivity mode or Settings → Tools → Google Workspace.",
-        ));
+    let Some(mut tokens) = load_tokens(settings, account)? else {
+        return Err(tool_err(format!(
+            "{} is not connected. Connect it in Settings → Tools → Google Workspace.",
+            account.label()
+        )));
     };
     if tokens.expires_at - now_unix() > REFRESH_SKEW_SECS {
         return Ok(tokens.access_token);
     }
     let Some(refresh) = tokens.refresh_token.clone() else {
-        return Err(tool_err(
-            "Google session expired and no refresh token is stored — reconnect the account.",
-        ));
+        return Err(tool_err(format!(
+            "{} session expired and no refresh token is stored — reconnect the account.",
+            account.label()
+        )));
     };
     let client_id = effective_client_id(settings);
     let client_secret = effective_client_secret(settings)?;
@@ -444,7 +659,7 @@ async fn access_token(
     if let Some(r) = token.refresh_token {
         tokens.refresh_token = Some(r);
     }
-    store_tokens(settings, &tokens)?;
+    store_tokens(settings, account, &tokens)?;
     Ok(token.access_token)
 }
 
@@ -464,10 +679,11 @@ fn clip(s: &str, max: usize) -> String {
 async fn api_get(
     http: &reqwest::Client,
     settings: &SettingsManager,
+    account: GoogleAccount,
     url: &str,
     query: &[(&str, String)],
 ) -> Result<Value, ProviderError> {
-    let token = access_token(http, settings).await?;
+    let token = access_token(http, settings, account).await?;
     let resp = http
         .get(url)
         .query(query)
@@ -489,10 +705,11 @@ async fn api_get(
 async fn api_get_bytes(
     http: &reqwest::Client,
     settings: &SettingsManager,
+    account: GoogleAccount,
     url: &str,
     query: &[(&str, String)],
 ) -> Result<Vec<u8>, ProviderError> {
-    let token = access_token(http, settings).await?;
+    let token = access_token(http, settings, account).await?;
     let resp = http
         .get(url)
         .query(query)
@@ -517,10 +734,11 @@ async fn api_get_bytes(
 async fn api_post(
     http: &reqwest::Client,
     settings: &SettingsManager,
+    account: GoogleAccount,
     url: &str,
     body: &Value,
 ) -> Result<Value, ProviderError> {
-    let token = access_token(http, settings).await?;
+    let token = access_token(http, settings, account).await?;
     let resp = http
         .post(url)
         .bearer_auth(&token)
@@ -542,9 +760,10 @@ async fn api_post(
 async fn api_delete(
     http: &reqwest::Client,
     settings: &SettingsManager,
+    account: GoogleAccount,
     url: &str,
 ) -> Result<(), ProviderError> {
-    let token = access_token(http, settings).await?;
+    let token = access_token(http, settings, account).await?;
     let resp = http
         .delete(url)
         .bearer_auth(&token)
@@ -560,6 +779,35 @@ async fn api_delete(
         )));
     }
     Ok(())
+}
+
+async fn api_patch(
+    http: &reqwest::Client,
+    settings: &SettingsManager,
+    account: GoogleAccount,
+    url: &str,
+    body: &Value,
+) -> Result<Value, ProviderError> {
+    let token = access_token(http, settings, account).await?;
+    let resp = http
+        .patch(url)
+        .bearer_auth(&token)
+        .json(body)
+        .send()
+        .await
+        .map_err(|e| tool_err(format!("Google API: {e}")))?;
+    let status = resp.status();
+    let text = resp.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(tool_err(format!(
+            "Google API HTTP {status}: {}",
+            clip(&text, 400)
+        )));
+    }
+    if text.trim().is_empty() {
+        return Ok(json!({}));
+    }
+    serde_json::from_str(&text).map_err(|e| tool_err(format!("Google API JSON: {e}")))
 }
 
 // --- Gmail ----------------------------------------------------------------------
@@ -581,6 +829,7 @@ fn header_value(headers: &[Value], name: &str) -> String {
 pub async fn gmail_list(
     http: &reqwest::Client,
     settings: &SettingsManager,
+    account: GoogleAccount,
     query: &str,
     max_results: u32,
 ) -> Result<Value, ProviderError> {
@@ -589,7 +838,7 @@ pub async fn gmail_list(
     if !query.trim().is_empty() {
         q.push(("q", query.trim().to_string()));
     }
-    let list = api_get(http, settings, &format!("{GMAIL_BASE}/messages"), &q).await?;
+    let list = api_get(http, settings, account, &format!("{GMAIL_BASE}/messages"), &q).await?;
     let ids: Vec<String> = list
         .get("messages")
         .and_then(Value::as_array)
@@ -605,6 +854,7 @@ pub async fn gmail_list(
         let meta = api_get(
             http,
             settings,
+            account,
             &format!("{GMAIL_BASE}/messages/{id}"),
             &[
                 ("format", "metadata".to_string()),
@@ -680,12 +930,14 @@ fn strip_html(html: &str) -> String {
 pub async fn gmail_read(
     http: &reqwest::Client,
     settings: &SettingsManager,
+    account: GoogleAccount,
     message_id: &str,
     max_chars: usize,
 ) -> Result<Value, ProviderError> {
     let msg = api_get(
         http,
         settings,
+        account,
         &format!("{GMAIL_BASE}/messages/{message_id}"),
         &[("format", "full".to_string())],
     )
@@ -707,12 +959,15 @@ pub async fn gmail_read(
     let max = max_chars.clamp(200, 40_000);
     Ok(json!({
         "id": message_id,
+        "threadId": msg.get("threadId").and_then(Value::as_str).unwrap_or_default(),
+        "messageIdHeader": header_value(headers, "Message-ID"),
         "from": header_value(headers, "From"),
         "to": header_value(headers, "To"),
         "cc": header_value(headers, "Cc"),
         "subject": header_value(headers, "Subject"),
         "date": header_value(headers, "Date"),
         "body": clip(&body, max),
+        "account": account.as_str(),
     }))
 }
 
@@ -740,6 +995,8 @@ fn build_mime(
     subject: &str,
     body: &str,
     attachments: &[Attachment],
+    in_reply_to: &str,
+    references: &str,
 ) -> String {
     let mut headers = String::new();
     headers.push_str(&format!("To: {to}\r\n"));
@@ -747,6 +1004,17 @@ fn build_mime(
         headers.push_str(&format!("Cc: {cc}\r\n"));
     }
     headers.push_str(&format!("Subject: {}\r\n", encode_header(subject)));
+    if !in_reply_to.trim().is_empty() {
+        headers.push_str(&format!("In-Reply-To: {}\r\n", in_reply_to.trim()));
+    }
+    let refs = if !references.trim().is_empty() {
+        references.trim()
+    } else {
+        in_reply_to.trim()
+    };
+    if !refs.is_empty() {
+        headers.push_str(&format!("References: {refs}\r\n"));
+    }
     headers.push_str("MIME-Version: 1.0\r\n");
 
     if attachments.is_empty() {
@@ -796,6 +1064,7 @@ async fn fetch_drive_attachment(
     let meta = api_get(
         http,
         settings,
+        GoogleAccount::User,
         &format!("{DRIVE_BASE}/files/{file_id}"),
         &[("fields", "id,name,mimeType,size".to_string())],
     )
@@ -816,6 +1085,7 @@ async fn fetch_drive_attachment(
         let bytes = api_get_bytes(
             http,
             settings,
+            GoogleAccount::User,
             &format!("{DRIVE_BASE}/files/{file_id}/export"),
             &[("mimeType", "application/pdf".to_string())],
         )
@@ -825,6 +1095,7 @@ async fn fetch_drive_attachment(
         let bytes = api_get_bytes(
             http,
             settings,
+            GoogleAccount::User,
             &format!("{DRIVE_BASE}/files/{file_id}"),
             &[("alt", "media".to_string())],
         )
@@ -848,12 +1119,16 @@ async fn fetch_drive_attachment(
 pub async fn gmail_compose(
     http: &reqwest::Client,
     settings: &SettingsManager,
+    account: GoogleAccount,
     to: &str,
     cc: &str,
     subject: &str,
     body: &str,
     drive_attachment_ids: &[String],
     send: bool,
+    thread_id: &str,
+    in_reply_to: &str,
+    references: &str,
 ) -> Result<Value, ProviderError> {
     if to.trim().is_empty() {
         return Err(tool_err("`to` recipient is required"));
@@ -862,33 +1137,51 @@ pub async fn gmail_compose(
     for id in drive_attachment_ids.iter().take(5) {
         attachments.push(fetch_drive_attachment(http, settings, id).await?);
     }
-    let mime = build_mime(to, cc, subject, body, &attachments);
+    let mime = build_mime(
+        to,
+        cc,
+        subject,
+        body,
+        &attachments,
+        in_reply_to,
+        references,
+    );
     let raw = b64url(mime.as_bytes());
+
+    let mut message = json!({ "raw": raw });
+    if !thread_id.trim().is_empty() {
+        message["threadId"] = json!(thread_id.trim());
+    }
 
     if send {
         let resp = api_post(
             http,
             settings,
+            account,
             &format!("{GMAIL_BASE}/messages/send"),
-            &json!({ "raw": raw }),
+            &message,
         )
         .await?;
         Ok(json!({
             "status": "sent",
             "id": resp.get("id").and_then(Value::as_str).unwrap_or_default(),
+            "threadId": resp.get("threadId").and_then(Value::as_str).unwrap_or(thread_id.trim()),
+            "account": account.as_str(),
             "attachments": attachments.iter().map(|a| a.filename.clone()).collect::<Vec<_>>(),
         }))
     } else {
         let resp = api_post(
             http,
             settings,
+            account,
             &format!("{GMAIL_BASE}/drafts"),
-            &json!({ "message": { "raw": raw } }),
+            &json!({ "message": message }),
         )
         .await?;
         Ok(json!({
             "status": "draft_created",
             "draftId": resp.get("id").and_then(Value::as_str).unwrap_or_default(),
+            "account": account.as_str(),
             "attachments": attachments.iter().map(|a| a.filename.clone()).collect::<Vec<_>>(),
             "note": "Draft saved to Gmail — the user can review and send it from Gmail or the Email widget.",
         }))
@@ -929,6 +1222,7 @@ pub async fn calendar_list_events(
     let resp = api_get(
         http,
         settings,
+        GoogleAccount::User,
         &format!("{CALENDAR_BASE}/calendars/primary/events"),
         &q,
     )
@@ -1042,6 +1336,7 @@ pub async fn calendar_create_event(
     let resp = api_post(
         http,
         settings,
+        GoogleAccount::User,
         &format!("{CALENDAR_BASE}/calendars/primary/events"),
         &body,
     )
@@ -1066,6 +1361,7 @@ pub async fn calendar_delete_event(
     api_delete(
         http,
         settings,
+        GoogleAccount::User,
         &format!("{CALENDAR_BASE}/calendars/primary/events/{}", event_id.trim()),
     )
     .await?;
@@ -1091,6 +1387,7 @@ pub async fn drive_list(
     let resp = api_get(
         http,
         settings,
+        GoogleAccount::User,
         &format!("{DRIVE_BASE}/files"),
         &[
             ("q", q_parts.join(" and ")),
@@ -1106,6 +1403,275 @@ pub async fn drive_list(
     Ok(json!({ "files": resp.get("files").cloned().unwrap_or_else(|| json!([])) }))
 }
 
+// --- People (Contacts) -----------------------------------------------------------
+
+fn person_display_name(person: &Value) -> String {
+    person
+        .pointer("/names/0/displayName")
+        .and_then(Value::as_str)
+        .or_else(|| person.pointer("/names/0/unstructuredName").and_then(Value::as_str))
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn person_emails(person: &Value) -> Vec<String> {
+    person
+        .get("emailAddresses")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|e| e.get("value").and_then(Value::as_str).map(str::to_string))
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn person_phones(person: &Value) -> Vec<String> {
+    person
+        .get("phoneNumbers")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|e| e.get("value").and_then(Value::as_str).map(str::to_string))
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn contact_row(person: &Value) -> Option<Value> {
+    let resource = person
+        .get("resourceName")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let name = person_display_name(person);
+    let emails = person_emails(person);
+    let phones = person_phones(person);
+    if name.is_empty() && emails.is_empty() && phones.is_empty() {
+        return None;
+    }
+    Some(json!({
+        "id": resource,
+        "name": name,
+        "emails": emails,
+        "phones": phones,
+    }))
+}
+
+pub async fn contacts_list(
+    http: &reqwest::Client,
+    settings: &SettingsManager,
+    query: &str,
+    page_size: u32,
+) -> Result<Value, ProviderError> {
+    let size = page_size.clamp(1, 50);
+    let q = query.trim();
+    let people: Vec<Value> = if q.is_empty() {
+        let resp = api_get(
+            http,
+            settings,
+            GoogleAccount::User,
+            &format!("{PEOPLE_BASE}/people/me/connections"),
+            &[
+                ("personFields", "names,emailAddresses,phoneNumbers".into()),
+                ("pageSize", size.to_string()),
+                ("sortOrder", "FIRST_NAME_ASCENDING".into()),
+            ],
+        )
+        .await?;
+        resp.get("connections")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    } else {
+        let resp = api_get(
+            http,
+            settings,
+            GoogleAccount::User,
+            &format!("{PEOPLE_BASE}/people:searchContacts"),
+            &[
+                ("query", q.to_string()),
+                ("readMask", "names,emailAddresses,phoneNumbers".into()),
+                ("pageSize", size.to_string()),
+            ],
+        )
+        .await?;
+        resp.get("results")
+            .and_then(Value::as_array)
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|r| r.get("person").cloned())
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let contacts: Vec<Value> = people.iter().filter_map(contact_row).collect();
+    Ok(json!({ "contacts": contacts }))
+}
+
+// --- Tasks -----------------------------------------------------------------------
+
+async fn default_task_list_id(
+    http: &reqwest::Client,
+    settings: &SettingsManager,
+) -> Result<String, ProviderError> {
+    let resp = api_get(
+        http,
+        settings,
+        GoogleAccount::User,
+        &format!("{TASKS_BASE}/users/@me/lists"),
+        &[("maxResults", "20".into())],
+    )
+    .await?;
+    let lists = resp
+        .get("items")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let id = lists
+        .iter()
+        .find(|l| {
+            l.get("title")
+                .and_then(Value::as_str)
+                .is_some_and(|t| t.eq_ignore_ascii_case("My Tasks") || t.eq_ignore_ascii_case("Tasks"))
+        })
+        .or_else(|| lists.first())
+        .and_then(|l| l.get("id").and_then(Value::as_str))
+        .unwrap_or_default();
+    if id.is_empty() {
+        return Err(tool_err(
+            "No Google Tasks list found. Create a list in Google Tasks, then retry.",
+        ));
+    }
+    Ok(id.to_string())
+}
+
+pub async fn tasks_list(
+    http: &reqwest::Client,
+    settings: &SettingsManager,
+    max_results: u32,
+) -> Result<Value, ProviderError> {
+    let list_id = default_task_list_id(http, settings).await?;
+    let resp = api_get(
+        http,
+        settings,
+        GoogleAccount::User,
+        &format!("{TASKS_BASE}/lists/{list_id}/tasks"),
+        &[
+            ("maxResults", max_results.clamp(1, 50).to_string()),
+            ("showCompleted", "true".into()),
+            ("showHidden", "false".into()),
+        ],
+    )
+    .await?;
+    let items = resp
+        .get("items")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let tasks: Vec<Value> = items
+        .iter()
+        .filter_map(|t| {
+            let id = t.get("id")?.as_str()?.to_string();
+            let title = t
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let status = t
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("needsAction")
+                .to_string();
+            let due = t.get("due").and_then(Value::as_str).unwrap_or("").to_string();
+            let notes = t
+                .get("notes")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            Some(json!({
+                "id": id,
+                "title": title,
+                "status": status,
+                "completed": status == "completed",
+                "due": due,
+                "notes": notes,
+                "listId": list_id,
+            }))
+        })
+        .collect();
+    Ok(json!({ "listId": list_id, "tasks": tasks }))
+}
+
+pub async fn tasks_add(
+    http: &reqwest::Client,
+    settings: &SettingsManager,
+    title: &str,
+) -> Result<Value, ProviderError> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err(tool_err("Task title is required"));
+    }
+    let list_id = default_task_list_id(http, settings).await?;
+    let resp = api_post(
+        http,
+        settings,
+        GoogleAccount::User,
+        &format!("{TASKS_BASE}/lists/{list_id}/tasks"),
+        &json!({ "title": title }),
+    )
+    .await?;
+    Ok(json!({
+        "id": resp.get("id").and_then(Value::as_str).unwrap_or_default(),
+        "title": resp.get("title").and_then(Value::as_str).unwrap_or(title),
+        "status": resp.get("status").and_then(Value::as_str).unwrap_or("needsAction"),
+        "completed": false,
+        "listId": list_id,
+    }))
+}
+
+pub async fn tasks_set_completed(
+    http: &reqwest::Client,
+    settings: &SettingsManager,
+    task_id: &str,
+    completed: bool,
+    list_id: Option<&str>,
+) -> Result<Value, ProviderError> {
+    if task_id.trim().is_empty() {
+        return Err(tool_err("`task_id` is required"));
+    }
+    let list = match list_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(id) => id.to_string(),
+        None => default_task_list_id(http, settings).await?,
+    };
+    let status = if completed {
+        "completed"
+    } else {
+        "needsAction"
+    };
+    let mut body = json!({ "status": status });
+    if completed {
+        body["completed"] = json!(chrono::Utc::now().to_rfc3339());
+    } else {
+        body["completed"] = Value::Null;
+    }
+    let resp = api_patch(
+        http,
+        settings,
+        GoogleAccount::User,
+        &format!("{TASKS_BASE}/lists/{list}/tasks/{}", task_id.trim()),
+        &body,
+    )
+    .await?;
+    Ok(json!({
+        "id": resp.get("id").and_then(Value::as_str).unwrap_or(task_id.trim()),
+        "status": resp.get("status").and_then(Value::as_str).unwrap_or(status),
+        "completed": completed,
+        "listId": list,
+    }))
+}
+
 pub async fn drive_read_document(
     http: &reqwest::Client,
     settings: &SettingsManager,
@@ -1115,6 +1681,7 @@ pub async fn drive_read_document(
     let meta = api_get(
         http,
         settings,
+        GoogleAccount::User,
         &format!("{DRIVE_BASE}/files/{file_id}"),
         &[("fields", "id,name,mimeType,size,webViewLink".to_string())],
     )
@@ -1131,6 +1698,7 @@ pub async fn drive_read_document(
         let bytes = api_get_bytes(
             http,
             settings,
+            GoogleAccount::User,
             &format!("{DRIVE_BASE}/files/{file_id}/export"),
             &[("mimeType", "text/plain".to_string())],
         )
@@ -1140,6 +1708,7 @@ pub async fn drive_read_document(
         let bytes = api_get_bytes(
             http,
             settings,
+            GoogleAccount::User,
             &format!("{DRIVE_BASE}/files/{file_id}"),
             &[("alt", "media".to_string())],
         )
@@ -1173,6 +1742,10 @@ pub fn is_google_tool_name(name: &str) -> bool {
             | "calendar_delete_event"
             | "drive_search"
             | "drive_read_document"
+            | "contacts_search"
+            | "tasks_list"
+            | "tasks_add"
+            | "tasks_set_completed"
     )
 }
 
@@ -1182,13 +1755,14 @@ pub fn tool_definitions(settings: &SettingsManager) -> Vec<ToolDefinition> {
         tools.push(ToolDefinition {
             name: "gmail_search".into(),
             description: Some(
-                "Search the user's Gmail inbox. Supports Gmail query syntax (from:, subject:, newer_than:2d, is:unread…). Returns sender, subject, date, snippet, and message ids.".into(),
+                "Search Gmail. Default account=user (your inbox). Pass account=agent for the companion's designated email (a separate Gmail you created for the agent). Supports Gmail query syntax (from:, subject:, newer_than:2d, is:unread…).".into(),
             ),
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "query": { "type": "string", "description": "Gmail search query, e.g. `from:vanessa newer_than:7d`. Empty = most recent inbox mail." },
-                    "max_results": { "type": "integer", "description": "1-25, default 10" }
+                    "max_results": { "type": "integer", "description": "1-25, default 10" },
+                    "account": { "type": "string", "description": "`user` (default) = your inbox; `agent` = agent's designated email account" }
                 },
                 "required": []
             }),
@@ -1196,13 +1770,14 @@ pub fn tool_definitions(settings: &SettingsManager) -> Vec<ToolDefinition> {
         tools.push(ToolDefinition {
             name: "gmail_read".into(),
             description: Some(
-                "Read one email in full (headers + plain-text body) by message id from gmail_search.".into(),
+                "Read one email in full (headers + plain-text body) by message id from gmail_search. Returns threadId and messageIdHeader for replies.".into(),
             ),
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "message_id": { "type": "string" },
-                    "max_chars": { "type": "integer", "description": "Body truncation, default 8000" }
+                    "max_chars": { "type": "integer", "description": "Body truncation, default 8000" },
+                    "account": { "type": "string", "description": "`user` or `agent`" }
                 },
                 "required": ["message_id"]
             }),
@@ -1210,7 +1785,7 @@ pub fn tool_definitions(settings: &SettingsManager) -> Vec<ToolDefinition> {
         tools.push(ToolDefinition {
             name: "gmail_create_draft".into(),
             description: Some(
-                "Create a Gmail draft for the user to review and send. Optionally attach Google Drive files by id (Google Docs are converted to PDF). Prefer this over gmail_send.".into(),
+                "Create a Gmail draft. Optionally attach Drive files by id. Prefer this over gmail_send for the user's inbox. For agent mailbox replies, gmail_send with account=agent is OK when correspondence is expected.".into(),
             ),
             parameters: json!({
                 "type": "object",
@@ -1222,30 +1797,42 @@ pub fn tool_definitions(settings: &SettingsManager) -> Vec<ToolDefinition> {
                     "drive_attachment_ids": {
                         "type": "array", "items": { "type": "string" },
                         "description": "Drive file ids from drive_search to attach (max 5)"
-                    }
+                    },
+                    "account": { "type": "string", "description": "`user` or `agent`" },
+                    "thread_id": { "type": "string", "description": "Gmail thread id when replying (from gmail_read)" },
+                    "in_reply_to": { "type": "string", "description": "RFC Message-ID header from gmail_read (messageIdHeader)" },
+                    "references": { "type": "string", "description": "Optional References header; defaults to in_reply_to" }
                 },
                 "required": ["to", "subject", "body"]
             }),
         });
-        if settings.google_agent_send_enabled() {
-            tools.push(ToolDefinition {
-                name: "gmail_send".into(),
-                description: Some(
-                    "Send an email immediately from the user's Gmail account. Only use when the user explicitly asked to send (not draft). Supports Drive attachments by id.".into(),
-                ),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "to": { "type": "string" },
-                        "cc": { "type": "string" },
-                        "subject": { "type": "string" },
-                        "body": { "type": "string" },
-                        "drive_attachment_ids": { "type": "array", "items": { "type": "string" } }
-                    },
-                    "required": ["to", "subject", "body"]
-                }),
-            });
-        }
+        // Always expose gmail_send when agent tools are on: human send still gated in run_google_tool;
+        // agent-account send is allowed for designated-agent correspondence.
+        tools.push(ToolDefinition {
+            name: "gmail_send".into(),
+            description: Some(
+                "Send email. For account=user, only when the user enabled direct agent sending. \
+                 For account=agent, ONLY the dedicated Email Agent thread may send (bind in Settings). \
+                 Pass thread_id + in_reply_to from gmail_read to keep the thread. \
+                 Other threads should leave pending actions via correspondence_sync."
+                    .into(),
+            ),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "to": { "type": "string" },
+                    "cc": { "type": "string" },
+                    "subject": { "type": "string" },
+                    "body": { "type": "string" },
+                    "drive_attachment_ids": { "type": "array", "items": { "type": "string" } },
+                    "account": { "type": "string", "description": "`user` or `agent`" },
+                    "thread_id": { "type": "string" },
+                    "in_reply_to": { "type": "string" },
+                    "references": { "type": "string" }
+                },
+                "required": ["to", "subject", "body"]
+            }),
+        });
     }
     if settings.google_calendar_enabled() {
         tools.push(ToolDefinition {
@@ -1324,6 +1911,62 @@ pub fn tool_definitions(settings: &SettingsManager) -> Vec<ToolDefinition> {
             }),
         });
     }
+    // Contacts + Tasks widgets (always available when Google agent tools are on).
+    tools.push(ToolDefinition {
+        name: "contacts_search".into(),
+        description: Some(
+            "Search or list the user's Google Contacts (name, emails, phones). Empty query returns recent/alphabetical connections.".into(),
+        ),
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "query": { "type": "string", "description": "Name or email fragment; empty = browse contacts" },
+                "page_size": { "type": "integer", "description": "1-50, default 20" }
+            },
+            "required": []
+        }),
+    });
+    tools.push(ToolDefinition {
+        name: "tasks_list".into(),
+        description: Some(
+            "List tasks from the user's Google Tasks default list (includes completed and open items).".into(),
+        ),
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "max_results": { "type": "integer", "description": "1-50, default 25" }
+            },
+            "required": []
+        }),
+    });
+    tools.push(ToolDefinition {
+        name: "tasks_add".into(),
+        description: Some(
+            "Add a new task to the user's Google Tasks default list.".into(),
+        ),
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "title": { "type": "string", "description": "Task title / text" }
+            },
+            "required": ["title"]
+        }),
+    });
+    tools.push(ToolDefinition {
+        name: "tasks_set_completed".into(),
+        description: Some(
+            "Mark a Google Task completed or reopen it. Use task id from tasks_list.".into(),
+        ),
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "task_id": { "type": "string" },
+                "completed": { "type": "boolean", "description": "true = complete, false = reopen" },
+                "list_id": { "type": "string", "description": "Optional; defaults to the primary Tasks list" }
+            },
+            "required": ["task_id", "completed"]
+        }),
+    });
     tools
 }
 
@@ -1358,6 +2001,7 @@ pub async fn run_google_tool(
     settings: &SettingsManager,
     name: &str,
     args: &Value,
+    conversation_id: Option<&str>,
 ) -> Result<String, ProviderError> {
     if !settings.google_enabled() || !settings.google_agent_tools_enabled() {
         return Err(tool_err(
@@ -1366,13 +2010,22 @@ pub async fn run_google_tool(
     }
     let result = match name {
         "gmail_search" => {
-            gmail_list(http, settings, &arg_str(args, "query"), arg_u32(args, "max_results", 10))
-                .await?
+            let account = GoogleAccount::parse(&arg_str(args, "account"));
+            gmail_list(
+                http,
+                settings,
+                account,
+                &arg_str(args, "query"),
+                arg_u32(args, "max_results", 10),
+            )
+            .await?
         }
         "gmail_read" => {
+            let account = GoogleAccount::parse(&arg_str(args, "account"));
             gmail_read(
                 http,
                 settings,
+                account,
                 &arg_str(args, "message_id"),
                 arg_u32(args, "max_chars", 8000) as usize,
             )
@@ -1380,20 +2033,39 @@ pub async fn run_google_tool(
         }
         "gmail_create_draft" | "gmail_send" => {
             let send = name == "gmail_send";
-            if send && !settings.google_agent_send_enabled() {
+            let account = GoogleAccount::parse(&arg_str(args, "account"));
+            // Human inbox send stays opt-in; agent mailbox send is Email-Agent-thread only.
+            if send && account == GoogleAccount::User && !settings.google_agent_send_enabled() {
                 return Err(tool_err(
-                    "Direct sending is disabled — create a draft with gmail_create_draft instead, or the user can enable agent sending in Settings → Tools → Google Workspace.",
+                    "Direct sending from your inbox is disabled — create a draft with gmail_create_draft, enable agent sending in Settings, or send from account=agent in the Email Agent thread.",
                 ));
+            }
+            if send && account == GoogleAccount::Sage {
+                let Some(cid) = conversation_id.map(str::trim).filter(|s| !s.is_empty()) else {
+                    return Err(tool_err(
+                        "Agent-mailbox send requires an active chat thread context.",
+                    ));
+                };
+                if !settings.is_email_agent_conversation(cid) {
+                    return Err(tool_err(
+                        "Only the dedicated Email Agent thread may gmail_send with account=agent. \
+                         Bind that thread in Settings → Google → Agent email, or leave a pending action via correspondence_sync for the Email Agent.",
+                    ));
+                }
             }
             gmail_compose(
                 http,
                 settings,
+                account,
                 &arg_str(args, "to"),
                 &arg_str(args, "cc"),
                 &arg_str(args, "subject"),
                 &arg_str(args, "body"),
                 &arg_str_vec(args, "drive_attachment_ids"),
                 send,
+                &arg_str(args, "thread_id"),
+                &arg_str(args, "in_reply_to"),
+                &arg_str(args, "references"),
             )
             .await?
         }
@@ -1437,6 +2109,38 @@ pub async fn run_google_tool(
             )
             .await?
         }
+        "contacts_search" => {
+            contacts_list(
+                http,
+                settings,
+                &arg_str(args, "query"),
+                arg_u32(args, "page_size", 20),
+            )
+            .await?
+        }
+        "tasks_list" => {
+            tasks_list(http, settings, arg_u32(args, "max_results", 25)).await?
+        }
+        "tasks_add" => tasks_add(http, settings, &arg_str(args, "title")).await?,
+        "tasks_set_completed" => {
+            let completed = args
+                .get("completed")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            let list = arg_str(args, "list_id");
+            tasks_set_completed(
+                http,
+                settings,
+                &arg_str(args, "task_id"),
+                completed,
+                if list.trim().is_empty() {
+                    None
+                } else {
+                    Some(list.as_str())
+                },
+            )
+            .await?
+        }
         other => return Err(tool_err(format!("unknown Google tool: {other}"))),
     };
     serde_json::to_string(&result).map_err(|e| tool_err(e.to_string()))
@@ -1450,13 +2154,21 @@ pub fn google_status(state: State<'_, NovaState>) -> Result<GoogleStatus, String
 }
 
 #[tauri::command]
-pub async fn google_auth_start(state: State<'_, NovaState>) -> Result<GoogleStatus, String> {
-    auth_start(&state.http, &state.settings).await
+pub async fn google_auth_start(
+    account: Option<String>,
+    state: State<'_, NovaState>,
+) -> Result<GoogleStatus, String> {
+    let acct = GoogleAccount::parse(account.as_deref().unwrap_or("user"));
+    auth_start(&state.http, &state.settings, acct).await
 }
 
 #[tauri::command]
-pub fn google_disconnect(state: State<'_, NovaState>) -> Result<GoogleStatus, String> {
-    disconnect(&state.settings)
+pub fn google_disconnect(
+    account: Option<String>,
+    state: State<'_, NovaState>,
+) -> Result<GoogleStatus, String> {
+    let acct = GoogleAccount::parse(account.as_deref().unwrap_or("user"));
+    disconnect(&state.settings, acct)
 }
 
 #[tauri::command]
@@ -1468,6 +2180,7 @@ pub async fn google_gmail_list(
     gmail_list(
         &state.http,
         &state.settings,
+        GoogleAccount::User,
         query.as_deref().unwrap_or_default(),
         max_results.unwrap_or(15),
     )
@@ -1480,9 +2193,15 @@ pub async fn google_gmail_get(
     message_id: String,
     state: State<'_, NovaState>,
 ) -> Result<Value, String> {
-    gmail_read(&state.http, &state.settings, &message_id, 20_000)
-        .await
-        .map_err(|e| e.to_string())
+    gmail_read(
+        &state.http,
+        &state.settings,
+        GoogleAccount::User,
+        &message_id,
+        20_000,
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1497,12 +2216,16 @@ pub async fn google_gmail_send(
     gmail_compose(
         &state.http,
         &state.settings,
+        GoogleAccount::User,
         &to,
         cc.as_deref().unwrap_or_default(),
         &subject,
         &body,
         &[],
         send.unwrap_or(false),
+        "",
+        "",
+        "",
     )
     .await
     .map_err(|e| e.to_string())
@@ -1575,4 +2298,94 @@ pub async fn google_drive_list(
     )
     .await
     .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn google_contacts_list(
+    query: Option<String>,
+    page_size: Option<u32>,
+    state: State<'_, NovaState>,
+) -> Result<Value, String> {
+    contacts_list(
+        &state.http,
+        &state.settings,
+        query.as_deref().unwrap_or_default(),
+        page_size.unwrap_or(30),
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn google_tasks_list(
+    max_results: Option<u32>,
+    state: State<'_, NovaState>,
+) -> Result<Value, String> {
+    tasks_list(&state.http, &state.settings, max_results.unwrap_or(40))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn google_tasks_add(
+    title: String,
+    state: State<'_, NovaState>,
+) -> Result<Value, String> {
+    tasks_add(&state.http, &state.settings, &title)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn google_tasks_set_completed(
+    task_id: String,
+    completed: bool,
+    list_id: Option<String>,
+    state: State<'_, NovaState>,
+) -> Result<Value, String> {
+    tasks_set_completed(
+        &state.http,
+        &state.settings,
+        &task_id,
+        completed,
+        list_id.as_deref(),
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write as _;
+    use std::net::TcpStream;
+
+    #[test]
+    fn oauth_redirect_uri_uses_loopback_with_port() {
+        assert_eq!(oauth_redirect_uri(54321), "http://127.0.0.1:54321");
+    }
+
+    #[test]
+    fn loopback_callback_accepts_redirect_with_code() {
+        let (v4, v6, port) = bind_oauth_loopback().expect("bind");
+        let mut listeners = vec![v4];
+        if let Some(v6) = v6 {
+            listeners.push(v6);
+        }
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let wait = std::thread::spawn(move || wait_for_redirect(listeners, Some(ready_tx)));
+        ready_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("ready");
+
+        let mut stream =
+            TcpStream::connect(("127.0.0.1", port)).expect("connect to oauth callback");
+        stream
+            .write_all(
+                b"GET /?code=test-auth-code&scope=email HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n",
+            )
+            .expect("write");
+        let code = wait.join().expect("join").expect("code");
+        assert_eq!(code, "test-auth-code");
+    }
 }

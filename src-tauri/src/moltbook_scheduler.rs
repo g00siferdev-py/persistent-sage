@@ -382,6 +382,17 @@ async fn run_action_with_prompt(
                 },
             }
         }
+        Err(e) if e == chat::TURN_SKIPPED_BUSY => {
+            // Companion mid-task — defer quietly.
+            return MoltbookSchedulerEvent {
+                ok: true,
+                at,
+                action: action.label().into(),
+                conversation_id: Some(cid),
+                summary: Some("Skipped — companion busy.".into()),
+                error: None,
+            };
+        }
         Err(e) => {
             eprintln!("persistent-sage: moltbook scheduler {} failed: {e}", action.label());
             MoltbookSchedulerEvent {

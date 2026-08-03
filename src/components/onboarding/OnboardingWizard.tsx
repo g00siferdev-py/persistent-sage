@@ -16,6 +16,7 @@ type SettingsView = {
   hasOllamaApiKey: boolean;
   hasGeminiApiKey: boolean;
   hasXaiApiKey: boolean;
+  hasOpenrouterApiKey: boolean;
   onboardingCompleted: boolean;
 };
 
@@ -40,7 +41,25 @@ function hasKeyForProvider(settings: SettingsView | null, providerId: string): b
   if (providerId === "ollama_cloud") return settings.hasOllamaApiKey;
   if (providerId === "gemini") return settings.hasGeminiApiKey;
   if (providerId === "xai") return settings.hasXaiApiKey;
+  if (providerId === "openrouter") return settings.hasOpenrouterApiKey;
   return true;
+}
+
+function apiKeyPlaceholder(providerId: string): string {
+  switch (providerId) {
+    case "openai":
+      return "sk-…";
+    case "anthropic":
+      return "sk-ant-…";
+    case "gemini":
+      return "Google AI Studio API key";
+    case "xai":
+      return "xAI API key";
+    case "openrouter":
+      return "sk-or-…";
+    default:
+      return "Ollama Cloud API key";
+  }
 }
 
 export function OnboardingWizard({ onComplete }: Props) {
@@ -145,7 +164,9 @@ export function OnboardingWizard({ onComplete }: Props) {
               ? "gemini"
               : providerId === "xai"
                 ? "xai"
-                : null;
+                : providerId === "openrouter"
+                  ? "openrouter"
+                  : null;
     if (!provider) return;
     setBusy(true);
     setError(null);
@@ -318,17 +339,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                       <input
                         type="password"
                         autoComplete="off"
-                        placeholder={
-                          providerId === "openai"
-                            ? "sk-…"
-                            : providerId === "anthropic"
-                              ? "sk-ant-…"
-                              : providerId === "gemini"
-                                ? "Google AI Studio API key"
-                                : providerId === "xai"
-                                  ? "xAI API key"
-                                  : "Ollama Cloud API key"
-                        }
+                        placeholder={apiKeyPlaceholder(providerId)}
                         value={apiKeyInput}
                         disabled={busy}
                         onChange={(e) => setApiKeyInput(e.target.value)}
@@ -360,17 +371,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               <input
                 type="password"
                 autoComplete="off"
-                placeholder={
-                  providerId === "openai"
-                    ? "sk-…"
-                    : providerId === "anthropic"
-                      ? "sk-ant-…"
-                      : providerId === "gemini"
-                        ? "Google AI Studio API key"
-                        : providerId === "xai"
-                          ? "xAI API key"
-                          : "Ollama Cloud API key"
-                }
+                placeholder={apiKeyPlaceholder(providerId)}
                 value={apiKeyInput}
                 disabled={busy}
                 onChange={(e) => setApiKeyInput(e.target.value)}

@@ -49,10 +49,12 @@ fn tool_user_facing_label(name: &str) -> String {
         "workspace_list_directory" => "List Workspace Folder".into(),
         "workspace_read_pdf" => "Read PDF".into(),
         "workspace_write_pdf" => "Create PDF".into(),
+        "correspondence_sync" => "Correspondence Sync".into(),
         "database_query" => "Database Query".into(),
         "personality_get" => "View Personality".into(),
         "personality_update" => "Update Personality".into(),
         "memory_search" => "Memory Search".into(),
+        "memory_search_all" => "Memory Search All Agents".into(),
         "coding_grep" => "Code Search".into(),
         "coding_apply_patch" => "Apply Patch".into(),
         "coding_run_command" => "Run Command".into(),
@@ -374,6 +376,11 @@ fn workspace_write_file(
     rel: &str,
     content: &str,
 ) -> Result<String, ProviderError> {
+    if crate::correspondence_sync::is_protected_rel(rel) {
+        return Err(tool_err(
+            "correspondence_sync.md / sync_*.txt are protected — use the correspondence_sync tool instead of workspace_write_file.",
+        ));
+    }
     let path = resolve_workspace_subpath(workspace_root, rel)?;
     if content.as_bytes().len() > WORKSPACE_WRITE_MAX_BYTES {
         return Err(tool_err(format!(
@@ -1270,6 +1277,7 @@ pub async fn run_builtin_tool(
     coding_ctx: Option<&crate::coding::CodingTurnContext>,
     tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     settings: Option<&crate::settings::SettingsManager>,
+    conversation_id: Option<&str>,
     name: &str,
     arguments_json: &str,
 ) -> Result<String, ProviderError> {
@@ -1303,12 +1311,28 @@ pub async fn run_builtin_tool(
         return crate::moltbook::run_moltbook_tool(http, settings, n, &v).await;
     }
 
+    if n == "correspondence_sync" {
+        let root = workspace_root.ok_or_else(|| {
+            tool_err("correspondence_sync needs the agent workspace (enable Google agent tools)")
+        })?;
+        let v: Value = serde_json::from_str(arguments_json)
+            .map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
+        let actor = conversation_id.unwrap_or("agent");
+        return crate::correspondence_sync::run_tool(root, &v, actor);
+    }
+
     if crate::google::is_google_tool_name(n) {
         let settings =
             settings.ok_or_else(|| tool_err("Google tools need settings context"))?;
         let v: Value = serde_json::from_str(arguments_json)
             .map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
-        return crate::google::run_google_tool(http, settings, n, &v).await;
+        return crate::google::run_google_tool(http, settings, n, &v, conversation_id).await;
+    }
+
+    if crate::weather::is_weather_tool_name(n) {
+        let v: Value = serde_json::from_str(arguments_json)
+            .map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
+        return crate::weather::run_weather_tool(http, n, &v).await;
     }
 
     if crate::pdf::is_pdf_tool_name(n) {
@@ -1371,6 +1395,24 @@ pub async fn run_builtin_tool(
             let (settings, memory) = memory_tools
                 .ok_or_else(|| tool_err("memory_search is not available (no memory context)"))?;
             let body = crate::memory_tools::run_memory_search(http, settings, memory, &v)
+                .await
+                .map_err(|e| tool_err(e.to_string()))?;
+            Ok(body)
+        }
+        "memory_search_all" => {
+            let (settings, memory) = memory_tools
+                .ok_or_else(|| tool_err("memory_search_all is not available (no memory context)"))?;
+            let Some(cid) = conversation_id.map(str::trim).filter(|s| !s.is_empty()) else {
+                return Err(tool_err(
+                    "memory_search_all requires an active conversation (Email Agent only).",
+                ));
+            };
+            if !settings.is_email_agent_conversation(cid) {
+                return Err(tool_err(
+                    "memory_search_all is exclusive to the global Email Agent thread (read-only cross-agent recall).",
+                ));
+            }
+            let body = crate::memory_tools::run_memory_search_all(http, settings, memory, &v)
                 .await
                 .map_err(|e| tool_err(e.to_string()))?;
             Ok(body)

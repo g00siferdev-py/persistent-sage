@@ -19,7 +19,8 @@ export function GoogleConnectCard({ status, onStatusChange, compact = false }: P
     setBusy(true);
     setError(null);
     try {
-      const next = await invoke<GoogleStatus>("google_auth_start");
+      // Backend auto-enables Google Workspace on first sign-in.
+      const next = await invoke<GoogleStatus>("google_auth_start", { account: "user" });
       onStatusChange(next);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -28,37 +29,41 @@ export function GoogleConnectCard({ status, onStatusChange, compact = false }: P
     }
   };
 
-  const notEnabled = !status?.enabled;
-  const missingClient = !!status?.enabled && !status?.hasClientId;
-  const missingSetup = notEnabled || missingClient;
+  const missingClient = !!status && !status.hasClientId;
+  const canSignIn = !missingClient;
 
   return (
-    <div className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${compact ? "py-4" : "py-10"}`}>
+    <div
+      className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${compact ? "py-4" : "py-10"}`}
+    >
       <p className="text-sm text-ps-muted">
-        {notEnabled ? (
+        {missingClient ? (
           <>
-            Google Workspace is turned off. Enable it under{" "}
-            <strong className="text-ps-ink">Settings → Tools → Google Workspace</strong>, then sign
-            in here.
-          </>
-        ) : missingClient ? (
-          <>
-            This build has no built-in Google app credentials. Add your own OAuth Client ID under{" "}
-            <strong className="text-ps-ink">Settings → Tools → Google Workspace</strong> (Desktop
-            app client from Google Cloud Console).
+            This development build has no built-in Google app. Use an official Persistent Sage
+            installer for one-click sign-in, or add a Desktop OAuth client under{" "}
+            <strong className="text-ps-ink">Settings → Tools → Google → Advanced</strong>.
           </>
         ) : (
-          <>Sign in with Google to use Gmail, Calendar, and Drive here and from companion chat.</>
+          <>
+            Click <strong className="text-ps-ink">Sign in with Google</strong> — your browser opens,
+            you approve access, then Productivity widgets unlock (Gmail, Calendar, Drive, Contacts,
+            Tasks). No Client ID or secret to paste.
+          </>
         )}
       </p>
-      {!missingSetup ? (
-        <button type="button" onClick={() => void connect()} disabled={busy} className="ps-btn-primary px-4 py-2">
+      {canSignIn ? (
+        <button
+          type="button"
+          onClick={() => void connect()}
+          disabled={busy}
+          className="ps-btn-primary px-5 py-2.5 text-sm"
+        >
           {busy ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
           ) : (
             <LogIn className="size-4" aria-hidden />
           )}
-          {busy ? "Waiting for browser sign-in…" : "Sign in with Google"}
+          {busy ? "Waiting for browser…" : "Sign in with Google"}
         </button>
       ) : null}
       {error ? <p className="max-w-sm text-xs text-ps-danger">{error}</p> : null}

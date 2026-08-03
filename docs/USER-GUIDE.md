@@ -163,8 +163,14 @@ For migrating a long-running OpenClaw agent with maximum fidelity, see [§ 11 Mi
 | **Google Gemini** | API key, base URL, model (e.g. `gemini-2.5-flash`) |
 | **xAI Grok** | API key, base URL, model (e.g. `grok-4-fast-reasoning`) |
 | **Ollama (local)** | Base URL (default `http://127.0.0.1:11434`), model name |
-| **Ollama Cloud** | API key, cloud model (e.g. `kimi-k2.5:cloud`) |
+| **Ollama Cloud** | API key, cloud model (e.g. `kimi-k2.6`); refresh the list after a failure, since Ollama retires cloud models often |
 | **Anthropic** | API key, Claude model id |
+| **OpenRouter** | API key from [openrouter.ai/keys](https://openrouter.ai/keys), `author/model` id (e.g. `openai/gpt-4o-mini`) |
+
+**Refresh Models** lists only models the provider reports as usable for chat in
+Persistent Sage, so incompatible or retired entries stay out of the picker. **Test
+model** sends one short prompt to the provider selected for chat and shows the reply or
+the exact error.
 
 ### 6.3 Tools
 

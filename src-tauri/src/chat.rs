@@ -234,7 +234,7 @@ enum AgentWebToolBackend {
 
 fn web_tool_backend_for_provider(provider_id: &str) -> Option<AgentWebToolBackend> {
     match provider_id {
-        "openai" | "xai" => Some(AgentWebToolBackend::OpenAI),
+        "openai" | "xai" | "openrouter" => Some(AgentWebToolBackend::OpenAI),
         "ollama" | "ollama_cloud" => Some(AgentWebToolBackend::Ollama),
         "anthropic" => Some(AgentWebToolBackend::Anthropic),
         _ => None,
@@ -253,6 +253,7 @@ async fn apply_tool_round_messages(
     coding_ctx: Option<&crate::coding::CodingTurnContext>,
     tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     settings: Option<&crate::settings::SettingsManager>,
+    conversation_id: &str,
     messages: &mut Vec<ChatTurn>,
     round: &CompletionResponse,
     backend: AgentWebToolBackend,
@@ -274,6 +275,7 @@ async fn apply_tool_round_messages(
         coding_ctx: Option<&crate::coding::CodingTurnContext>,
         tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
         settings: Option<&crate::settings::SettingsManager>,
+        conversation_id: &str,
         name: &str,
         arguments_json: &str,
     ) -> String {
@@ -305,6 +307,7 @@ async fn apply_tool_round_messages(
                         coding_ctx,
                         tool_stream,
                         settings,
+                        Some(conversation_id),
                         name,
                         arguments_json,
                     )
@@ -326,6 +329,7 @@ async fn apply_tool_round_messages(
                 coding_ctx,
                 tool_stream,
                 settings,
+                Some(conversation_id),
                 name,
                 arguments_json,
             )
@@ -360,6 +364,7 @@ async fn apply_tool_round_messages(
                     coding_ctx,
                     tool_stream,
                     settings,
+                    conversation_id,
                     &tc.name,
                     &tc.arguments_json,
                 )
@@ -401,6 +406,7 @@ async fn apply_tool_round_messages(
                     coding_ctx,
                     tool_stream,
                     settings,
+                    conversation_id,
                     &tc.name,
                     &tc.arguments_json,
                 )
@@ -443,6 +449,7 @@ async fn apply_tool_round_messages(
                     coding_ctx,
                     tool_stream,
                     settings,
+                    conversation_id,
                     &tc.name,
                     &tc.arguments_json,
                 )
@@ -484,6 +491,7 @@ async fn agent_complete_with_tools(
     coding_ctx: Option<&crate::coding::CodingTurnContext>,
     tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     settings: Option<&crate::settings::SettingsManager>,
+    conversation_id: &str,
     mut messages: Vec<ChatTurn>,
     max_tokens: Option<u32>,
     temperature: f32,
@@ -537,6 +545,7 @@ async fn agent_complete_with_tools(
             coding_ctx,
             tool_stream,
             settings,
+            conversation_id,
             &mut messages,
             &round,
             backend,
@@ -562,6 +571,7 @@ async fn try_complete_after_embedded_tool_xml(
     coding_ctx: Option<&crate::coding::CodingTurnContext>,
     tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     settings: Option<&crate::settings::SettingsManager>,
+    conversation_id: &str,
     mut messages: Vec<ChatTurn>,
     assistant_xml: &str,
     max_tokens: Option<u32>,
@@ -598,6 +608,7 @@ async fn try_complete_after_embedded_tool_xml(
         coding_ctx,
         tool_stream,
         settings,
+        conversation_id,
         &mut messages,
         &round,
         backend,
@@ -616,6 +627,7 @@ async fn try_complete_after_embedded_tool_xml(
         coding_ctx,
         tool_stream,
         settings,
+        conversation_id,
         messages,
         max_tokens,
         temperature,
@@ -654,6 +666,9 @@ pub struct ChatStreamEvent {
     pub done: bool,
 }
 
+/// Returned when a background turn (`skip_if_busy`) finds the companion already mid-task.
+pub const TURN_SKIPPED_BUSY: &str = "companion_busy";
+
 /// Controls streaming, transcript persistence, and tool use for a chat turn.
 #[derive(Clone, Debug)]
 pub struct ChatTurnOptions {
@@ -669,6 +684,8 @@ pub struct ChatTurnOptions {
     pub coding_context: Option<CodingTurnContext>,
     /// Frontend UI theme hint for artifact styling (`light` | `dark`).
     pub ui_theme: Option<String>,
+    /// Background Pulse / agent-email / Moltbook: skip instead of interrupting an active turn.
+    pub skip_if_busy: bool,
 }
 
 /// Ephemeral user text is sent to the model but not stored in SQLite / chat UI.
@@ -692,6 +709,7 @@ impl ChatTurnOptions {
             ephemeral_user_note: EphemeralUserNote::None,
             coding_context: None,
             ui_theme: None,
+            skip_if_busy: false,
         }
     }
 
@@ -706,6 +724,7 @@ impl ChatTurnOptions {
             ephemeral_user_note: EphemeralUserNote::FormSubmission,
             coding_context: None,
             ui_theme: None,
+            skip_if_busy: false,
         }
     }
 
@@ -720,6 +739,7 @@ impl ChatTurnOptions {
             ephemeral_user_note: EphemeralUserNote::Pulse,
             coding_context: None,
             ui_theme: None,
+            skip_if_busy: true,
         }
     }
 
@@ -734,6 +754,7 @@ impl ChatTurnOptions {
             ephemeral_user_note: EphemeralUserNote::Moltbook,
             coding_context: None,
             ui_theme: None,
+            skip_if_busy: true,
         }
     }
 
@@ -747,6 +768,7 @@ impl ChatTurnOptions {
             ephemeral_user_note: EphemeralUserNote::None,
             coding_context: Some(ctx),
             ui_theme: None,
+            skip_if_busy: false,
         }
     }
 }
@@ -800,6 +822,10 @@ async fn run_chat_completion(
         && state.settings.google_agent_tools_enabled()
     {
         tool_definitions.extend(crate::google::tool_definitions(&state.settings));
+        tool_definitions.extend(crate::correspondence_sync::tool_definitions());
+    }
+    if options.enable_tools && !is_coding_turn {
+        tool_definitions.extend(crate::weather::tool_definitions());
     }
     let database_tools_enabled = options.enable_tools
         && !is_coding_turn
@@ -839,8 +865,14 @@ async fn run_chat_completion(
     let provider_id = engine.provider_id();
     let memory_tools_active =
         options.enable_tools && provider_id != "placeholder" && !is_coding_turn;
+    let is_email_agent_turn = state
+        .settings
+        .is_email_agent_conversation(conversation_id);
     if memory_tools_active {
         tool_definitions.extend(crate::memory_tools::tool_definitions());
+        if is_email_agent_turn {
+            tool_definitions.extend(crate::memory_tools::email_agent_tool_definitions());
+        }
     }
     let memory_tools_ctx = memory_tools_active.then(|| {
         (
@@ -853,6 +885,7 @@ async fn run_chat_completion(
     let max_tool_rounds = if is_coding_turn { 32 } else { 8 };
     let workspace_root_for_tools = if state.settings.agent_workspace_enabled()
         || state.settings.artifacts_enabled()
+        || (state.settings.google_enabled() && state.settings.google_agent_tools_enabled())
         || (is_coding_turn
             && (state.settings.agent_coding_tools_enabled()
                 || state.settings.agent_coding_shell_enabled()
@@ -901,6 +934,16 @@ async fn run_chat_completion(
                     system
                         .content
                         .push_str(crate::memory_tools::memory_system_hint());
+                    if is_email_agent_turn {
+                        system
+                            .content
+                            .push_str(crate::memory_tools::email_agent_memory_system_hint());
+                    }
+                }
+                if state.settings.google_enabled() && state.settings.google_agent_tools_enabled() {
+                    system
+                        .content
+                        .push_str(crate::correspondence_sync::system_hint());
                 }
                 if state.settings.moltbook_enabled() && state.settings.moltbook_agent_tools_enabled()
                 {
@@ -947,6 +990,7 @@ async fn run_chat_completion(
             coding_ctx_ref,
             tool_stream,
             settings_for_tools,
+            conversation_id,
             messages,
             max_tokens,
             temperature,
@@ -1071,6 +1115,7 @@ async fn run_chat_completion(
                     coding_ctx_ref,
                     tool_stream,
                     settings_for_tools,
+                    conversation_id,
                     messages_for_tool_recovery,
                     &full,
                     max_tokens,
@@ -1235,6 +1280,16 @@ pub async fn execute_chat_turn(
     if text.is_empty() && pending_image.is_none() {
         return Err("message content is empty".into());
     }
+
+    // Interactive turns wait; background turns (Pulse / agent email / Moltbook) skip if busy.
+    let _turn_guard = if options.skip_if_busy {
+        match state.companion_turn.try_lock() {
+            Ok(g) => g,
+            Err(_) => return Err(TURN_SKIPPED_BUSY.into()),
+        }
+    } else {
+        state.companion_turn.lock().await
+    };
 
     let pid = personality_id.trim();
     let pid = if pid.is_empty() {

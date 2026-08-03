@@ -352,6 +352,12 @@ pub trait ConversationMemory: Send + Sync {
     /// Scope subsequent list/create/recall operations to this companion profile id (`default` if empty).
     fn set_active_personality(&self, personality_id: &str);
 
+    /// Current companion profile id used for personality-scoped memory ops.
+    fn active_personality_id(&self) -> String;
+
+    /// Distinct personality ids that have anchors or conversations (for Email Agent cross-search).
+    fn list_personality_ids_for_recall(&self) -> Result<Vec<String>, MemoryError>;
+
     /// Upsert a global project anchor visible to all companion profiles.
     fn upsert_project_anchor(&self, project_id: &str, title: &str) -> Result<String, MemoryError>;
 
@@ -2643,6 +2649,46 @@ impl ConversationMemory for MemoryAnchor {
         if let Ok(mut g) = self.active_personality_id.lock() {
             *g = s;
         }
+    }
+
+    fn active_personality_id(&self) -> String {
+        self.active_personality()
+            .unwrap_or_else(|_| DEFAULT_PERSONALITY_ID.to_string())
+    }
+
+    fn list_personality_ids_for_recall(&self) -> Result<Vec<String>, MemoryError> {
+        let conn = self.conn()?;
+        let mut ids = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        {
+            let mut stmt = conn.prepare(
+                "SELECT DISTINCT personality_id FROM anchors WHERE personality_id IS NOT NULL AND trim(personality_id) != ''",
+            )?;
+            let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+            for r in rows {
+                let t = r?.trim().to_string();
+                if !t.is_empty() && seen.insert(t.clone()) {
+                    ids.push(t);
+                }
+            }
+        }
+        {
+            let mut stmt = conn.prepare(
+                "SELECT DISTINCT personality_id FROM conversations WHERE personality_id IS NOT NULL AND trim(personality_id) != ''",
+            )?;
+            let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+            for r in rows {
+                let t = r?.trim().to_string();
+                if !t.is_empty() && seen.insert(t.clone()) {
+                    ids.push(t);
+                }
+            }
+        }
+        if ids.is_empty() {
+            ids.push(DEFAULT_PERSONALITY_ID.to_string());
+        }
+        ids.sort();
+        Ok(ids)
     }
 
     fn wipe_all_user_data(&self) -> Result<(), MemoryError> {

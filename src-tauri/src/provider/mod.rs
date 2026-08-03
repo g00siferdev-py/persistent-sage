@@ -14,11 +14,13 @@ pub use engine::LLMProviderEngine;
 pub use error::ProviderError;
 pub use gemini::{fetch_gemini_model_ids, GeminiProvider};
 pub use ollama::{fetch_ollama_cloud_model_tags, fetch_ollama_local_model_tags, OllamaProvider};
-pub use openai::{fetch_openai_model_ids, fetch_xai_model_ids, OpenAIProvider};
+pub use openai::{
+    fetch_openai_model_ids, fetch_openrouter_model_catalog, fetch_xai_model_ids, OpenAIProvider,
+};
 pub use placeholder::PlaceholderEngine;
 pub use types::{
-    ChatSendResult, ChatTurn, CompletionRequest, CompletionResponse, ProviderDescriptor,
-    StreamChunk, ToolCall, ToolDefinition,
+    ChatSendResult, ChatTurn, CompletionRequest, CompletionResponse, ModelCatalogEntry,
+    ProviderDescriptor, StreamChunk, ToolCall, ToolDefinition,
 };
 
 use std::sync::Arc;
@@ -71,6 +73,12 @@ pub fn list_provider_descriptors() -> Vec<ProviderDescriptor> {
             local_first: false,
             requires_api_key: true,
         },
+        ProviderDescriptor {
+            id: "openrouter".into(),
+            label: "OpenRouter — many models, one key".into(),
+            local_first: false,
+            requires_api_key: true,
+        },
     ]
 }
 
@@ -87,6 +95,7 @@ pub fn build_engine(
         "anthropic" => Arc::new(AnthropicProvider::from_settings(settings, http)?),
         "gemini" => Arc::new(GeminiProvider::from_settings(settings, http)?),
         "xai" => Arc::new(OpenAIProvider::from_xai_settings(settings, http)?),
+        "openrouter" => Arc::new(OpenAIProvider::from_openrouter_settings(settings, http)?),
         _ => Arc::new(PlaceholderEngine::new()),
     };
     Ok(engine)
