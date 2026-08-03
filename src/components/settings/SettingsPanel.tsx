@@ -6,6 +6,10 @@ import { GeneralSettingsTab } from "@/components/settings/GeneralSettingsTab";
 import { ProviderSettingsTab } from "@/components/settings/ProviderSettingsTab";
 import { ToolsSettingsTab } from "@/components/settings/ToolsSettingsTab";
 import { applySettingsPatch, settingsPanelWidth } from "@/components/settings/settingsHelpers";
+import {
+  mergeSettingsPatches,
+  settingsPatchHasKeys,
+} from "@/components/settings/settingsPatchMerge";
 import type {
   AppDataPaths,
   SettingsPanelProps,
@@ -32,6 +36,7 @@ export function SettingsPanel({
   const [dataPaths, setDataPaths] = useState<AppDataPaths | null>(null);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPatchRef = useRef<SettingsPatch>({});
 
   const refreshSettings = useCallback(async () => {
     try {
@@ -58,33 +63,56 @@ export function SettingsPanel({
     void refreshDataPaths();
   }, [open, refreshSettings, refreshDataPaths]);
 
-  const flushDebounce = useCallback(() => {
+  const clearDebounceTimer = useCallback(() => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
       debounceRef.current = null;
     }
   }, []);
 
+  /** Persist any coalesced debounced edits immediately (does not discard them). */
+  const flushDebounce = useCallback(async () => {
+    clearDebounceTimer();
+    const pending = pendingPatchRef.current;
+    if (!settingsPatchHasKeys(pending)) return;
+    pendingPatchRef.current = {};
+    try {
+      setError(null);
+      const next = await applySettingsPatch(pending);
+      setSettings(next);
+    } catch (e) {
+      pendingPatchRef.current = mergeSettingsPatches(pending, pendingPatchRef.current);
+      setError(String(e));
+      throw e;
+    }
+  }, [clearDebounceTimer]);
+
   const schedulePatch = useCallback(
     (patch: SettingsPatch) => {
-      flushDebounce();
+      pendingPatchRef.current = mergeSettingsPatches(pendingPatchRef.current, patch);
+      clearDebounceTimer();
       debounceRef.current = setTimeout(() => {
         debounceRef.current = null;
-        void (async () => {
-          try {
-            setError(null);
-            const next = await applySettingsPatch(patch);
-            setSettings(next);
-          } catch (e) {
-            setError(String(e));
-          }
-        })();
+        void flushDebounce().catch(() => {
+          /* error already recorded */
+        });
       }, DEBOUNCE_MS);
     },
-    [flushDebounce],
+    [clearDebounceTimer, flushDebounce],
   );
 
-  useEffect(() => () => flushDebounce(), [flushDebounce]);
+  useEffect(
+    () => () => {
+      clearDebounceTimer();
+      const pending = pendingPatchRef.current;
+      if (!settingsPatchHasKeys(pending)) return;
+      pendingPatchRef.current = {};
+      void applySettingsPatch(pending).catch((e) => {
+        console.error("persistent-sage: failed to flush settings on unmount", e);
+      });
+    },
+    [clearDebounceTimer],
+  );
 
   const panelWidthClass = settingsPanelWidth(layoutMode);
 

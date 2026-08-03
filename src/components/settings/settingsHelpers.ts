@@ -165,3 +165,5 @@ export function feedbackIssueUrl(
 export async function applySettingsPatch(patch: SettingsPatch): Promise<SettingsView> {
   return invoke<SettingsView>("settings_update", { patch });
 }
+
+export { mergeSettingsPatches, settingsPatchHasKeys } from "@/components/settings/settingsPatchMerge";

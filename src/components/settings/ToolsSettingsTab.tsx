@@ -156,7 +156,7 @@ export type ToolsSettingsTabProps = {
   setSettings: Dispatch<SetStateAction<SettingsView | null>>;
   dataPaths: AppDataPaths | null;
   panelDense: boolean;
-  flushDebounce: () => void;
+  flushDebounce: () => Promise<void>;
   schedulePatch: (patch: SettingsPatch) => void;
   setError: (error: string | null) => void;
   refreshSettings: () => Promise<void>;
@@ -401,10 +401,10 @@ export function ToolsSettingsTab({
           checked={settings?.artifactsEnabled ?? true}
           onChange={(artifactsEnabled) => {
             setSettings((s) => (s ? { ...s, artifactsEnabled } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ artifactsEnabled });
                 setSettings(next);
               } catch (err) {
@@ -424,10 +424,10 @@ export function ToolsSettingsTab({
           disabled={!providerSupportsTools(settings)}
           onChange={(agentWebToolsEnabled) => {
             setSettings((s) => (s ? { ...s, agentWebToolsEnabled } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ agentWebToolsEnabled });
                 setSettings(next);
               } catch (err) {
@@ -450,10 +450,10 @@ export function ToolsSettingsTab({
           disabled={!providerSupportsTools(settings) || !settings?.agentWebToolsEnabled}
           onChange={(agentBrowserFetchEnabled) => {
             setSettings((s) => (s ? { ...s, agentBrowserFetchEnabled } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ agentBrowserFetchEnabled });
                 setSettings(next);
               } catch (err) {
@@ -478,10 +478,10 @@ export function ToolsSettingsTab({
           }
           onChange={(agentBrowserIgnoreRobots) => {
             setSettings((s) => (s ? { ...s, agentBrowserIgnoreRobots } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ agentBrowserIgnoreRobots });
                 setSettings(next);
               } catch (err) {
@@ -502,10 +502,10 @@ export function ToolsSettingsTab({
           disabled={!providerSupportsTools(settings)}
           onChange={(agentPersonalityEditEnabled) => {
             setSettings((s) => (s ? { ...s, agentPersonalityEditEnabled } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ agentPersonalityEditEnabled });
                 setSettings(next);
               } catch (err) {
@@ -530,10 +530,10 @@ export function ToolsSettingsTab({
           disabled={!providerSupportsTools(settings)}
           onChange={(agentWorkspaceEnabled) => {
             setSettings((s) => (s ? { ...s, agentWorkspaceEnabled } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ agentWorkspaceEnabled });
                 setSettings(next);
               } catch (err) {
@@ -562,10 +562,10 @@ export function ToolsSettingsTab({
           checked={settings?.agentCodingCompanionLinkedEnabled ?? true}
           onChange={(agentCodingCompanionLinkedEnabled) => {
             setSettings((s) => (s ? { ...s, agentCodingCompanionLinkedEnabled } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ agentCodingCompanionLinkedEnabled });
                 setSettings(next);
               } catch (err) {
@@ -585,10 +585,10 @@ export function ToolsSettingsTab({
           disabled={!providerSupportsTools(settings)}
           onChange={(agentCodingToolsEnabled) => {
             setSettings((s) => (s ? { ...s, agentCodingToolsEnabled } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ agentCodingToolsEnabled });
                 setSettings(next);
               } catch (err) {
@@ -609,10 +609,10 @@ export function ToolsSettingsTab({
           disabled={!providerSupportsTools(settings) || !settings?.agentCodingToolsEnabled}
           onChange={(agentCodingShellEnabled) => {
             setSettings((s) => (s ? { ...s, agentCodingShellEnabled } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ agentCodingShellEnabled });
                 setSettings(next);
               } catch (err) {
@@ -633,10 +633,10 @@ export function ToolsSettingsTab({
           disabled={!providerSupportsTools(settings) || !settings?.agentCodingToolsEnabled}
           onChange={(agentCodingGitEnabled) => {
             setSettings((s) => (s ? { ...s, agentCodingGitEnabled } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ agentCodingGitEnabled });
                 setSettings(next);
               } catch (err) {
@@ -661,10 +661,10 @@ export function ToolsSettingsTab({
           }
           onChange={(agentCodingGitRemoteEnabled) => {
             setSettings((s) => (s ? { ...s, agentCodingGitRemoteEnabled } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ agentCodingGitRemoteEnabled });
                 setSettings(next);
               } catch (err) {
@@ -717,10 +717,10 @@ export function ToolsSettingsTab({
           disabled={!providerSupportsTools(settings)}
           onChange={(databaseAppDataEnabled) => {
             setSettings((s) => (s ? { ...s, databaseAppDataEnabled } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ databaseAppDataEnabled });
                 setSettings(next);
               } catch (err) {
@@ -750,10 +750,10 @@ export function ToolsSettingsTab({
           }
           onChange={(databaseAllowWrite) => {
             setSettings((s) => (s ? { ...s, databaseAllowWrite } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ databaseAllowWrite });
                 setSettings(next);
               } catch (err) {
@@ -784,10 +784,10 @@ export function ToolsSettingsTab({
           checked={settings?.moltbookEnabled ?? false}
           onChange={(moltbookEnabled) => {
             setSettings((s) => (s ? { ...s, moltbookEnabled } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ moltbookEnabled });
                 setSettings(next);
               } catch (err) {
@@ -893,12 +893,12 @@ export function ToolsSettingsTab({
                   onChange={(e) => {
                     const on = e.target.checked;
                     setPreferSubmolt(on);
-                    flushDebounce();
                     if (!on) {
                       setSettings((s) => (s ? { ...s, moltbookDefaultSubmolt: "" } : s));
                       void (async () => {
                         try {
                           setError(null);
+                          await flushDebounce();
                           const next = await applySettingsPatch({ moltbookDefaultSubmolt: "" });
                           setSettings(next);
                         } catch (err) {
@@ -997,10 +997,10 @@ export function ToolsSettingsTab({
                 checked={settings?.moltbookNeverDiscussHuman ?? true}
                 onChange={(moltbookNeverDiscussHuman) => {
                   setSettings((s) => (s ? { ...s, moltbookNeverDiscussHuman } : s));
-                  flushDebounce();
                   void (async () => {
                     try {
                       setError(null);
+                      await flushDebounce();
                       const next = await applySettingsPatch({ moltbookNeverDiscussHuman });
                       setSettings(next);
                     } catch (err) {
@@ -1039,10 +1039,10 @@ export function ToolsSettingsTab({
               disabled={!providerSupportsTools(settings)}
               onChange={(moltbookAgentToolsEnabled) => {
                 setSettings((s) => (s ? { ...s, moltbookAgentToolsEnabled } : s));
-                flushDebounce();
                 void (async () => {
                   try {
                     setError(null);
+                    await flushDebounce();
                     const next = await applySettingsPatch({ moltbookAgentToolsEnabled });
                     setSettings(next);
                   } catch (err) {
@@ -1066,10 +1066,10 @@ export function ToolsSettingsTab({
               }
               onChange={(moltbookSchedulerEnabled) => {
                 setSettings((s) => (s ? { ...s, moltbookSchedulerEnabled } : s));
-                flushDebounce();
                 void (async () => {
                   try {
                     setError(null);
+                    await flushDebounce();
                     const next = await applySettingsPatch({ moltbookSchedulerEnabled });
                     setSettings(next);
                   } catch (err) {
@@ -1172,10 +1172,10 @@ export function ToolsSettingsTab({
                         onChange={(e) => {
                           const value = e.target.checked;
                           setSettings((s) => (s ? { ...s, [key]: value } : s));
-                          flushDebounce();
                           void (async () => {
                             try {
                               setError(null);
+                              await flushDebounce();
                               const next = await applySettingsPatch({ [key]: value });
                               setSettings(next);
                             } catch (err) {
@@ -1259,10 +1259,10 @@ export function ToolsSettingsTab({
               }
               onChange={(moltbookReplyWatcherEnabled) => {
                 setSettings((s) => (s ? { ...s, moltbookReplyWatcherEnabled } : s));
-                flushDebounce();
                 void (async () => {
                   try {
                     setError(null);
+                    await flushDebounce();
                     const next = await applySettingsPatch({ moltbookReplyWatcherEnabled });
                     setSettings(next);
                   } catch (err) {
