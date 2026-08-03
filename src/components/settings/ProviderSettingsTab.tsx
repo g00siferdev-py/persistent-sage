@@ -123,7 +123,7 @@ export type ProviderSettingsTabProps = {
   settings: SettingsView | null;
   setSettings: Dispatch<SetStateAction<SettingsView | null>>;
   schedulePatch: (patch: SettingsPatch) => void;
-  flushDebounce: () => void;
+  flushDebounce: () => Promise<void>;
   setError: (error: string | null) => void;
   refreshSettings: () => Promise<void>;
 };
@@ -183,7 +183,7 @@ export function ProviderSettingsTab({
     ) => {
       try {
         setError(null);
-        flushDebounce();
+        await flushDebounce();
         const next = await applySettingsPatch(patch);
         setSettings(next);
       } catch (e) {
@@ -899,10 +899,10 @@ export function ProviderSettingsTab({
             onChange={(e) => {
               const t = Number(e.target.value);
               setSettings((s) => (s ? { ...s, temperature: t } : s));
-              flushDebounce();
               void (async () => {
                 try {
                   setError(null);
+                  await flushDebounce();
                   const next = await applySettingsPatch({ temperature: t });
                   setSettings(next);
                 } catch (err) {
@@ -936,11 +936,11 @@ export function ProviderSettingsTab({
             const maxTokens = v === "default" ? null : Number.parseInt(v, 10);
             if (v !== "default" && Number.isNaN(maxTokens)) return;
 
-            flushDebounce();
             setSettings((s) => (s ? { ...s, maxTokens } : s));
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ maxTokens });
                 setSettings({ ...next, maxTokens: next.maxTokens ?? null });
               } catch (err) {

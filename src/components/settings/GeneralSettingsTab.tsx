@@ -63,7 +63,7 @@ export type GeneralSettingsTabProps = {
   settings: SettingsView | null;
   setSettings: Dispatch<SetStateAction<SettingsView | null>>;
   schedulePatch: (patch: SettingsPatch) => void;
-  flushDebounce: () => void;
+  flushDebounce: () => Promise<void>;
   setError: (error: string | null) => void;
   refreshSettings: () => Promise<void>;
   onRequestOnboarding?: () => void;
@@ -449,10 +449,10 @@ export function GeneralSettingsTab({
             onChange={(e) => {
               const pulseEnabled = e.target.checked;
               setSettings((s) => (s ? { ...s, pulseEnabled } : s));
-              flushDebounce();
               void (async () => {
                 try {
                   setError(null);
+                  await flushDebounce();
                   const next = await applySettingsPatch({ pulseEnabled });
                   setSettings(next);
                 } catch (err) {
@@ -588,10 +588,10 @@ export function GeneralSettingsTab({
           disabled={!settings}
           onChange={(memoryLlmExtractionEnabled) => {
             setSettings((s) => (s ? { ...s, memoryLlmExtractionEnabled } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ memoryLlmExtractionEnabled });
                 setSettings(next);
               } catch (err) {
@@ -609,10 +609,10 @@ export function GeneralSettingsTab({
           disabled={!settings}
           onChange={(memorySemanticEnabled) => {
             setSettings((s) => (s ? { ...s, memorySemanticEnabled } : s));
-            flushDebounce();
             void (async () => {
               try {
                 setError(null);
+                await flushDebounce();
                 const next = await applySettingsPatch({ memorySemanticEnabled });
                 setSettings(next);
               } catch (err) {
