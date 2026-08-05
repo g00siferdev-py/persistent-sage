@@ -971,10 +971,20 @@ pub async fn gmail_read(
     }))
 }
 
+/// Strip CR/LF and other ASCII controls so attacker-controlled fields cannot
+/// inject extra MIME headers (e.g. `Bcc:`) into `build_mime` output.
+fn sanitize_header_value(value: &str) -> String {
+    value
+        .chars()
+        .filter(|c| !matches!(c, '\0'..='\x1f' | '\x7f'))
+        .collect()
+}
+
 /// RFC 2047 header word-encoding for non-ASCII subjects.
 fn encode_header(value: &str) -> String {
+    let value = sanitize_header_value(value);
     if value.is_ascii() {
-        value.to_string()
+        value
     } else {
         format!(
             "=?UTF-8?B?{}?=",
@@ -998,6 +1008,11 @@ fn build_mime(
     in_reply_to: &str,
     references: &str,
 ) -> String {
+    let to = sanitize_header_value(to);
+    let cc = sanitize_header_value(cc);
+    let in_reply_to = sanitize_header_value(in_reply_to);
+    let references = sanitize_header_value(references);
+
     let mut headers = String::new();
     headers.push_str(&format!("To: {to}\r\n"));
     if !cc.trim().is_empty() {
@@ -1034,14 +1049,16 @@ fn build_mime(
     headers.push_str(&base64::engine::general_purpose::STANDARD.encode(body.as_bytes()));
     headers.push_str("\r\n");
     for att in attachments {
+        let mime = sanitize_header_value(&att.mime);
+        let filename = sanitize_header_value(&att.filename);
         headers.push_str(&format!("--{boundary}\r\n"));
         headers.push_str(&format!(
             "Content-Type: {}; name=\"{}\"\r\n",
-            att.mime, att.filename
+            mime, filename
         ));
         headers.push_str(&format!(
             "Content-Disposition: attachment; filename=\"{}\"\r\n",
-            att.filename
+            filename
         ));
         headers.push_str("Content-Transfer-Encoding: base64\r\n\r\n");
         let encoded = base64::engine::general_purpose::STANDARD.encode(&att.bytes);
@@ -1996,6 +2013,20 @@ fn arg_str_vec(v: &Value, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn require_google_service(
+    settings: &SettingsManager,
+    enabled: bool,
+    service: &str,
+) -> Result<(), ProviderError> {
+    if enabled {
+        Ok(())
+    } else {
+        Err(tool_err(format!(
+            "Google {service} is disabled — enable it in Settings → Tools → Google Workspace."
+        )))
+    }
+}
+
 pub async fn run_google_tool(
     http: &reqwest::Client,
     settings: &SettingsManager,
@@ -2008,8 +2039,22 @@ pub async fn run_google_tool(
             "Google tools are disabled — enable them in Settings → Tools → Google Workspace.",
         ));
     }
+    // Defense in depth: even text-embedded tool XML must not reach Gmail/Drive from the
+    // autonomous Moltbook scheduler thread (untrusted public feed content).
+    if let Some(cid) = conversation_id.map(str::trim).filter(|s| !s.is_empty()) {
+        if settings
+            .moltbook_scheduler_conversation_id()
+            .as_deref()
+            .is_some_and(|sched| sched == cid)
+        {
+            return Err(tool_err(
+                "Google Workspace tools are not available on autonomous Moltbook scheduler turns.",
+            ));
+        }
+    }
     let result = match name {
         "gmail_search" => {
+            require_google_service(settings, settings.google_gmail_enabled(), "Gmail")?;
             let account = GoogleAccount::parse(&arg_str(args, "account"));
             gmail_list(
                 http,
@@ -2021,6 +2066,7 @@ pub async fn run_google_tool(
             .await?
         }
         "gmail_read" => {
+            require_google_service(settings, settings.google_gmail_enabled(), "Gmail")?;
             let account = GoogleAccount::parse(&arg_str(args, "account"));
             gmail_read(
                 http,
@@ -2032,6 +2078,7 @@ pub async fn run_google_tool(
             .await?
         }
         "gmail_create_draft" | "gmail_send" => {
+            require_google_service(settings, settings.google_gmail_enabled(), "Gmail")?;
             let send = name == "gmail_send";
             let account = GoogleAccount::parse(&arg_str(args, "account"));
             // Human inbox send stays opt-in; agent mailbox send is Email-Agent-thread only.
@@ -2070,6 +2117,7 @@ pub async fn run_google_tool(
             .await?
         }
         "calendar_list_events" => {
+            require_google_service(settings, settings.google_calendar_enabled(), "Calendar")?;
             calendar_list_events(
                 http,
                 settings,
@@ -2081,6 +2129,7 @@ pub async fn run_google_tool(
             .await?
         }
         "calendar_create_event" => {
+            require_google_service(settings, settings.google_calendar_enabled(), "Calendar")?;
             calendar_create_event(
                 http,
                 settings,
@@ -2094,13 +2143,16 @@ pub async fn run_google_tool(
             .await?
         }
         "calendar_delete_event" => {
+            require_google_service(settings, settings.google_calendar_enabled(), "Calendar")?;
             calendar_delete_event(http, settings, &arg_str(args, "event_id")).await?
         }
         "drive_search" => {
+            require_google_service(settings, settings.google_drive_enabled(), "Drive")?;
             drive_list(http, settings, &arg_str(args, "query"), arg_u32(args, "max_results", 10))
                 .await?
         }
         "drive_read_document" => {
+            require_google_service(settings, settings.google_drive_enabled(), "Drive")?;
             drive_read_document(
                 http,
                 settings,
@@ -2387,5 +2439,74 @@ mod tests {
             .expect("write");
         let code = wait.join().expect("join").expect("code");
         assert_eq!(code, "test-auth-code");
+    }
+
+    #[test]
+    fn sanitize_header_value_strips_crlf_and_controls() {
+        assert_eq!(
+            sanitize_header_value("victim@example.com\r\nBcc: attacker@evil.com"),
+            "victim@example.comBcc: attacker@evil.com"
+        );
+        assert_eq!(sanitize_header_value("ok\nline\x00\x1f\x7f"), "okline");
+    }
+
+    #[test]
+    fn build_mime_rejects_header_injection_via_to() {
+        let mime = build_mime(
+            "victim@example.com\r\nBcc: attacker@evil.com",
+            "",
+            "Hello",
+            "body",
+            &[],
+            "",
+            "",
+        );
+        assert!(
+            !mime.contains("\r\nBcc:"),
+            "injected Bcc header must not appear: {mime}"
+        );
+        assert!(
+            mime.starts_with("To: victim@example.comBcc: attacker@evil.com\r\n"),
+            "To line should keep text without CR/LF split: {mime}"
+        );
+        assert!(mime.contains("Subject: Hello\r\n"));
+    }
+
+    #[test]
+    fn build_mime_rejects_header_injection_via_subject_and_cc() {
+        let mime = build_mime(
+            "a@example.com",
+            "b@example.com\r\nBcc: stealth@evil.com",
+            "Hi\r\nBcc: subject-inject@evil.com",
+            "body",
+            &[],
+            "",
+            "",
+        );
+        assert!(!mime.contains("\r\nBcc:"), "injected Bcc must not appear: {mime}");
+        assert!(mime.contains("Cc: b@example.comBcc: stealth@evil.com\r\n"));
+        assert!(mime.contains("Subject: HiBcc: subject-inject@evil.com\r\n"));
+    }
+
+    #[test]
+    fn build_mime_rejects_header_injection_via_reply_headers_and_attachment() {
+        let attachments = [Attachment {
+            filename: "report.pdf\r\nBcc: file@evil.com".into(),
+            mime: "application/pdf\r\nX-Injected: yes".into(),
+            bytes: b"pdf".to_vec(),
+        }];
+        let mime = build_mime(
+            "a@example.com",
+            "",
+            "Re: thread",
+            "body",
+            &attachments,
+            "<id@x>\r\nBcc: reply@evil.com",
+            "<ref@x>\r\nBcc: refs@evil.com",
+        );
+        assert!(!mime.contains("\r\nBcc:"), "injected Bcc must not appear: {mime}");
+        assert!(!mime.contains("\r\nX-Injected:"), "injected mime header must not appear: {mime}");
+        assert!(mime.contains("In-Reply-To: <id@x>Bcc: reply@evil.com\r\n"));
+        assert!(mime.contains("filename=\"report.pdfBcc: file@evil.com\""));
     }
 }

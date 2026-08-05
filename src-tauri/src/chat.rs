@@ -816,8 +816,13 @@ async fn run_chat_completion(
     {
         tool_definitions.extend(crate::moltbook::tool_definitions());
     }
+    // Moltbook scheduler turns consume untrusted public feed text — never advertise
+    // Gmail/Calendar/Drive/correspondence tools there (prompt-injection blast radius).
+    let is_moltbook_scheduler_turn =
+        options.ephemeral_user_note == EphemeralUserNote::Moltbook;
     if options.enable_tools
         && !is_coding_turn
+        && !is_moltbook_scheduler_turn
         && state.settings.google_enabled()
         && state.settings.google_agent_tools_enabled()
     {
