@@ -21,6 +21,11 @@ import {
   memoryStartupBriefing,
 } from "@/hooks/useNovaMemory";
 import type { PersonalityFile } from "@/lib/personalityPrompt";
+import {
+  applyToolStreamEvent,
+  type ChatToolStreamEvent,
+  type ToolActivityState,
+} from "@/types/toolStream";
 
 const RECENT_LIMIT = 200;
 
@@ -37,8 +42,12 @@ function companionDisplayName(file: PersonalityFile | null, profileId: string): 
   return n.length > 0 ? n : "Sage";
 }
 
-type ChatStreamStart = { conversationId: string };
-type ChatStreamEvent = { conversationId: string; delta: string; done: boolean };
+export type StreamAssistantState = {
+  thinking: boolean;
+  text: string;
+  statusDetail: string | null;
+  toolActivity: ToolActivityState;
+} | null;
 
 export function useChat(options?: {
   externalActiveConversationId?: string | null;
@@ -59,7 +68,6 @@ export function useChat(options?: {
   const [extractingAnchors, setExtractingAnchors] = useState(false);
   const [sending, setSending] = useState(false);
   const [streamAssistant, setStreamAssistant] = useState<StreamAssistantState>(null);
-  const [abortedTurn, setAbortedTurn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** Companion profile id — MemoryAnchor is scoped to this for chats, recall, and threads. */
   const [activePersonalityId, setActivePersonalityId] = useState("default");
@@ -78,6 +86,10 @@ export function useChat(options?: {
 
   const loadSeq = useRef(0);
   const activeConversationIdRef = useRef<string | null>(null);
+  /** True while `chat_send_message` is in flight — mirrors coding mode to avoid stream `done` clearing the bubble early. */
+  const sendingRef = useRef(false);
+  /** Abort flag readable after await (state alone is stale inside the in-flight send). */
+  const abortedTurnRef = useRef(false);
   /** Mirrors `activePersonalityId` for invoke payloads (always read right before IPC). */
   const activePersonalityIdRef = useRef(activePersonalityId);
 
@@ -216,21 +228,36 @@ export function useChat(options?: {
   useEffect(() => {
     let unlistenStart: (() => void) | undefined;
     let unlistenStream: (() => void) | undefined;
+    let unlistenTool: (() => void) | undefined;
+    let unlistenStatus: (() => void) | undefined;
     let unlistenErr: (() => void) | undefined;
     let unlistenPulse: (() => void) | undefined;
     let unlistenEmail: (() => void) | undefined;
 
-    void listen<ChatStreamStart>("chat:stream-start", (e) => {
+    type ChatTurnStatusEvent = {
+      conversationId: string;
+      detail: string;
+    };
+
+    void listen<{ conversationId: string }>("chat:stream-start", (e) => {
       if (e.payload.conversationId !== activeConversationIdRef.current) return;
-      setStreamAssistant({ thinking: true, text: "" });
+      setStreamAssistant({
+        thinking: true,
+        text: "",
+        statusDetail: "Preparing…",
+        toolActivity: null,
+      });
     }).then((fn) => {
       unlistenStart = fn;
     });
 
-    void listen<ChatStreamEvent>("chat:stream", (e) => {
+    void listen<{ conversationId: string; delta: string; done: boolean }>("chat:stream", (e) => {
       if (e.payload.conversationId !== activeConversationIdRef.current) return;
       const { delta, done } = e.payload;
       if (done) {
+        // Synthetic stream `done` fires before invoke returns / transcript reload.
+        // Clearing here ghosts the reply (especially after long workspace tool turns).
+        if (sendingRef.current) return;
         setStreamAssistant(null);
         return;
       }
@@ -238,10 +265,57 @@ export function useChat(options?: {
         setStreamAssistant((prev) => ({
           thinking: false,
           text: (prev?.text ?? "") + delta,
+          statusDetail: prev?.statusDetail ?? null,
+          toolActivity: prev?.toolActivity ?? null,
         }));
       }
     }).then((fn) => {
       unlistenStream = fn;
+    });
+
+    void listen<ChatToolStreamEvent>("chat:tool-stream", (e) => {
+      if (e.payload.conversationId !== activeConversationIdRef.current) return;
+      // Ignore stragglers after the turn finished — recreating an empty bubble looks like "Thinking…" forever.
+      if (!sendingRef.current) return;
+      setStreamAssistant((prev) => {
+        const base = prev ?? {
+          thinking: true,
+          text: "",
+          statusDetail: null,
+          toolActivity: null,
+        };
+        const toolActivity = applyToolStreamEvent(base.toolActivity, e.payload);
+        return {
+          ...base,
+          thinking: e.payload.phase === "start" ? true : base.thinking,
+          statusDetail: e.payload.phase === "start" ? null : base.statusDetail,
+          toolActivity,
+        };
+      });
+    }).then((fn) => {
+      unlistenTool = fn;
+    });
+
+    void listen<ChatTurnStatusEvent>("chat:turn-status", (e) => {
+      if (e.payload.conversationId !== activeConversationIdRef.current) return;
+      if (!sendingRef.current) return;
+      setStreamAssistant((prev) => {
+        const base = prev ?? {
+          thinking: true,
+          text: "",
+          statusDetail: null,
+          toolActivity: null,
+        };
+        // Keep tool panel visible while a tool is mid-flight; still refresh status text.
+        const detail = e.payload.detail.trim();
+        return {
+          ...base,
+          thinking: true,
+          statusDetail: detail || base.statusDetail,
+        };
+      });
+    }).then((fn) => {
+      unlistenStatus = fn;
     });
 
     void listen<string>("chat:stream-error", (event) => {
@@ -296,6 +370,8 @@ export function useChat(options?: {
     return () => {
       unlistenStart?.();
       unlistenStream?.();
+      unlistenTool?.();
+      unlistenStatus?.();
       unlistenErr?.();
       unlistenPulse?.();
       unlistenEmail?.();
@@ -585,12 +661,13 @@ export function useChat(options?: {
   ]);
 
   const abortTurn = useCallback(() => {
-    if (!sending) return;
-    setAbortedTurn(true);
+    if (!sendingRef.current) return;
+    abortedTurnRef.current = true;
+    sendingRef.current = false;
     setStreamAssistant(null);
     setSending(false);
     setError("Turn aborted. The agent may still finish the current operation on the backend.");
-  }, [sending]);
+  }, []);
 
   const sendMessage = useCallback(
     async (
@@ -600,7 +677,7 @@ export function useChat(options?: {
     ) => {
       const trimmed = text.trim();
       const convId = activeConversationId;
-      if ((!trimmed && !image) || sending) return;
+      if ((!trimmed && !image) || sendingRef.current) return;
       if (!convId) {
         setError(
           'No conversation is open. Click "New chat" in the sidebar (or restore your app data folder), then try again.',
@@ -623,9 +700,15 @@ export function useChat(options?: {
           },
         ]);
       }
-      setAbortedTurn(false);
+      abortedTurnRef.current = false;
       setSending(true);
-      setStreamAssistant({ thinking: true, text: "" });
+      sendingRef.current = true;
+      setStreamAssistant({
+        thinking: true,
+        text: "",
+        statusDetail: "Sending…",
+        toolActivity: null,
+      });
       setError(null);
 
       try {
@@ -641,7 +724,7 @@ export function useChat(options?: {
           conversationId: convId,
           hasImage: Boolean(image),
         });
-        await invoke<ChatSendResult>("chat_send_message", {
+        const result = await invoke<ChatSendResult>("chat_send_message", {
           conversationId: convId,
           message: trimmed,
           personalityId: personalityIdForSend,
@@ -651,9 +734,19 @@ export function useChat(options?: {
           uiTheme: getStoredTheme(),
         });
 
-        // Reload from SQLite so artifacts (artifactJson) render consistently.
-        // This also avoids showing raw ```artifact blocks in the optimistic message.
-        if (!abortedTurn) {
+        // Paint invoke reply immediately so a stream/reload race can't leave an empty "Thinking…" bubble.
+        // Then reload from SQLite so artifacts (artifactJson) render consistently.
+        if (abortedTurnRef.current) {
+          setStreamAssistant(null);
+        } else {
+          if (result.reply?.trim()) {
+            setStreamAssistant({
+              thinking: false,
+              text: result.reply,
+              statusDetail: null,
+              toolActivity: null,
+            });
+          }
           await loadActiveThread(convId);
         }
         void refreshSidebarContext(convId);
@@ -669,19 +762,20 @@ export function useChat(options?: {
         await loadActiveThread(convId);
         await refreshConversations();
       } finally {
+        sendingRef.current = false;
         setStreamAssistant(null);
         setSending(false);
-        setAbortedTurn(false);
+        abortedTurnRef.current = false;
       }
     },
     [
       activeConversationId,
       activePersonalityId,
-      sending,
       loadActiveThread,
       refreshConversations,
       refreshSidebarContext,
       refreshProjectList,
+      refreshVisionSupported,
     ],
   );
 
@@ -710,9 +804,10 @@ export function useChat(options?: {
     async (recipeId: string) => {
       const convId = activeConversationIdRef.current;
       if (!convId) return;
-      if (sending) return;
+      if (sendingRef.current) return;
       try {
         setSending(true);
+        sendingRef.current = true;
         setError(null);
         await invoke("recipe_run", { recipeId, conversationId: convId });
         await loadActiveThread(convId);
@@ -722,10 +817,11 @@ export function useChat(options?: {
         setError(String(e));
         await loadActiveThread(convId);
       } finally {
+        sendingRef.current = false;
         setSending(false);
       }
     },
-    [loadActiveThread, refreshConversations, refreshProjectList, sending],
+    [loadActiveThread, refreshConversations, refreshProjectList],
   );
 
   const continueProject = useCallback(
@@ -790,8 +886,3 @@ export function useChat(options?: {
     abortTurn,
   };
 }
-
-export type StreamAssistantState = {
-  thinking: boolean;
-  text: string;
-} | null;

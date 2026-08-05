@@ -18,6 +18,7 @@ import {
 import type { ChatMessage } from "@/types/chat";
 import type { StreamAssistantState } from "@/hooks/useChat";
 import { fileFromImageBlob, readImageFileAsDataUrl } from "@/lib/chatAttachments";
+import { pickWorkspaceImage } from "@/lib/pickWorkspaceImage";
 import { settingsLayoutLabel, type SettingsLayoutMode } from "@/lib/settingsLayout";
 import { formatChatHeader } from "@/lib/chatTimestamp";
 import { ArtifactRenderer } from "@/components/chat/ArtifactRenderer";
@@ -26,6 +27,8 @@ import { MessageActions } from "@/components/chat/MessageActions";
 import { MessageContent } from "@/components/chat/MessageContent";
 import { MoltbookPanel } from "@/components/chat/MoltbookPanel";
 import { WebcamCaptureModal } from "@/components/chat/WebcamCaptureModal";
+import { ToolActivityPanel } from "@/components/coding/ToolActivityPanel";
+import { toolDisplayName } from "@/lib/toolDisplayNames";
 
 export type CompanionHeaderOption = {
   id: string;
@@ -209,6 +212,28 @@ export function ChatMain({
     await onPickImage(file);
   };
 
+  const onPickFromWorkspace = async () => {
+    try {
+      setAttachError(null);
+      const picked = await pickWorkspaceImage();
+      if (!picked) return;
+      const file = new File([], picked.fileName, { type: picked.mime });
+      setPendingImage((prev) => {
+        if (prev?.previewUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(prev.previewUrl);
+        }
+        return {
+          file,
+          previewUrl: picked.base64,
+          base64: picked.base64,
+          mime: picked.mime,
+        };
+      });
+    } catch (e) {
+      setAttachError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   useEffect(() => {
     if (!attachMenuOpen) return;
     const onPointerDown = (event: MouseEvent) => {
@@ -388,10 +413,21 @@ export function ChatMain({
               <p className="ps-msg-label">
                 {formatChatHeader("Agent", new Date().toISOString())}
               </p>
+              {streamAssistant.toolActivity ? (
+                <div className="mb-2">
+                  <ToolActivityPanel activity={streamAssistant.toolActivity} />
+                </div>
+              ) : null}
               {streamAssistant.thinking && !streamAssistant.text ? (
                 <p className="flex items-center gap-2 text-ps-muted">
                   <Loader2 className="size-4 shrink-0 animate-spin text-ps-accent" aria-hidden />
-                  <span>Thinking…</span>
+                  <span>
+                    {streamAssistant.statusDetail?.trim()
+                      ? streamAssistant.statusDetail
+                      : streamAssistant.toolActivity?.running
+                        ? `${toolDisplayName(streamAssistant.toolActivity.toolName)}…`
+                        : "Thinking…"}
+                  </span>
                 </p>
               ) : (
                 <div className="text-ps-ink">
@@ -509,6 +545,18 @@ export function ChatMain({
                     >
                       <ImagePlus className="size-3.5 shrink-0 text-ps-faint" aria-hidden />
                       Choose from computer
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="ps-menu-item"
+                      onClick={() => {
+                        setAttachMenuOpen(false);
+                        void onPickFromWorkspace();
+                      }}
+                    >
+                      <FolderOpen className="size-3.5 shrink-0 text-ps-faint" aria-hidden />
+                      From workspace
                     </button>
                     <button
                       type="button"

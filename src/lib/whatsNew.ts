@@ -8,14 +8,15 @@ export type WhatsNewContent = {
 const RELEASES: Record<string, WhatsNewContent> = {
   "3.0.0": {
     version: "3.0.0",
-    title: "Persistent Sage 3.0 — Moltbook, PDF, and more",
+    title: "Persistent Sage 3.0 — Moltbook, Productivity, and workspace vision",
     highlights: [
       "Moltbook — companion panel and agent tools for feed, search, posts, and comments (enable in Settings → Tools).",
+      "Productivity mode — movable Google Workspace widgets, Email Agent, weather, and local notepad/links.",
       "Favorites and Share — pin favorites; Share menu and richer copy options on chat messages.",
-      "PDF agent tools — read PDF text and create PDFs from Markdown, HTML, or plain text in the workspace.",
-      "Personality updates — improved edit/import flow so companion profiles stay in sync.",
-      "Settings refactor — General, Provider, and Tools tabs for clearer navigation.",
-      "Webcam capture and coding Markdown/JSON playground polish.",
+      "Vision — attach from computer, webcam, or workspace; agents can call workspace_view_image on screenshots.",
+      "Chat fixes — fenced code blocks render again; companion replies no longer ghost after heavy workspace tool turns.",
+      "PDF agent tools, experimental subagents (extra tokens), and Settings tabs (General / Provider / Tools).",
+      "Dual updates — Settings → General → Updates works for Microsoft Store and GitHub installs.",
     ],
   },
   "2.1.0": {

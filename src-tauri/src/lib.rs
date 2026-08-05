@@ -45,6 +45,7 @@ mod pulse;
 mod recipes;
 mod settings;
 mod store_updates;
+mod subagents;
 mod token_counter;
 mod tool_stream;
 mod weather;
@@ -1128,6 +1129,27 @@ fn read_text_files(paths: Vec<String>) -> Result<Vec<TextFilePayload>, String> {
     Ok(out)
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceImageAttachPayload {
+    /// Data URL (`data:image/…;base64,…`) for the composer.
+    base64: String,
+    mime: String,
+}
+
+/// Read a workspace image (absolute path from the native dialog) for composer attach.
+#[tauri::command]
+fn workspace_read_image_for_attach(
+    absolute_path: String,
+    state: State<'_, NovaState>,
+) -> Result<WorkspaceImageAttachPayload, String> {
+    let (base64, mime) = attachments::read_workspace_image_for_attach(
+        state.workspace_root.as_path(),
+        &absolute_path,
+    )?;
+    Ok(WorkspaceImageAttachPayload { base64, mime })
+}
+
 // --- Lifecycle ----------------------------------------------------------------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1237,6 +1259,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             read_text_files,
+            workspace_read_image_for_attach,
             app_version,
             app_distribution_info,
             open_store_updates,

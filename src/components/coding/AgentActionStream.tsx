@@ -12,6 +12,8 @@ type StreamEvent = {
   timestamp: number;
   generationNumber?: number;
   mission?: string;
+  depth?: number;
+  agentKind?: string;
   toolKind?: string;
   toolName?: string;
   label?: string;
@@ -56,6 +58,8 @@ export function AgentActionStream({ repoId: _repoId }: Props) {
         id: string;
         generationNumber?: number;
         mission: string;
+        depth?: number;
+        agentKind?: string;
       }>("generation_step:start", (e) => {
         setEvents((prev) => [
           ...prev,
@@ -65,6 +69,8 @@ export function AgentActionStream({ repoId: _repoId }: Props) {
             timestamp: Date.now(),
             generationNumber: e.payload.generationNumber,
             mission: e.payload.mission,
+            depth: e.payload.depth,
+            agentKind: e.payload.agentKind,
           },
         ]);
       });
@@ -254,7 +260,11 @@ export function AgentActionStream({ repoId: _repoId }: Props) {
         ) : (
           <ul className="flex flex-col gap-2">
             {events.map((ev) => (
-              <li key={ev.id} className="rounded border border-ps-border bg-ps-elevated p-2">
+              <li
+                key={ev.id}
+                className="rounded border border-ps-border bg-ps-elevated p-2"
+                style={{ marginLeft: Math.min((ev.depth ?? 0) * 12, 48) }}
+              >
                 <div className="flex items-start gap-2">
                   <div className="mt-0.5 shrink-0">
                     {ev.kind === "generation_step:start" && <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />}
@@ -266,8 +276,12 @@ export function AgentActionStream({ repoId: _repoId }: Props) {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate font-medium text-ps-ink">
-                        {ev.kind === "generation_step:start" && "Generation step started"}
-                        {ev.kind === "generation_step:end" && "Generation step ended"}
+                        {ev.kind === "generation_step:start" &&
+                          (ev.agentKind === "subagent" ? "Subagent started" : "Generation step started")}
+                        {ev.kind === "generation_step:end" &&
+                          (ev.summary?.startsWith("Error:") || ev.success === false
+                            ? "Subagent / step ended"
+                            : "Generation step ended")}
                         {ev.kind === "tool:start" && ev.label}
                         {ev.kind === "tool:end" && (ev.toolName || ev.label || "Tool ended")}
                         {ev.kind === "tool:status" && ev.status}

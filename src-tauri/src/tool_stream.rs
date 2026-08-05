@@ -144,9 +144,42 @@ pub fn tool_start_detail(name: &str, arguments_json: &str) -> String {
             format!("{n} ({t})")
         }
         "coding_github_save_pat" => "save GitHub PAT".into(),
-        "workspace_read_file" | "workspace_write_file" => {
+        "workspace_read_file" | "workspace_write_file" | "workspace_view_image" => {
             v["path"].as_str().unwrap_or("").trim().to_string()
         }
+        "task" | "spawn_subagent" => {
+            if let Some(arr) = v["prompts"].as_array() {
+                let n = arr
+                    .iter()
+                    .filter(|x| x.as_str().map(|s| !s.trim().is_empty()).unwrap_or(false))
+                    .count();
+                if n > 1 {
+                    return format!("{n} parallel missions");
+                }
+            }
+            let prompt = v["prompt"]
+                .as_str()
+                .or_else(|| {
+                    v["prompts"]
+                        .as_array()
+                        .and_then(|a| a.first())
+                        .and_then(|x| x.as_str())
+                })
+                .unwrap_or("")
+                .trim();
+            let mode = v["mode"].as_str().unwrap_or("auto").trim();
+            let short: String = prompt.chars().take(72).collect();
+            if short.is_empty() {
+                format!("mode={mode}")
+            } else if prompt.chars().count() > 72 {
+                format!("{mode} · {short}…")
+            } else {
+                format!("{mode} · {short}")
+            }
+        }
+        "web_search" => v["query"].as_str().unwrap_or("").trim().to_string(),
+        "fetch_url" | "fetch_browser" => v["url"].as_str().unwrap_or("").trim().to_string(),
+        "memory_search" | "memory_search_all" => v["query"].as_str().unwrap_or("").trim().to_string(),
         _ => String::new(),
     }
 }

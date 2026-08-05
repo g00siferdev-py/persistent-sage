@@ -17,7 +17,7 @@ Persistent Sage is a **local-first AI companion**:
 - **Favorites & Share (3.0)** — pin favorites; Share menu and enhanced copy on messages
 - **Moltbook (3.0)** — companion panel and agent tools for feed, search, posts, and comments (Settings → Tools)
 - **Pulse** — scheduled check-ins in your **currently selected** conversation
-- **Image attachments** — send photos to vision-capable models from the composer
+- **Image attachments** — send photos to vision-capable models from the composer (computer, webcam, or workspace)
 - **Coding mode (v2)** — repo-scoped IDE, terminal, coding agent, playground, notepad (see [§ 12 Coding mode](#12-coding-mode-v2))
 - **Help menu** — header **?** button opens in-app guide and doc links
 - **Light/dark theme** — Settings → General → Appearance
@@ -28,7 +28,7 @@ Your data stays on your machine. See [DATA-AND-PRIVACY.md](./DATA-AND-PRIVACY.md
 
 ## 2. Application modes and layout
 
-Persistent Sage has two top-level modes, switched from the header: **Companion** and **Coding**.
+Persistent Sage has three top-level modes, switched from the header: **Companion**, **Productivity**, and **Coding**.
 
 ### Companion mode (default)
 
@@ -39,6 +39,10 @@ Persistent Sage has two top-level modes, switched from the header: **Companion**
 | **Right** | Settings panel | Companion · Provider · Tools · General |
 
 Settings slides in from the right; toggle **Settings** / **Hide** in the chat header.
+
+### Productivity mode
+
+A customizable canvas of movable widgets (Email, Calendar, Documents, Contacts, Tasks, Weather, Clock, Quick Links, Notepad, Projects). Connect Google under **Settings → Tools → Google Workspace**. Layout is remembered per machine. Open **Settings** from the Productivity top bar anytime.
 
 ### Coding mode
 
@@ -75,7 +79,7 @@ Choose which **companion profile** receives new chats and memory scoping. Switch
 ### Sending messages
 
 - Type in the composer; **Enter** sends, **Shift+Enter** newline
-- **Attach image** (camera icon) — pick JPEG, PNG, WebP, or GIF when your model supports vision
+- **Attach image** (camera icon) — pick JPEG, PNG, WebP, or GIF from your computer, workspace, or webcam when your model supports vision
 - Preview appears above the composer; **X** removes it before send
 - User bubble shows immediately (optimistic UI); assistant reply streams in
 
@@ -180,9 +184,10 @@ the exact error.
 | **Headless browser fetch** | `fetch_browser` (Chrome/Chromium/Edge; JS-rendered pages) |
 | **Ignore robots.txt** | Optional for `fetch_browser` only (off by default) |
 | **Allow personality self-edit** | `personality_get`, `personality_update` on active profile |
-| **Workspace tools** | Read/write/list under `{data_dir}/workspace` |
+| **Workspace tools** | Read/write/list under `{data_dir}/workspace`; **`workspace_view_image`** for PNG/JPEG/WebP/GIF (vision model required) |
 | **PDF tools (3.0)** | `workspace_read_pdf`, `workspace_write_pdf` (Markdown/HTML/text → PDF; requires Chrome/Edge) |
 | **Moltbook (3.0)** | Panel + `moltbook_feed`, `moltbook_search`, `moltbook_create_post`, `moltbook_comment` |
+| **Subagents (experimental)** | Nested `task` / `spawn_subagent` workers — uses **more tokens**; enable under Settings → Tools → Subagents |
 | **App data databases** | `database_query` on `.sqlite` in data folder |
 | **Allow database writes** | INSERT/UPDATE/DELETE via `database_query` (dangerous) |
 
@@ -201,7 +206,7 @@ Coding agent tools require **OpenAI, Anthropic, xAI, or Ollama**. Gemini and Pla
 
 Full reference: [CODING-MODE.md](./CODING-MODE.md).
 
-**Note:** When you send an **image** on Ollama, web/workspace tools are **disabled for that request** so the model can receive the image payload.
+**Note:** When you send an **image** on Ollama from the composer, web/workspace tools are **disabled for that request** so the model can receive the image payload. If the agent loads a workspace image mid-turn via `workspace_view_image`, Persistent Sage finishes that turn with a vision-only completion (no further tools) for the same reason.
 
 ### 6.4 General
 
@@ -210,7 +215,7 @@ Full reference: [CODING-MODE.md](./CODING-MODE.md).
 | **Generation** | Temperature, max output tokens |
 | **Memory** | LLM extraction, semantic recall, optional embedding model override, re-index embeddings |
 | **Pulse** | Enable timer, interval (minutes), instructions; runs in **sidebar-selected** thread |
-| **Updates** | **Store installs:** Microsoft Store (Library → Get updates). **GitHub installs:** Tauri updater checks GitHub Releases |
+| **Updates** | **Same buttons for everyone** under Settings → General → Updates. **Store installs** check Partner Center / Microsoft Store APIs. **GitHub installs** (NSIS/portable) use the signed Tauri updater against `releases/latest` (`latest.json`). |
 | **Cache** | View temp cache size, open folder, clear cached tool/runtime files |
 | **Send feedback** | Open prefilled GitHub Issues for bugs, ideas, or general notes |
 | **Donate** | Footer link on every screen — optional PayPal / Cash App (see [SUPPORT.md](./SUPPORT.md)) |
@@ -228,6 +233,14 @@ Pulse emits `pulse:tick` events; the chat UI reloads the thread after each tick.
 - Vision-capable model (e.g. OpenAI `gpt-4o*`, Claude 3+, Ollama llava/kimi/vision models)
 - Attach button is **disabled** with a tooltip when the active model is not supported
 
+### How to attach
+
+- **Choose from computer** or **Take photo with webcam** — classic composer attach
+- **From workspace** — pick a PNG/JPEG/WebP/GIF already inside your Persistent Sage workspace folder
+- **Agent tool** — with workspace tools enabled, the companion can call `workspace_view_image` on a workspace-relative path (e.g. `screenshots/storefront.png`). Text-only `workspace_read_file` will refuse images and point you here.
+
+Images still save under `{data_dir}/attachments/{conversationId}/` for the vision API. Dropping a file in `workspace/` alone is not enough unless you attach it or the agent loads it with `workspace_view_image`.
+
 ### Storage
 
 Images save to `{data_dir}/attachments/{conversationId}/`. Paths are stored in SQLite. **Files are not encrypted.**
@@ -237,7 +250,7 @@ Images save to `{data_dir}/attachments/{conversationId}/`. Paths are stored in S
 - Add a short caption (“What is in this photo?”) with the image
 - For Ollama Cloud **kimi** and similar models, ensure Provider tab shows the correct model id
 - If the model acts blind, check terminal logs for `persistent-sage: chat completion includes image(s)`
-
+- Text-only models (many coding LLMs) cannot see screenshots — switch to a vision model for visual review
 ---
 
 ## 8. Data and privacy (essentials)

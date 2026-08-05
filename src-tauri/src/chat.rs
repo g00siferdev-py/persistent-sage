@@ -226,13 +226,13 @@ fn anthropic_user_tool_results(tool_calls: &[ToolCall], bodies: &[String]) -> se
 }
 
 #[derive(Clone, Copy)]
-enum AgentWebToolBackend {
+pub(crate) enum AgentWebToolBackend {
     OpenAI,
     Ollama,
     Anthropic,
 }
 
-fn web_tool_backend_for_provider(provider_id: &str) -> Option<AgentWebToolBackend> {
+pub(crate) fn web_tool_backend_for_provider(provider_id: &str) -> Option<AgentWebToolBackend> {
     match provider_id {
         "openai" | "xai" | "openrouter" => Some(AgentWebToolBackend::OpenAI),
         "ollama" | "ollama_cloud" => Some(AgentWebToolBackend::Ollama),
@@ -257,8 +257,12 @@ async fn apply_tool_round_messages(
     messages: &mut Vec<ChatTurn>,
     round: &CompletionResponse,
     backend: AgentWebToolBackend,
-) -> Result<(), ProviderError> {
+) -> Result<bool, ProviderError> {
     let mut personality_updated = false;
+    let mut vision_injected = false;
+    let provider_id = settings
+        .map(|s| s.selected_provider())
+        .unwrap_or_default();
 
     async fn exec_tool(
         http: &reqwest::Client,
@@ -287,7 +291,39 @@ async fn apply_tool_round_messages(
         let args_parsed: serde_json::Value =
             serde_json::from_str(arguments_json).unwrap_or(serde_json::Value::Null);
 
-        let body = if let Some(app) = maybe_app {
+        let body = if crate::subagents::is_subagent_tool_name(name) {
+            let settings = match settings {
+                Some(s) => s,
+                None => {
+                    if let Some(ts) = tool_stream {
+                        ts.end(name);
+                    }
+                    return "Tool error: subagents require settings context".into();
+                }
+            };
+            let host = crate::subagents::SubagentHost {
+                app: maybe_app,
+                http,
+                workspace_root,
+                data_directory,
+                database_app_data_enabled,
+                database_allow_write,
+                browser_ignore_robots,
+                personality,
+                memory_tools,
+                coding_ctx,
+                tool_stream,
+                settings,
+                conversation_id,
+                temperature: settings.temperature(),
+                max_tokens: settings.max_tokens(),
+                thinking_effort: Some(settings.thinking_effort()),
+            };
+            match crate::subagents::run_task_tool(&host, arguments_json).await {
+                Ok(s) => s,
+                Err(e) => format!("Tool error: {e}"),
+            }
+        } else if let Some(app) = maybe_app {
             crate::agent_stream::run_result_tool_with_stream(
                 app,
                 "agent",
@@ -342,6 +378,44 @@ async fn apply_tool_round_messages(
         body
     }
 
+    fn push_vision_followup(
+        messages: &mut Vec<ChatTurn>,
+        provider_id: &str,
+        data_directory: &Path,
+        display_body: &str,
+        rel: &str,
+        mime: &str,
+        vision_injected: &mut bool,
+    ) {
+        let caption = if display_body.trim().is_empty() {
+            "The workspace image is attached. Review it and answer the user.".to_string()
+        } else {
+            format!(
+                "{}\n\n(Image bytes follow for vision — review the screenshot and answer the user.)",
+                display_body.trim()
+            )
+        };
+        match attachments::chat_turn_from_attachment(
+            provider_id,
+            data_directory,
+            rel,
+            mime,
+            &caption,
+        ) {
+            Ok(turn) => {
+                messages.push(turn);
+                *vision_injected = true;
+            }
+            Err(e) => {
+                eprintln!("persistent-sage: workspace vision inject failed: {e}");
+                messages.push(ChatTurn::text(
+                    "user",
+                    format!("Tool note: could not attach workspace image for vision ({e})."),
+                ));
+            }
+        }
+    }
+
     match backend {
         AgentWebToolBackend::OpenAI => {
             messages.push(ChatTurn {
@@ -352,7 +426,7 @@ async fn apply_tool_round_messages(
                 anthropic_message: None,
             });
             for tc in &round.tool_calls {
-                let body = exec_tool(
+                let raw = exec_tool(
                     http,
                     workspace_root,
                     data_directory,
@@ -369,20 +443,32 @@ async fn apply_tool_round_messages(
                     &tc.arguments_json,
                 )
                 .await;
-                if tc.name == "personality_update" && !body.starts_with("Tool error:") {
+                if tc.name == "personality_update" && !raw.starts_with("Tool error:") {
                     personality_updated = true;
                 }
+                let (body, vision) = attachments::take_vision_marker(&raw);
                 messages.push(ChatTurn {
                     role: "tool".into(),
                     content: body.clone(),
                     openai_message: Some(json!({
                         "role": "tool",
                         "tool_call_id": &tc.id,
-                        "content": body,
+                        "content": body.clone(),
                     })),
                     ollama_message: None,
                     anthropic_message: None,
                 });
+                if let Some((rel, mime)) = vision {
+                    push_vision_followup(
+                        messages,
+                        &provider_id,
+                        data_directory,
+                        &body,
+                        &rel,
+                        &mime,
+                        &mut vision_injected,
+                    );
+                }
             }
         }
         AgentWebToolBackend::Ollama => {
@@ -394,7 +480,7 @@ async fn apply_tool_round_messages(
                 anthropic_message: None,
             });
             for tc in &round.tool_calls {
-                let body = exec_tool(
+                let raw = exec_tool(
                     http,
                     workspace_root,
                     data_directory,
@@ -411,9 +497,10 @@ async fn apply_tool_round_messages(
                     &tc.arguments_json,
                 )
                 .await;
-                if tc.name == "personality_update" && !body.starts_with("Tool error:") {
+                if tc.name == "personality_update" && !raw.starts_with("Tool error:") {
                     personality_updated = true;
                 }
+                let (body, vision) = attachments::take_vision_marker(&raw);
                 messages.push(ChatTurn {
                     role: "tool".into(),
                     content: body.clone(),
@@ -421,10 +508,21 @@ async fn apply_tool_round_messages(
                     ollama_message: Some(json!({
                         "role": "tool",
                         "tool_name": &tc.name,
-                        "content": body,
+                        "content": body.clone(),
                     })),
                     anthropic_message: None,
                 });
+                if let Some((rel, mime)) = vision {
+                    push_vision_followup(
+                        messages,
+                        &provider_id,
+                        data_directory,
+                        &body,
+                        &rel,
+                        &mime,
+                        &mut vision_injected,
+                    );
+                }
             }
         }
         AgentWebToolBackend::Anthropic => {
@@ -436,8 +534,10 @@ async fn apply_tool_round_messages(
                 anthropic_message: Some(anthropic_assistant_with_tool_calls(round)),
             });
             let mut bodies: Vec<String> = Vec::with_capacity(round.tool_calls.len());
+            let mut visions: Vec<Option<(String, String)>> =
+                Vec::with_capacity(round.tool_calls.len());
             for tc in &round.tool_calls {
-                let body = exec_tool(
+                let raw = exec_tool(
                     http,
                     workspace_root,
                     data_directory,
@@ -454,10 +554,12 @@ async fn apply_tool_round_messages(
                     &tc.arguments_json,
                 )
                 .await;
-                if tc.name == "personality_update" && !body.starts_with("Tool error:") {
+                if tc.name == "personality_update" && !raw.starts_with("Tool error:") {
                     personality_updated = true;
                 }
+                let (body, vision) = attachments::take_vision_marker(&raw);
                 bodies.push(body);
+                visions.push(vision);
             }
             messages.push(ChatTurn {
                 role: "user".into(),
@@ -466,6 +568,19 @@ async fn apply_tool_round_messages(
                 ollama_message: None,
                 anthropic_message: Some(anthropic_user_tool_results(&round.tool_calls, &bodies)),
             });
+            for (body, vision) in bodies.iter().zip(visions.into_iter()) {
+                if let Some((rel, mime)) = vision {
+                    push_vision_followup(
+                        messages,
+                        &provider_id,
+                        data_directory,
+                        body,
+                        &rel,
+                        &mime,
+                        &mut vision_injected,
+                    );
+                }
+            }
         }
     }
     if personality_updated {
@@ -474,11 +589,11 @@ async fn apply_tool_round_messages(
             eprintln!("persistent-sage: refreshed system persona after personality_update");
         }
     }
-    Ok(())
+    Ok(vision_injected)
 }
 
 /// Non-streaming completion with tool rounds (OpenAI, Ollama, Anthropic).
-async fn agent_complete_with_tools(
+pub(crate) async fn agent_complete_with_tools(
     engine: &(dyn LLMProviderEngine + Send + Sync),
     http: &reqwest::Client,
     workspace_root: Option<&Path>,
@@ -503,9 +618,21 @@ async fn agent_complete_with_tools(
     if tools.is_empty() {
         return Err(ProviderError::Api("internal: no tools configured".into()));
     }
-    for _ in 0..max_tool_rounds {
+    for round_idx in 0..max_tool_rounds {
         if let Some(ts) = tool_stream {
-            ts.turn_status("Waiting for model…");
+            let active = crate::subagents::active_subagent_count();
+            if active > 0 {
+                let noun = if active == 1 { "subagent" } else { "subagents" };
+                ts.turn_status(&format!(
+                    "Thinking (step {}/{max_tool_rounds}) — {active} {noun} still running…",
+                    round_idx + 1
+                ));
+            } else {
+                ts.turn_status(&format!(
+                    "Thinking (step {}/{max_tool_rounds})…",
+                    round_idx + 1
+                ));
+            }
         }
         let req = CompletionRequest {
             messages: messages.clone(),
@@ -533,7 +660,7 @@ async fn agent_complete_with_tools(
             );
         }
         let round = completion_for_tool_round(&resp, &tool_calls);
-        apply_tool_round_messages(
+        let vision_followup = apply_tool_round_messages(
             http,
             workspace_root,
             data_directory,
@@ -551,6 +678,21 @@ async fn agent_complete_with_tools(
             backend,
         )
         .await?;
+        // After workspace_view_image, finish without tools so providers (esp. Ollama) actually see the image.
+        if vision_followup {
+            if let Some(ts) = tool_stream {
+                ts.turn_status("Reviewing workspace image…");
+            }
+            let req = CompletionRequest {
+                messages: messages.clone(),
+                tools: None,
+                max_tokens,
+                temperature: Some(temperature),
+                thinking_effort: thinking_effort.clone(),
+            };
+            let resp = engine.complete(&req).await?;
+            return Ok(resp.content);
+        }
     }
     Err(ProviderError::Api(
         format!("Agent stopped after maximum tool rounds ({max_tool_rounds}) — try a narrower question."),
@@ -596,7 +738,7 @@ async fn try_complete_after_embedded_tool_xml(
         usage: None,
     };
     let round = completion_for_tool_round(&resp, &calls);
-    apply_tool_round_messages(
+    let vision_followup = apply_tool_round_messages(
         http,
         workspace_root,
         data_directory,
@@ -614,6 +756,20 @@ async fn try_complete_after_embedded_tool_xml(
         backend,
     )
     .await?;
+    if vision_followup {
+        if let Some(ts) = tool_stream {
+            ts.turn_status("Reviewing workspace image…");
+        }
+        let req = CompletionRequest {
+            messages: messages.clone(),
+            tools: None,
+            max_tokens,
+            temperature: Some(temperature),
+            thinking_effort: thinking_effort.clone(),
+        };
+        let resp = engine.complete(&req).await?;
+        return Ok(Some(resp.content));
+    }
     let text = agent_complete_with_tools(
         engine,
         http,
@@ -874,6 +1030,9 @@ async fn run_chat_completion(
             tool_definitions.extend(crate::memory_tools::email_agent_tool_definitions());
         }
     }
+    if options.enable_tools && state.settings.subagents_enabled() {
+        tool_definitions.extend(crate::subagents::tool_definitions());
+    }
     let memory_tools_ctx = memory_tools_active.then(|| {
         (
             &*state.settings,
@@ -882,7 +1041,14 @@ async fn run_chat_completion(
     });
     let coding_ctx_ref = options.coding_context.as_ref();
     let settings_for_tools = Some(&*state.settings);
-    let max_tool_rounds = if is_coding_turn { 32 } else { 8 };
+    // Long-running orchestrators need more rounds when subagents are enabled.
+    let max_tool_rounds = if state.settings.subagents_enabled() {
+        if is_coding_turn { 64 } else { 24 }
+    } else if is_coding_turn {
+        32
+    } else {
+        8
+    };
     let workspace_root_for_tools = if state.settings.agent_workspace_enabled()
         || state.settings.artifacts_enabled()
         || (state.settings.google_enabled() && state.settings.google_agent_tools_enabled())

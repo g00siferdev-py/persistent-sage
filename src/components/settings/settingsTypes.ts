@@ -43,6 +43,13 @@ export type SettingsView = {
   agentCodingGitRemoteEnabled: boolean;
   agentCodingCompanionLinkedEnabled: boolean;
   agentPersonalityEditEnabled: boolean;
+  /** When true, companion/coding agents may spawn nested `task` subagents. */
+  subagentsEnabled: boolean;
+  subagentMaxDepth: number;
+  subagentMaxConcurrent: number;
+  subagentRoundBudget: number;
+  subagentPreferOpenrouter: boolean;
+  subagentModel: string;
   /** When true, database_query may use location=app_data on .db/.sqlite files in the Persistent Sage data directory (same folder as the live memory DB). */
   databaseAppDataEnabled: boolean;
   /** When true, database_query may run INSERT/UPDATE/DELETE/REPLACE on workspace .db files (DROP/ALTER/CREATE still blocked). */
@@ -139,6 +146,12 @@ export type SettingsPatch = {
   agentCodingGitRemoteEnabled?: boolean;
   agentCodingCompanionLinkedEnabled?: boolean;
   agentPersonalityEditEnabled?: boolean;
+  subagentsEnabled?: boolean;
+  subagentMaxDepth?: number;
+  subagentMaxConcurrent?: number;
+  subagentRoundBudget?: number;
+  subagentPreferOpenrouter?: boolean;
+  subagentModel?: string;
   databaseAppDataEnabled?: boolean;
   databaseAllowWrite?: boolean;
   pulseEnabled?: boolean;

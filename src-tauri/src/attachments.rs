@@ -10,6 +10,9 @@ use crate::provider::ChatTurn;
 
 const MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
 
+const VISION_MARKER_START: &str = "[persistent-sage-vision]";
+const VISION_MARKER_END: &str = "[/persistent-sage-vision]";
+
 /// MIME types we accept from the composer.
 pub fn normalize_image_mime(mime: &str) -> Option<&'static str> {
     match mime.trim().to_lowercase().as_str() {
@@ -17,6 +20,23 @@ pub fn normalize_image_mime(mime: &str) -> Option<&'static str> {
         "image/png" => Some("image/png"),
         "image/webp" => Some("image/webp"),
         "image/gif" => Some("image/gif"),
+        _ => None,
+    }
+}
+
+/// Infer image MIME from a file path extension.
+#[must_use]
+pub fn mime_from_image_path(path: &Path) -> Option<&'static str> {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    match ext.as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "webp" => Some("image/webp"),
+        "gif" => Some("image/gif"),
         _ => None,
     }
 }
@@ -32,7 +52,7 @@ pub fn extension_for_mime(mime: &str) -> &'static str {
 
 #[cfg(test)]
 mod vision_tests {
-    use super::model_supports_vision;
+    use super::{format_vision_tool_result, model_supports_vision, take_vision_marker};
 
     #[test]
     fn kimi_cloud_is_vision_capable() {
@@ -50,6 +70,31 @@ mod vision_tests {
             "openrouter",
             "mistralai/mistral-small"
         ));
+    }
+
+    #[test]
+    fn vision_marker_round_trips() {
+        let raw = format_vision_tool_result(
+            "attachments/c1/a.png",
+            "image/png",
+            "Loaded workspace image `shot.png` for vision review.",
+        );
+        let (display, vision) = take_vision_marker(&raw);
+        assert_eq!(
+            display,
+            "Loaded workspace image `shot.png` for vision review."
+        );
+        assert_eq!(
+            vision,
+            Some(("attachments/c1/a.png".into(), "image/png".into()))
+        );
+    }
+
+    #[test]
+    fn plain_tool_text_has_no_vision_marker() {
+        let (display, vision) = take_vision_marker("hello");
+        assert_eq!(display, "hello");
+        assert!(vision.is_none());
     }
 }
 
@@ -148,6 +193,115 @@ pub fn save_image_attachment(
     std::fs::write(&abs, &bytes).map_err(|e| e.to_string())?;
 
     Ok((rel_path, mime.to_string()))
+}
+
+/// Write raw image bytes under `{data_dir}/attachments/{conversation_id}/`.
+pub fn save_image_bytes(
+    data_dir: &Path,
+    conversation_id: &str,
+    mime: &str,
+    bytes: &[u8],
+) -> Result<(String, String), String> {
+    let mime = normalize_image_mime(mime).ok_or_else(|| {
+        format!("unsupported image type (use JPEG, PNG, WebP, or GIF); got {mime}")
+    })?;
+    if bytes.is_empty() {
+        return Err("image file is empty".into());
+    }
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err(format!(
+            "image too large ({} MB max)",
+            MAX_IMAGE_BYTES / (1024 * 1024)
+        ));
+    }
+
+    let rel_dir = format!("attachments/{conversation_id}");
+    let dir = data_dir.join(&rel_dir);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let name = format!("{}.{}", uuid::Uuid::new_v4(), extension_for_mime(mime));
+    let rel_path = format!("{rel_dir}/{name}");
+    let abs = data_dir.join(&rel_path);
+    std::fs::write(&abs, bytes).map_err(|e| e.to_string())?;
+
+    Ok((rel_path, mime.to_string()))
+}
+
+/// Tool-result body with a machine marker for mid-turn vision injection.
+#[must_use]
+pub fn format_vision_tool_result(rel_path: &str, mime: &str, human: &str) -> String {
+    format!(
+        "{VISION_MARKER_START}\nrel={rel_path}\nmime={mime}\n{VISION_MARKER_END}\n{human}"
+    )
+}
+
+/// Strip the vision marker from a tool result. Returns `(display_text, Some((rel, mime)))` when present.
+#[must_use]
+pub fn take_vision_marker(body: &str) -> (String, Option<(String, String)>) {
+    let Some(start) = body.find(VISION_MARKER_START) else {
+        return (body.to_string(), None);
+    };
+    let Some(end_rel) = body[start..].find(VISION_MARKER_END) else {
+        return (body.to_string(), None);
+    };
+    let block_end = start + end_rel + VISION_MARKER_END.len();
+    let block = &body[start..block_end];
+    let mut rel = None;
+    let mut mime = None;
+    for line in block.lines() {
+        if let Some(v) = line.strip_prefix("rel=") {
+            rel = Some(v.trim().to_string());
+        } else if let Some(v) = line.strip_prefix("mime=") {
+            mime = Some(v.trim().to_string());
+        }
+    }
+    let mut display = String::new();
+    display.push_str(body[..start].trim_end());
+    let after = body[block_end..].trim_start();
+    if !after.is_empty() {
+        if !display.is_empty() {
+            display.push('\n');
+        }
+        display.push_str(after);
+    }
+    let display = display.trim().to_string();
+    match (rel, mime) {
+        (Some(r), Some(m)) if !r.is_empty() && normalize_image_mime(&m).is_some() => {
+            (display, Some((r, normalize_image_mime(&m).unwrap().to_string())))
+        }
+        _ => (body.to_string(), None),
+    }
+}
+
+/// Read an image under the workspace root for composer attach (absolute path from native dialog).
+pub fn read_workspace_image_for_attach(
+    workspace_root: &Path,
+    absolute_path: &str,
+) -> Result<(String, String), String> {
+    let path = Path::new(absolute_path.trim());
+    if absolute_path.trim().is_empty() {
+        return Err("path is empty".into());
+    }
+    let root_canon = std::fs::canonicalize(workspace_root)
+        .map_err(|e| format!("workspace root: {e}"))?;
+    let path_canon = std::fs::canonicalize(path).map_err(|e| format!("image path: {e}"))?;
+    if !path_canon.starts_with(&root_canon) {
+        return Err("image must be inside the Persistent Sage workspace folder".into());
+    }
+    let mime = mime_from_image_path(&path_canon)
+        .ok_or_else(|| "unsupported image type (use JPEG, PNG, WebP, or GIF)".to_string())?;
+    let bytes = std::fs::read(&path_canon).map_err(|e| e.to_string())?;
+    if bytes.is_empty() {
+        return Err("image file is empty".into());
+    }
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err(format!(
+            "image too large ({} MB max)",
+            MAX_IMAGE_BYTES / (1024 * 1024)
+        ));
+    }
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok((format!("data:{mime};base64,{encoded}"), mime.to_string()))
 }
 
 pub fn read_image_bytes(data_dir: &Path, rel_path: &str) -> Result<Vec<u8>, String> {
@@ -278,6 +432,53 @@ pub fn chat_turn_includes_image(turn: &ChatTurn) -> bool {
 #[must_use]
 pub fn messages_include_images(messages: &[ChatTurn]) -> bool {
     messages.iter().any(chat_turn_includes_image)
+}
+
+/// Build a multimodal user turn from an attachment already on disk under `data_dir`.
+pub fn chat_turn_from_attachment(
+    provider_id: &str,
+    data_dir: &Path,
+    rel_path: &str,
+    mime: &str,
+    text: &str,
+) -> Result<ChatTurn, String> {
+    let mime = normalize_image_mime(mime).unwrap_or("image/jpeg");
+    let content = if text.trim().is_empty() {
+        "Describe this image.".to_string()
+    } else {
+        text.to_string()
+    };
+    let (openai_message, ollama_message, anthropic_message) = match provider_id {
+        "openai" | "openrouter" | "xai" => (
+            Some(build_openai_user_message(&content, data_dir, rel_path, mime)?),
+            None,
+            None,
+        ),
+        "anthropic" => (
+            None,
+            None,
+            Some(build_anthropic_user_message(
+                &content, data_dir, rel_path, mime,
+            )?),
+        ),
+        "ollama" | "ollama_cloud" => (
+            None,
+            Some(build_ollama_user_message(&content, data_dir, rel_path, mime)?),
+            None,
+        ),
+        _ => {
+            return Err(format!(
+                "provider `{provider_id}` does not support vision attachments"
+            ));
+        }
+    };
+    Ok(ChatTurn {
+        role: "user".into(),
+        content,
+        openai_message,
+        ollama_message,
+        anthropic_message,
+    })
 }
 
 /// Build a provider-specific [`ChatTurn`] for a stored row (text and/or image).

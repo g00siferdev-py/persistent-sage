@@ -1,6 +1,6 @@
 # Installing Persistent Sage on Windows
 
-Download the installer from the **Microsoft Store** (when listed) or **[GitHub Releases](https://github.com/g00siferdev-py/persistent-sage/releases)** (`Persistent.Sage_*_x64-setup.exe`). No Node or Rust required for pre-built installs.
+Download the installer from the **Microsoft Store** or **[GitHub Releases](https://github.com/g00siferdev-py/persistent-sage/releases/latest)** (`Persistent.Sage_*_x64-setup.exe`). No Node or Rust required for pre-built installs.
 
 Two supported ways to run Persistent Sage: **desktop install** (recommended) and **portable** (USB / flash drive).
 
@@ -13,25 +13,23 @@ Two supported ways to run Persistent Sage: **desktop install** (recommended) and
 1. Open the Microsoft Store and search for **Persistent Sage**, or use the listing URL from the project README when published.
 2. Click **Get** / **Install**.
 3. Open **Persistent Sage** from the Start Menu and complete the **setup wizard**.
-4. Updates: Store app → **Library** → **Get updates** (or **Settings → General → Updates** in Persistent Sage).
+4. Updates: **Settings → General → Updates → Check for updates** (uses Microsoft Store APIs). You can also use Store → **Library** → **Get updates**.
 
 ### Install from GitHub Releases
 
-**Beta testers (3.0):** use the **[v3.0.0-beta.1 prerelease](https://github.com/g00siferdev-py/persistent-sage/releases/tag/v3.0.0-beta.1)** — download **`Persistent.Sage_3.0.0_x64-setup.exe`** or **`PersistentSagePortable.zip`**.
+**Current release (3.0.0):** open **[Releases → Latest](https://github.com/g00siferdev-py/persistent-sage/releases/latest)** and download **`Persistent.Sage_*_x64-setup.exe`** or **`PersistentSagePortable.zip`**.
 
-**General users (current public release):** open **[Releases → Latest](https://github.com/g00siferdev-py/persistent-sage/releases/latest)** (currently **2.0.0** until Store/GitHub GA for 3.0).
-
-1. Download **`Persistent.Sage_*_x64-setup.exe`** (or the beta filenames above).
-3. Run the installer. If **SmartScreen** warns (unsigned direct-download build): **More info → Run anyway**.
-4. Open **Persistent Sage** from the Start Menu and complete the **setup wizard**.
-5. Updates: **Settings → General → Updates → Check for updates** (Tauri updater; beta builds use the prerelease tag until published as Latest).
+1. Download **`Persistent.Sage_*_x64-setup.exe`**.
+2. Run the installer. If **SmartScreen** warns (unsigned direct-download build): **More info → Run anyway**.
+3. Open **Persistent Sage** from the Start Menu and complete the **setup wizard**.
+4. Updates: **Settings → General → Updates → Check for updates** (signed Tauri updater against GitHub Releases).
 
 The installer will:
 
 - Install Persistent Sage (you can change the install folder — pick a USB drive for portable-style layout)
 - Download or embed **WebView2** if missing
 - Add **Start Menu** shortcuts:
-  - **Persistent Sage** — normal desktop use (data in `%LOCALAPPDATA%\Persistent Sage\Persistent Sage\data\`)
+  - **Persistent Sage** — normal desktop use (data in `%LOCALAPPDATA%\Persistent Sage\Persistent Sage\data\` or the app data folder shown in Help)
   - **Start Persistent Sage (Portable)** — keeps `data\` next to `persistent-sage.exe` (USB-friendly)
 - Write `README.txt` in the install folder
 
@@ -73,7 +71,7 @@ Creates `dist\PersistentSagePortable\` with `persistent-sage.exe`, `Start-Persis
 | Data not on USB | Use **Start Persistent Sage (Portable).bat**, not `persistent-sage.exe` only |
 | Reset setup wizard | Settings → General → **Show setup wizard again** (if enabled) or delete `onboarding_completed` from `settings.json` |
 | Donation links don't open | Update to 2.1.0+ (opens system browser via Tauri shell) |
-| Beta 3.0 install | Use [v3.0.0-beta.1](https://github.com/g00siferdev-py/persistent-sage/releases/tag/v3.0.0-beta.1), not Releases → Latest (still 2.0 until GA) |
+| Updates button does nothing / wrong channel | Store MSIX uses Store APIs; GitHub NSIS/portable uses Tauri updater. Both use **Settings → General → Updates**. GitHub channel requires a published (non-prerelease) Release with `latest.json`. |
 
 ---
 

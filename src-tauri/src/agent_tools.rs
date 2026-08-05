@@ -47,6 +47,7 @@ fn tool_user_facing_label(name: &str) -> String {
         "workspace_read_file" => "Read Workspace File".into(),
         "workspace_write_file" => "Write Workspace File".into(),
         "workspace_list_directory" => "List Workspace Folder".into(),
+        "workspace_view_image" => "View Workspace Image".into(),
         "workspace_read_pdf" => "Read PDF".into(),
         "workspace_write_pdf" => "Create PDF".into(),
         "correspondence_sync" => "Correspondence Sync".into(),
@@ -55,6 +56,7 @@ fn tool_user_facing_label(name: &str) -> String {
         "personality_update" => "Update Personality".into(),
         "memory_search" => "Memory Search".into(),
         "memory_search_all" => "Memory Search All Agents".into(),
+        "task" | "spawn_subagent" => "Spawn Subagent".into(),
         "coding_grep" => "Code Search".into(),
         "coding_apply_patch" => "Apply Patch".into(),
         "coding_run_command" => "Run Command".into(),
@@ -225,7 +227,7 @@ pub fn workspace_tool_definitions() -> Vec<ToolDefinition> {
         ToolDefinition {
             name: "workspace_read_file".into(),
             description: Some(
-                "Read a UTF-8 text file inside the Persistent Sage workspace. Path is relative to the workspace root (forward slashes, no ..).".into(),
+                "Read a UTF-8 text file inside the Persistent Sage workspace. Path is relative to the workspace root (forward slashes, no ..). For PNG/JPEG/WebP/GIF images use workspace_view_image instead.".into(),
             ),
             parameters: json!({
                 "type": "object",
@@ -261,6 +263,19 @@ pub fn workspace_tool_definitions() -> Vec<ToolDefinition> {
                     "path": { "type": "string", "description": "Relative directory path (default \".\")" }
                 },
                 "required": []
+            }),
+        },
+        ToolDefinition {
+            name: "workspace_view_image".into(),
+            description: Some(
+                "Load a PNG, JPEG, WebP, or GIF from the Persistent Sage workspace into the vision context for this turn so you can see and describe it. Path is relative to the workspace root. Requires a vision-capable model.".into(),
+            ),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Relative image path under the workspace" }
+                },
+                "required": ["path"]
             }),
         },
     ];
@@ -343,6 +358,10 @@ pub(crate) fn assert_path_in_workspace(
     assert_path_contained_in(workspace_root, path, "workspace")
 }
 
+fn path_looks_like_image(path: &Path) -> bool {
+    crate::attachments::mime_from_image_path(path).is_some()
+}
+
 fn workspace_read_file(
     workspace_root: &Path,
     rel: &str,
@@ -367,8 +386,68 @@ fn workspace_read_file(
         )));
     }
     let bytes = std::fs::read(&path).map_err(|e| tool_err(format!("read_file: {e}")))?;
-    let text = String::from_utf8(bytes).map_err(|_| tool_err("file is not valid UTF-8"))?;
-    Ok(text)
+    match String::from_utf8(bytes) {
+        Ok(text) => Ok(text),
+        Err(_) if path_looks_like_image(&path) => Err(tool_err(
+            "Binary image file — use workspace_view_image (agent) or Attach → \"From workspace\" in the composer. Current model must support vision.",
+        )),
+        Err(_) => Err(tool_err(
+            "file is not valid UTF-8 (binary files cannot be read with workspace_read_file)",
+        )),
+    }
+}
+
+fn settings_active_model_id(settings: &crate::settings::SettingsManager) -> String {
+    match settings.selected_provider().trim() {
+        "openai" => settings.openai_model(),
+        "ollama" => settings.ollama_model(),
+        "ollama_cloud" => settings.ollama_cloud_model(),
+        "anthropic" => settings.anthropic_model(),
+        "gemini" => settings.gemini_model(),
+        "xai" => settings.xai_model(),
+        "openrouter" => settings.openrouter_model(),
+        other => other.to_string(),
+    }
+}
+
+/// Copy a workspace image into attachments and return a tool result with a vision injection marker.
+fn workspace_view_image(
+    workspace_root: &Path,
+    data_directory: &Path,
+    conversation_id: &str,
+    settings: &crate::settings::SettingsManager,
+    rel: &str,
+) -> Result<String, ProviderError> {
+    let path = resolve_workspace_subpath(workspace_root, rel)?;
+    assert_path_in_workspace(workspace_root, &path)?;
+    let mime = crate::attachments::mime_from_image_path(&path).ok_or_else(|| {
+        tool_err("unsupported image type (use PNG, JPEG, WebP, or GIF)")
+    })?;
+    let meta = std::fs::metadata(&path).map_err(|e| tool_err(format!("view_image: {e}")))?;
+    if !meta.is_file() {
+        return Err(tool_err("path is not a regular file"));
+    }
+    let provider = settings.selected_provider();
+    let model = settings_active_model_id(settings);
+    if !crate::attachments::model_supports_vision(&provider, &model) {
+        return Err(tool_err(format!(
+            "The active model ({model}) does not support image input. Switch to a vision-capable model in Settings → Provider (e.g. gpt-4o, Claude 3+, kimi, llava), then retry workspace_view_image."
+        )));
+    }
+    let bytes = std::fs::read(&path).map_err(|e| tool_err(format!("view_image: {e}")))?;
+    let (attach_rel, mime) = crate::attachments::save_image_bytes(
+        data_directory,
+        conversation_id,
+        mime,
+        &bytes,
+    )
+    .map_err(tool_err)?;
+    let display_rel = rel.trim().trim_start_matches('/');
+    Ok(crate::attachments::format_vision_tool_result(
+        &attach_rel,
+        &mime,
+        &format!("Loaded workspace image `{display_rel}` for vision review."),
+    ))
 }
 
 fn workspace_write_file(
@@ -1386,6 +1465,17 @@ pub async fn run_builtin_tool(
             let root = workspace_root.ok_or_else(|| tool_err("workspace tools are not enabled"))?;
             let p = v["path"].as_str().unwrap_or("").trim();
             workspace_list_directory(root, p)
+        }
+        "workspace_view_image" => {
+            let root = workspace_root.ok_or_else(|| tool_err("workspace tools are not enabled"))?;
+            let settings =
+                settings.ok_or_else(|| tool_err("workspace_view_image needs settings context"))?;
+            let cid = conversation_id
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| tool_err("workspace_view_image requires an active conversation"))?;
+            let p = v["path"].as_str().unwrap_or("").trim();
+            workspace_view_image(root, data_directory, cid, settings, p)
         }
         "project_list" | "project_create" | "project_read" | "project_write" | "project_set_active" => {
             let root = workspace_root.ok_or_else(|| tool_err("project tools are not available"))?;

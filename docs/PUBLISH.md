@@ -25,8 +25,8 @@ How to ship **Windows installers** and **Microsoft Store MSIX** packages to user
 4. Create and push a tag (must start with `v`):
 
    ```bash
-   git tag v3.0.0-beta.1
-   git push origin v3.0.0-beta.1
+   git tag v3.0.0
+   git push origin v3.0.0
    ```
 
 5. Wait for **Actions → Build Windows** to finish (triggered by the tag).
@@ -37,15 +37,13 @@ How to ship **Windows installers** and **Microsoft Store MSIX** packages to user
    - `latest.json` (Tauri updater manifest)
 7. Edit the release notes (copy from CHANGELOG), then click **Publish release**.
 
-**Beta builds:** mark GitHub releases as **Pre-release** so `releases/latest` stays on the prior GA until Store launch. Share the direct tag URL with testers (e.g. `.../releases/tag/v3.0.0-beta.1`).
+**Do not mark GA releases as Pre-release** — the in-app Tauri updater uses GitHub's `releases/latest`, which excludes prereleases. (Keep older beta tags like `v3.0.0-beta.1` as prereleases.)
 
 **Share with users (GA / updater):**
 
 ```text
 https://github.com/g00siferdev-py/persistent-sage/releases/latest
 ```
-
-The Tauri updater uses GitHub's `releases/latest` endpoint, which excludes GitHub prereleases. Publish updater-enabled releases as **normal** GitHub releases (not marked prerelease).
 
 **Repo settings (once):** **Settings → Actions → General → Workflow permissions → Read and write permissions** (so the workflow can attach files to the Release).
 
@@ -55,8 +53,8 @@ The Tauri updater uses GitHub's `releases/latest` endpoint, which excludes GitHu
 
 1. Download **Artifacts** from a successful **Build Windows** run.
 2. **Releases → Draft a new release**
-3. **Choose a tag:** create `v3.0.0-beta.1` (or next version) on `main`.
-4. Title: `Persistent Sage 3.0.0-beta.1 (beta testers)`
+3. **Choose a tag:** create `v3.0.0` (or next version) on `main`.
+4. Title: `Persistent Sage 3.0.0`
 5. Leave **Set as a pre-release** unchecked for updater-enabled releases.
 6. Attach:
    - `Persistent.Sage_*_x64-setup.exe`
@@ -71,7 +69,7 @@ The Tauri updater uses GitHub's `releases/latest` endpoint, which excludes GitHu
 
 Store distribution uses a separate CI workflow and config. See **[MICROSOFT-STORE.md](./MICROSOFT-STORE.md)**.
 
-- MSIX builds omit the Tauri updater; Store users update via Partner Center → Store rollout.
+- MSIX builds omit the Tauri updater; Store users update via **Settings → General → Updates** (Store APIs) or Partner Center → Store rollout.
 - Submit `PersistentSage_<version>_x64.msix` from **Actions → Build MSIX** artifacts.
 
 ---
@@ -80,7 +78,7 @@ Store distribution uses a separate CI workflow and config. See **[MICROSOFT-STOR
 
 Send them:
 
-1. **Microsoft Store** listing (when available) **or** **Releases** link (above)
+1. **Microsoft Store** listing **or** **Releases** link (above)
 2. Download **`Persistent.Sage_*_x64-setup.exe`** (GitHub path)
 3. Run installer (SmartScreen: **More info → Run anyway** if unsigned direct download)
 4. Open Persistent Sage from Start Menu; complete the **setup wizard**
@@ -91,6 +89,8 @@ Send them:
 **USB / portable:** download `PersistentSagePortable.zip`, unzip, run **`Start-Persistent-Sage-Portable.bat`** (not `persistent-sage.exe` alone).
 
 For feedback, ask users to use **Settings → General → Send feedback** or the GitHub Issue templates. Feedback is public, so users should not include private chats, Memory Anchors, API keys, or sensitive personal information.
+
+**In-app updates (both channels):** **Settings → General → Updates → Check for updates** — Store installs hit Microsoft Store; GitHub installs hit `latest.json` on Releases.
 
 ---
 
@@ -109,10 +109,9 @@ After publishing:
 
 1. Bump version in `package.json`, `src-tauri/tauri.conf.json`, `Cargo.toml`, `Package.appxmanifest`.
 2. CHANGELOG entry.
-3. Push `main`, then tag `v2.1.1` (or next version).
-4. Publish the draft Release when CI completes.
+3. Push `main`, then tag `v3.0.1` (or next version).
+4. Publish the draft Release when CI completes (**not** as a GitHub prerelease if you want in-app updater).
 5. For Store: upload new MSIX via Partner Center after **Build MSIX** succeeds.
-
 ---
 
 ## Signing keys (Tauri updater)

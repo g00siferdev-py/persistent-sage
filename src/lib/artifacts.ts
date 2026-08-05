@@ -593,9 +593,14 @@ function inferHtmlTitle(html: string): string {
   return "Report";
 }
 
+/**
+ * Strip leftover artifact/html fences that were already promoted to `artifactJson`.
+ * Do NOT strip normal markdown code fences (`bash`, `typescript`, plain ```, etc.) —
+ * those must reach MessageContent for syntax-highlighted rendering.
+ */
 function cleanAssistantDisplayText(text: string): string {
   return text
-    .replace(/```[\s\S]*?```/g, "")
+    .replace(/```(?:artifact|html|htm|xml)\b[\s\S]*?```/gi, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

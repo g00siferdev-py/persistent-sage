@@ -76,7 +76,7 @@ const WORKSPACE_TOOLS_INFO = (
   <>
     When enabled, your companion may use{" "}
     <strong className="font-medium text-ps-muted">
-      {toolLabelList(["workspace_list_directory", "workspace_read_file", "workspace_write_file"])}
+      {toolLabelList(["workspace_list_directory", "workspace_read_file", "workspace_write_file", "workspace_view_image"])}
     </strong>{" "}
     in the Persistent Sage workspace, and{" "}
     <strong className="font-medium text-ps-muted">{toolDisplayName("database_query")}</strong> on{" "}
@@ -392,6 +392,7 @@ export function ToolsSettingsTab({
               "workspace_list_directory",
               "workspace_read_file",
               "workspace_write_file",
+              "workspace_view_image",
             ])}
           </p>
           <p>
@@ -538,6 +539,7 @@ export function ToolsSettingsTab({
             "workspace_list_directory",
             "workspace_read_file",
             "workspace_write_file",
+            "workspace_view_image",
           ])}`}
           compact
           info={WORKSPACE_TOOLS_INFO}
@@ -565,6 +567,201 @@ export function ToolsSettingsTab({
             </p>
           ) : null}
         </SettingsToggleCard>
+
+        <p className="flex items-center gap-2 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ps-accent">
+          Subagents
+          <span
+            className="inline-flex items-center border border-ps-border bg-ps-elevated px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-ps-faint"
+            style={{ borderRadius: "var(--ps-radius)" }}
+            title="Nested workers run extra model turns and can increase token usage substantially."
+          >
+            Experimental
+          </span>
+        </p>
+        <p className="text-[11px] leading-relaxed text-ps-faint">
+          Lets companion, research, and coding agents spawn nested workers via the{" "}
+          <strong className="font-medium text-ps-muted">{toolDisplayName("task")}</strong> tool
+          (parallel <code className="font-mono text-[10px]">prompts</code> supported). Prefers
+          OpenRouter when a key is saved.{" "}
+          <span className="text-ps-muted">
+            Experimental — each subagent runs its own model turns, so this uses more tokens (and
+            cost) than a single chat reply.
+          </span>
+        </p>
+        <SettingsToggleCard
+          id="subagents-enabled"
+          title="Enable subagents"
+          compact
+          info={
+            <>
+              When on, agents can call <code className="font-mono text-[10px]">task</code> /
+              <code className="font-mono text-[10px]">spawn_subagent</code> to run nested tool loops.
+              Children are ephemeral (summary only). Raises parent tool-round budgets for long missions.
+            </>
+          }
+          footnote={providerToolsFootnote(settings)}
+          checked={settings?.subagentsEnabled ?? true}
+          disabled={!providerSupportsTools(settings)}
+          onChange={(subagentsEnabled) => {
+            setSettings((s) => (s ? { ...s, subagentsEnabled } : s));
+            flushDebounce();
+            void (async () => {
+              try {
+                setError(null);
+                const next = await applySettingsPatch({ subagentsEnabled });
+                setSettings(next);
+              } catch (err) {
+                setError(String(err));
+                await refreshSettings();
+              }
+            })();
+          }}
+        />
+        <SettingsToggleCard
+          id="subagent-prefer-openrouter"
+          title="Prefer OpenRouter for subagents"
+          compact
+          nestDepth={1}
+          info={
+            <>
+              Subagents use OpenRouter when a key is available (optional model override below). If
+              OpenRouter is unavailable, they fall back to the active chat provider.
+            </>
+          }
+          checked={settings?.subagentPreferOpenrouter ?? true}
+          disabled={!settings?.subagentsEnabled}
+          onChange={(subagentPreferOpenrouter) => {
+            setSettings((s) => (s ? { ...s, subagentPreferOpenrouter } : s));
+            flushDebounce();
+            void (async () => {
+              try {
+                setError(null);
+                const next = await applySettingsPatch({ subagentPreferOpenrouter });
+                setSettings(next);
+              } catch (err) {
+                setError(String(err));
+                await refreshSettings();
+              }
+            })();
+          }}
+        />
+        <div
+          className={`ml-3 space-y-2 rounded-md border border-ps-border bg-ps-elevated px-3 py-3 ${
+            settings?.subagentsEnabled ? "" : "opacity-50 pointer-events-none"
+          }`}
+        >
+          <label className="block text-[11px] text-ps-faint">
+            Max depth (1–4)
+            <input
+              type="number"
+              min={1}
+              max={4}
+              value={settings?.subagentMaxDepth ?? 2}
+              onChange={(e) => {
+                const subagentMaxDepth = Math.min(4, Math.max(1, Number(e.target.value) || 1));
+                setSettings((s) => (s ? { ...s, subagentMaxDepth } : s));
+              }}
+              onBlur={() => {
+                const subagentMaxDepth = settings?.subagentMaxDepth ?? 2;
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await applySettingsPatch({ subagentMaxDepth });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+              className="mt-1 w-full rounded-lg border border-ps-border bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
+            />
+          </label>
+          <label className="block text-[11px] text-ps-faint">
+            Max concurrent children (1–16)
+            <input
+              type="number"
+              min={1}
+              max={16}
+              value={settings?.subagentMaxConcurrent ?? 4}
+              onChange={(e) => {
+                const subagentMaxConcurrent = Math.min(16, Math.max(1, Number(e.target.value) || 1));
+                setSettings((s) => (s ? { ...s, subagentMaxConcurrent } : s));
+              }}
+              onBlur={() => {
+                const subagentMaxConcurrent = settings?.subagentMaxConcurrent ?? 4;
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await applySettingsPatch({ subagentMaxConcurrent });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+              className="mt-1 w-full rounded-lg border border-ps-border bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
+            />
+          </label>
+          <label className="block text-[11px] text-ps-faint">
+            Round budget per child (4–128)
+            <input
+              type="number"
+              min={4}
+              max={128}
+              value={settings?.subagentRoundBudget ?? 48}
+              onChange={(e) => {
+                const subagentRoundBudget = Math.min(128, Math.max(4, Number(e.target.value) || 4));
+                setSettings((s) => (s ? { ...s, subagentRoundBudget } : s));
+              }}
+              onBlur={() => {
+                const subagentRoundBudget = settings?.subagentRoundBudget ?? 48;
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await applySettingsPatch({ subagentRoundBudget });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+              className="mt-1 w-full rounded-lg border border-ps-border bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
+            />
+          </label>
+          <label className="block text-[11px] text-ps-faint">
+            Subagent OpenRouter model (optional)
+            <input
+              type="text"
+              placeholder="e.g. moonshotai/kimi-k2 — empty = OpenRouter default"
+              value={settings?.subagentModel ?? ""}
+              onChange={(e) => {
+                const subagentModel = e.target.value;
+                setSettings((s) => (s ? { ...s, subagentModel } : s));
+              }}
+              onBlur={() => {
+                const subagentModel = settings?.subagentModel ?? "";
+                flushDebounce();
+                void (async () => {
+                  try {
+                    setError(null);
+                    const next = await applySettingsPatch({ subagentModel });
+                    setSettings(next);
+                  } catch (err) {
+                    setError(String(err));
+                    await refreshSettings();
+                  }
+                })();
+              }}
+              className="mt-1 w-full rounded-lg border border-ps-border bg-ps-canvas px-3 py-2 font-mono text-sm text-ps-ink outline-none focus:border-ps-accent/50"
+            />
+          </label>
+        </div>
 
         <p className="pt-2 text-[11px] font-semibold uppercase tracking-wide text-ps-accent">
           Coding mode

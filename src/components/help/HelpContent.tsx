@@ -11,7 +11,9 @@ import {
   LayoutGrid,
   MessageCircle,
   Rocket,
+  Sparkles,
   Star,
+  Wrench,
 } from "lucide-react";
 import { LEGAL_LINKS, openExternalUrl } from "@/lib/legal";
 import packageJson from "../../../package.json";
@@ -110,8 +112,8 @@ export function HelpContent() {
         <ol className="list-inside list-decimal space-y-1">
           <li>
             Open <strong>Settings → Provider</strong> and pick a backend (OpenAI,
-            Anthropic, Google Gemini, xAI, or local/cloud Ollama) with an API key
-            where required.
+            Anthropic, Google Gemini, xAI, OpenRouter, or local/cloud Ollama) with
+            an API key where required.
           </li>
           <li>
             Click <strong>New chat</strong> in the sidebar to start a thread with
@@ -119,8 +121,18 @@ export function HelpContent() {
           </li>
           <li>
             Turn on optional agent capabilities under{" "}
-            <strong>Settings → Tools</strong> (workspace files, browser fetch, PDF
-            read/write, Moltbook, coding tools).
+            <strong>Settings → Tools</strong> (workspace files &amp; images, browser
+            fetch, PDF read/write, database query, Moltbook, subagents, coding
+            tools).
+          </li>
+          <li>
+            Switch modes from the top-left tabs: <strong>Companion</strong>,{" "}
+            <strong>Productivity</strong>, or <strong>Coding</strong>.
+          </li>
+          <li>
+            Updates: <strong>Settings → General → Updates</strong> — Store installs
+            check the Microsoft Store; GitHub installs check GitHub Releases. Same
+            buttons either way.
           </li>
         </ol>
       </Section>
@@ -137,8 +149,8 @@ export function HelpContent() {
           </li>
           <li>
             <strong>Memory Anchor</strong> (sidebar) stores long-term notes per
-            companion; use <em>Extract raw anchors</em> or the recall search to
-            revisit them.
+            companion; use <em>Extract raw anchors</em> or recall search (optional
+            semantic embeddings under Settings → General → Memory).
           </li>
           <li>
             <strong>Favorites</strong> <Star className="inline size-3 text-ps-warm" aria-hidden />{" "}
@@ -146,12 +158,19 @@ export function HelpContent() {
           </li>
           <li>
             <strong>Share</strong> a message to X, Reddit, Bluesky, and more — or
-            ask your companion to post on Moltbook as itself.
+            ask your companion to post on Moltbook as itself. Message{" "}
+            <strong>copy</strong> and <strong>timestamps</strong> are on each row.
           </li>
           <li>
-            Attach <strong>images</strong> (file or webcam) when the selected model
-            supports vision; set <strong>thinking effort</strong> from the composer
-            toolbar.
+            Attach <strong>images</strong> when the model supports vision: choose
+            from computer, <strong>From workspace</strong>, or webcam. Set{" "}
+            <strong>thinking effort</strong> from the composer toolbar. Agents can
+            also call <code className="text-[10px]">workspace_view_image</code> on
+            workspace screenshots.
+          </li>
+          <li>
+            <strong>Code blocks</strong> in replies render with syntax highlighting
+            and a copy button (standard markdown fences).
           </li>
           <li>
             <strong>Projects &amp; artifacts</strong> — living documents, charts,
@@ -160,7 +179,9 @@ export function HelpContent() {
           </li>
           <li>
             <strong>Pulse</strong> (Settings → General) runs scheduled companion
-            check-ins in your open thread.
+            check-ins in your open thread. Use <strong>Stop</strong> to abort a turn
+            in flight. The header <strong>token counter</strong> estimates context
+            use for the active model.
           </li>
         </ul>
       </Section>
@@ -225,6 +246,44 @@ export function HelpContent() {
       </Section>
 
       <Section
+        icon={<Wrench className="size-4 text-ps-accent" aria-hidden />}
+        title="Agent tools"
+      >
+        <ul className="list-inside list-disc space-y-1">
+          <li>
+            Opt-in under <strong>Settings → Tools</strong>: web search, URL fetch,
+            headless <code className="text-[10px]">fetch_browser</code>, HTTPS{" "}
+            <code className="text-[10px]">http_request</code>, sandboxed workspace
+            files, PDF read/create, optional database query, and personality
+            self-edit.
+          </li>
+          <li>
+            <strong>Workspace images</strong> — use{" "}
+            <code className="text-[10px]">workspace_view_image</code> (or Attach →
+            From workspace). Text <code className="text-[10px]">workspace_read_file</code>{" "}
+            is UTF-8 only and will refuse PNGs/JPEGs.
+          </li>
+          <li>
+            Theme (light/dark) and a <strong>cache manager</strong> live under
+            Settings → General.
+          </li>
+        </ul>
+      </Section>
+
+      <Section
+        icon={<Sparkles className="size-4 text-ps-warm" aria-hidden />}
+        title="Subagents (experimental)"
+      >
+        <p>
+          Enable under <strong>Settings → Tools → Subagents</strong>. Agents can
+          spawn nested workers via the <strong>task</strong> tool for parallel
+          research or coding missions. Nested turns use{" "}
+          <strong>more tokens</strong> (and cost) than a single reply — treat as
+          experimental and keep depth/concurrency conservative.
+        </p>
+      </Section>
+
+      <Section
         icon={<Code2 className="size-4 text-ps-success" aria-hidden />}
         title="Coding mode"
       >
@@ -247,7 +306,8 @@ export function HelpContent() {
           <li>
             The coding agent can grep, patch, run commands, and use git — enable
             under <strong>Settings → Tools → Coding mode (v2)</strong>. Live
-            output streams into the terminal and the Stream panel.
+            output streams into the terminal, Stream panel, and Agent Action
+            Stream / Event Stream Debugger when open.
           </li>
           <li>
             Store a <strong>GitHub PAT</strong> (encrypted) for push/pull/clone —

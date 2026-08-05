@@ -111,6 +111,19 @@ pub struct SettingsFile {
     pub agent_coding_companion_linked_enabled: bool,
     #[serde(default = "default_agent_personality_edit")]
     pub agent_personality_edit_enabled: bool,
+    #[serde(default = "default_subagents_enabled")]
+    pub subagents_enabled: bool,
+    #[serde(default = "default_subagent_max_depth")]
+    pub subagent_max_depth: u8,
+    #[serde(default = "default_subagent_max_concurrent")]
+    pub subagent_max_concurrent: u32,
+    #[serde(default = "default_subagent_round_budget")]
+    pub subagent_round_budget: u32,
+    #[serde(default = "default_subagent_prefer_openrouter")]
+    pub subagent_prefer_openrouter: bool,
+    /// Optional OpenRouter model id for subagents (empty = use Settings OpenRouter model).
+    #[serde(default)]
+    pub subagent_model: String,
     #[serde(default = "default_database_allow_write")]
     pub database_allow_write: bool,
     #[serde(default = "default_database_app_data")]
@@ -354,6 +367,26 @@ fn default_agent_personality_edit() -> bool {
     false
 }
 
+fn default_subagents_enabled() -> bool {
+    true
+}
+
+fn default_subagent_max_depth() -> u8 {
+    2
+}
+
+fn default_subagent_max_concurrent() -> u32 {
+    4
+}
+
+fn default_subagent_round_budget() -> u32 {
+    48
+}
+
+fn default_subagent_prefer_openrouter() -> bool {
+    true
+}
+
 fn default_database_allow_write() -> bool {
     false
 }
@@ -448,6 +481,12 @@ impl Default for SettingsFile {
             agent_coding_git_remote_enabled: false,
             agent_coding_companion_linked_enabled: true,
             agent_personality_edit_enabled: false,
+            subagents_enabled: true,
+            subagent_max_depth: 2,
+            subagent_max_concurrent: 4,
+            subagent_round_budget: 48,
+            subagent_prefer_openrouter: true,
+            subagent_model: String::new(),
             database_allow_write: false,
             database_app_data_enabled: false,
             pulse_enabled: false,
@@ -529,6 +568,12 @@ pub struct SettingsView {
     pub agent_coding_git_remote_enabled: bool,
     pub agent_coding_companion_linked_enabled: bool,
     pub agent_personality_edit_enabled: bool,
+    pub subagents_enabled: bool,
+    pub subagent_max_depth: u8,
+    pub subagent_max_concurrent: u32,
+    pub subagent_round_budget: u32,
+    pub subagent_prefer_openrouter: bool,
+    pub subagent_model: String,
     pub database_allow_write: bool,
     pub database_app_data_enabled: bool,
     pub pulse_enabled: bool,
@@ -617,6 +662,12 @@ pub struct SettingsUpdatePayload {
     pub agent_coding_git_remote_enabled: Option<bool>,
     pub agent_coding_companion_linked_enabled: Option<bool>,
     pub agent_personality_edit_enabled: Option<bool>,
+    pub subagents_enabled: Option<bool>,
+    pub subagent_max_depth: Option<u8>,
+    pub subagent_max_concurrent: Option<u32>,
+    pub subagent_round_budget: Option<u32>,
+    pub subagent_prefer_openrouter: Option<bool>,
+    pub subagent_model: Option<String>,
     pub database_allow_write: Option<bool>,
     pub database_app_data_enabled: Option<bool>,
     pub pulse_enabled: Option<bool>,
@@ -1207,6 +1258,12 @@ impl SettingsManager {
             agent_coding_git_remote_enabled: inner.agent_coding_git_remote_enabled,
             agent_coding_companion_linked_enabled: inner.agent_coding_companion_linked_enabled,
             agent_personality_edit_enabled: inner.agent_personality_edit_enabled,
+            subagents_enabled: inner.subagents_enabled,
+            subagent_max_depth: inner.subagent_max_depth,
+            subagent_max_concurrent: inner.subagent_max_concurrent,
+            subagent_round_budget: inner.subagent_round_budget,
+            subagent_prefer_openrouter: inner.subagent_prefer_openrouter,
+            subagent_model: inner.subagent_model.clone(),
             database_allow_write: inner.database_allow_write,
             database_app_data_enabled: inner.database_app_data_enabled,
             pulse_enabled: inner.pulse_enabled,
@@ -1569,6 +1626,48 @@ impl SettingsManager {
             .unwrap_or(false)
     }
 
+    pub fn subagents_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.subagents_enabled)
+            .unwrap_or(true)
+    }
+
+    pub fn subagent_max_depth(&self) -> u8 {
+        self.inner
+            .read()
+            .map(|g| g.subagent_max_depth.clamp(1, 4))
+            .unwrap_or(2)
+    }
+
+    pub fn subagent_max_concurrent(&self) -> u32 {
+        self.inner
+            .read()
+            .map(|g| g.subagent_max_concurrent.clamp(1, 16))
+            .unwrap_or(4)
+    }
+
+    pub fn subagent_round_budget(&self) -> usize {
+        self.inner
+            .read()
+            .map(|g| g.subagent_round_budget.clamp(4, 128) as usize)
+            .unwrap_or(48)
+    }
+
+    pub fn subagent_prefer_openrouter(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.subagent_prefer_openrouter)
+            .unwrap_or(true)
+    }
+
+    pub fn subagent_model(&self) -> String {
+        self.inner
+            .read()
+            .map(|g| g.subagent_model.clone())
+            .unwrap_or_default()
+    }
+
     pub fn database_allow_write(&self) -> bool {
         self.inner
             .read()
@@ -1846,6 +1945,24 @@ impl SettingsManager {
         }
         if let Some(b) = patch.agent_personality_edit_enabled {
             inner.agent_personality_edit_enabled = b;
+        }
+        if let Some(b) = patch.subagents_enabled {
+            inner.subagents_enabled = b;
+        }
+        if let Some(v) = patch.subagent_max_depth {
+            inner.subagent_max_depth = v.clamp(1, 4);
+        }
+        if let Some(v) = patch.subagent_max_concurrent {
+            inner.subagent_max_concurrent = v.clamp(1, 16);
+        }
+        if let Some(v) = patch.subagent_round_budget {
+            inner.subagent_round_budget = v.clamp(4, 128);
+        }
+        if let Some(b) = patch.subagent_prefer_openrouter {
+            inner.subagent_prefer_openrouter = b;
+        }
+        if let Some(s) = patch.subagent_model {
+            inner.subagent_model = s.trim().to_string();
         }
         if let Some(b) = patch.database_allow_write {
             inner.database_allow_write = b;

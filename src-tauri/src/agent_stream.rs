@@ -12,6 +12,10 @@ pub struct GenerationStepStartEvent {
     pub id: String,
     pub generation_number: Option<u32>,
     pub mission: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depth: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -80,11 +84,24 @@ pub fn emit_generation_step_start(
     generation_number: Option<u32>,
     mission: &str,
 ) -> String {
+    emit_generation_step_start_nested(app, generation_number, mission, None, None)
+}
+
+/// Like [`emit_generation_step_start`] with optional nesting metadata for the Agent Action Stream.
+pub fn emit_generation_step_start_nested(
+    app: &AppHandle,
+    generation_number: Option<u32>,
+    mission: &str,
+    depth: Option<u8>,
+    agent_kind: Option<&str>,
+) -> String {
     let id = format!("gen-step-{}", uuid::Uuid::new_v4());
     let payload = GenerationStepStartEvent {
         id: id.clone(),
         generation_number,
         mission: mission.to_string(),
+        depth,
+        agent_kind: agent_kind.map(|s| s.to_string()),
     };
     log_event("generation_step:start", &payload);
     let _ = app.emit("generation_step:start", payload);

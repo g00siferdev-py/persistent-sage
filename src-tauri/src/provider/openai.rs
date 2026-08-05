@@ -84,14 +84,28 @@ impl OpenAIProvider {
         settings: &SettingsManager,
         http: &reqwest::Client,
     ) -> Result<Self, ProviderError> {
+        Self::from_openrouter_with_model(settings, http, None)
+    }
+
+    /// OpenRouter engine with an optional model override (subagents / one-off missions).
+    pub fn from_openrouter_with_model(
+        settings: &SettingsManager,
+        http: &reqwest::Client,
+        model_override: Option<&str>,
+    ) -> Result<Self, ProviderError> {
         let api_key = settings
             .decrypt_api_key("openrouter")?
             .filter(|s| !s.trim().is_empty())
             .ok_or(ProviderError::MissingApiKey("openrouter"))?;
+        let model = model_override
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| settings.openrouter_model());
         Ok(Self {
             client: http.clone(),
             api_key,
-            model: settings.openrouter_model(),
+            model,
             base_url: settings
                 .openrouter_base_url()
                 .trim_end_matches('/')

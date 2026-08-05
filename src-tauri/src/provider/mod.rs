@@ -100,3 +100,47 @@ pub fn build_engine(
     };
     Ok(engine)
 }
+
+/// Build an engine for a subagent. Prefers OpenRouter when enabled/keyed; otherwise the active provider.
+/// `model_override` applies when using OpenRouter.
+pub fn build_subagent_engine(
+    http: &reqwest::Client,
+    settings: &SettingsManager,
+    model_override: Option<&str>,
+) -> Result<Arc<dyn LLMProviderEngine + Send + Sync>, ProviderError> {
+    let prefer_or = settings.subagent_prefer_openrouter();
+    let has_or = settings
+        .decrypt_api_key("openrouter")
+        .ok()
+        .flatten()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+
+    let settings_model = {
+        let m = settings.subagent_model();
+        let t = m.trim();
+        if t.is_empty() {
+            None
+        } else {
+            Some(t.to_string())
+        }
+    };
+    let chosen = model_override
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .or(settings_model);
+
+    if (prefer_or && has_or) || settings.selected_provider().trim() == "openrouter" {
+        if has_or || settings.selected_provider().trim() == "openrouter" {
+            return Ok(Arc::new(OpenAIProvider::from_openrouter_with_model(
+                settings,
+                http,
+                chosen.as_deref(),
+            )?));
+        }
+    }
+
+    let _ = chosen;
+    build_engine(http, settings)
+}
