@@ -2013,11 +2013,7 @@ fn arg_str_vec(v: &Value, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn require_google_service(
-    settings: &SettingsManager,
-    enabled: bool,
-    service: &str,
-) -> Result<(), ProviderError> {
+fn require_google_service(enabled: bool, service: &str) -> Result<(), ProviderError> {
     if enabled {
         Ok(())
     } else {
@@ -2054,7 +2050,7 @@ pub async fn run_google_tool(
     }
     let result = match name {
         "gmail_search" => {
-            require_google_service(settings, settings.google_gmail_enabled(), "Gmail")?;
+            require_google_service(settings.google_gmail_enabled(), "Gmail")?;
             let account = GoogleAccount::parse(&arg_str(args, "account"));
             gmail_list(
                 http,
@@ -2066,7 +2062,7 @@ pub async fn run_google_tool(
             .await?
         }
         "gmail_read" => {
-            require_google_service(settings, settings.google_gmail_enabled(), "Gmail")?;
+            require_google_service(settings.google_gmail_enabled(), "Gmail")?;
             let account = GoogleAccount::parse(&arg_str(args, "account"));
             gmail_read(
                 http,
@@ -2078,7 +2074,7 @@ pub async fn run_google_tool(
             .await?
         }
         "gmail_create_draft" | "gmail_send" => {
-            require_google_service(settings, settings.google_gmail_enabled(), "Gmail")?;
+            require_google_service(settings.google_gmail_enabled(), "Gmail")?;
             let send = name == "gmail_send";
             let account = GoogleAccount::parse(&arg_str(args, "account"));
             // Human inbox send stays opt-in; agent mailbox send is Email-Agent-thread only.
@@ -2117,7 +2113,7 @@ pub async fn run_google_tool(
             .await?
         }
         "calendar_list_events" => {
-            require_google_service(settings, settings.google_calendar_enabled(), "Calendar")?;
+            require_google_service(settings.google_calendar_enabled(), "Calendar")?;
             calendar_list_events(
                 http,
                 settings,
@@ -2129,7 +2125,7 @@ pub async fn run_google_tool(
             .await?
         }
         "calendar_create_event" => {
-            require_google_service(settings, settings.google_calendar_enabled(), "Calendar")?;
+            require_google_service(settings.google_calendar_enabled(), "Calendar")?;
             calendar_create_event(
                 http,
                 settings,
@@ -2143,16 +2139,16 @@ pub async fn run_google_tool(
             .await?
         }
         "calendar_delete_event" => {
-            require_google_service(settings, settings.google_calendar_enabled(), "Calendar")?;
+            require_google_service(settings.google_calendar_enabled(), "Calendar")?;
             calendar_delete_event(http, settings, &arg_str(args, "event_id")).await?
         }
         "drive_search" => {
-            require_google_service(settings, settings.google_drive_enabled(), "Drive")?;
+            require_google_service(settings.google_drive_enabled(), "Drive")?;
             drive_list(http, settings, &arg_str(args, "query"), arg_u32(args, "max_results", 10))
                 .await?
         }
         "drive_read_document" => {
-            require_google_service(settings, settings.google_drive_enabled(), "Drive")?;
+            require_google_service(settings.google_drive_enabled(), "Drive")?;
             drive_read_document(
                 http,
                 settings,
