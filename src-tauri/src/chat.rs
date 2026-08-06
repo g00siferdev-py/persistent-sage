@@ -446,7 +446,7 @@ async fn apply_tool_round_messages(
                 if tc.name == "personality_update" && !raw.starts_with("Tool error:") {
                     personality_updated = true;
                 }
-                let (body, vision) = attachments::take_vision_marker(&raw);
+                let (body, vision) = attachments::vision_from_tool_result(&tc.name, &raw);
                 messages.push(ChatTurn {
                     role: "tool".into(),
                     content: body.clone(),
@@ -500,7 +500,7 @@ async fn apply_tool_round_messages(
                 if tc.name == "personality_update" && !raw.starts_with("Tool error:") {
                     personality_updated = true;
                 }
-                let (body, vision) = attachments::take_vision_marker(&raw);
+                let (body, vision) = attachments::vision_from_tool_result(&tc.name, &raw);
                 messages.push(ChatTurn {
                     role: "tool".into(),
                     content: body.clone(),
@@ -557,7 +557,7 @@ async fn apply_tool_round_messages(
                 if tc.name == "personality_update" && !raw.starts_with("Tool error:") {
                     personality_updated = true;
                 }
-                let (body, vision) = attachments::take_vision_marker(&raw);
+                let (body, vision) = attachments::vision_from_tool_result(&tc.name, &raw);
                 bodies.push(body);
                 visions.push(vision);
             }
