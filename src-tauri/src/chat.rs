@@ -225,6 +225,38 @@ fn anthropic_user_tool_results(tool_calls: &[ToolCall], bodies: &[String]) -> se
     json!({ "role": "user", "content": blocks })
 }
 
+/// Reject native or text-embedded tool calls that were not advertised for this turn.
+fn ensure_tool_calls_are_advertised(
+    tool_calls: &[ToolCall],
+    tools: &[ToolDefinition],
+) -> Result<(), ProviderError> {
+    if let Some(call) = tool_calls
+        .iter()
+        .find(|call| !tools.iter().any(|tool| tool.name == call.name))
+    {
+        return Err(ProviderError::Api(format!(
+            "Model requested unavailable tool '{}'; the call was blocked.",
+            call.name
+        )));
+    }
+    Ok(())
+}
+
+/// Gmail + correspondence + memory only — Email Agent wakes feed untrusted inbox text into a
+/// hidden tool turn, so local/web/subagent packs must not be reachable (including via embedded XML).
+fn is_email_agent_permitted_tool_name(name: &str) -> bool {
+    matches!(
+        name,
+        "gmail_search"
+            | "gmail_read"
+            | "gmail_create_draft"
+            | "gmail_send"
+            | "correspondence_sync"
+            | "memory_search"
+            | "memory_search_all"
+    )
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum AgentWebToolBackend {
     OpenAI,
@@ -653,6 +685,7 @@ pub(crate) async fn agent_complete_with_tools(
             }
             return Ok(resp.content);
         }
+        ensure_tool_calls_are_advertised(&tool_calls, &tools)?;
         if resp.tool_calls.is_empty() {
             eprintln!(
                 "persistent-sage: executing {} tool call(s) parsed from model text (native tool_calls empty)",
@@ -727,6 +760,7 @@ async fn try_complete_after_embedded_tool_xml(
     if calls.is_empty() {
         return Ok(None);
     }
+    ensure_tool_calls_are_advertised(&calls, &tools)?;
     eprintln!(
         "persistent-sage: running {} embedded tool call(s) from model text (not native API)",
         calls.len()
@@ -951,7 +985,16 @@ async fn run_chat_completion(
 
     let mut tool_definitions: Vec<ToolDefinition> = Vec::new();
     let is_coding_turn = options.coding_context.is_some();
-    if options.enable_tools && state.settings.agent_web_tools_enabled() && !is_coding_turn {
+    let is_email_agent_turn = state
+        .settings
+        .is_email_agent_conversation(conversation_id);
+    // Email Agent (dedicated thread / inbox wake): mail + correspondence + memory only.
+    // Untrusted subject/snippet must not reach workspace/web/DB/personality/Moltbook/subagents.
+    if options.enable_tools
+        && state.settings.agent_web_tools_enabled()
+        && !is_coding_turn
+        && !is_email_agent_turn
+    {
         tool_definitions.extend(crate::agent_tools::builtin_tool_definitions());
         if state.settings.agent_browser_fetch_enabled() {
             tool_definitions.push(crate::agent_tools::browser_fetch_tool_definition(
@@ -959,14 +1002,23 @@ async fn run_chat_completion(
             ));
         }
     }
-    if options.enable_tools && state.settings.agent_workspace_enabled() && !is_coding_turn {
+    if options.enable_tools
+        && state.settings.agent_workspace_enabled()
+        && !is_coding_turn
+        && !is_email_agent_turn
+    {
         tool_definitions.extend(crate::agent_tools::workspace_tool_definitions());
     }
-    if options.enable_tools && state.settings.artifacts_enabled() && !is_coding_turn {
+    if options.enable_tools
+        && state.settings.artifacts_enabled()
+        && !is_coding_turn
+        && !is_email_agent_turn
+    {
         tool_definitions.extend(crate::projects::project_tool_definitions());
     }
     if options.enable_tools
         && !is_coding_turn
+        && !is_email_agent_turn
         && state.settings.moltbook_enabled()
         && state.settings.moltbook_agent_tools_enabled()
     {
@@ -977,20 +1029,31 @@ async fn run_chat_completion(
         && state.settings.google_enabled()
         && state.settings.google_agent_tools_enabled()
     {
-        tool_definitions.extend(crate::google::tool_definitions(&state.settings));
+        if is_email_agent_turn {
+            tool_definitions.extend(
+                crate::google::tool_definitions(&state.settings)
+                    .into_iter()
+                    .filter(|t| t.name.starts_with("gmail_")),
+            );
+        } else {
+            tool_definitions.extend(crate::google::tool_definitions(&state.settings));
+        }
         tool_definitions.extend(crate::correspondence_sync::tool_definitions());
     }
-    if options.enable_tools && !is_coding_turn {
+    if options.enable_tools && !is_coding_turn && !is_email_agent_turn {
         tool_definitions.extend(crate::weather::tool_definitions());
     }
     let database_tools_enabled = options.enable_tools
         && !is_coding_turn
+        && !is_email_agent_turn
         && (state.settings.agent_workspace_enabled() || state.settings.database_app_data_enabled());
     if database_tools_enabled {
         tool_definitions.extend(crate::database_query::tool_definitions());
     }
-    let personality_edit_enabled =
-        options.enable_tools && !is_coding_turn && state.settings.agent_personality_edit_enabled();
+    let personality_edit_enabled = options.enable_tools
+        && !is_coding_turn
+        && !is_email_agent_turn
+        && state.settings.agent_personality_edit_enabled();
     if personality_edit_enabled {
         tool_definitions.extend(crate::personality_tools::tool_definitions());
     }
@@ -1021,17 +1084,18 @@ async fn run_chat_completion(
     let provider_id = engine.provider_id();
     let memory_tools_active =
         options.enable_tools && provider_id != "placeholder" && !is_coding_turn;
-    let is_email_agent_turn = state
-        .settings
-        .is_email_agent_conversation(conversation_id);
     if memory_tools_active {
         tool_definitions.extend(crate::memory_tools::tool_definitions());
         if is_email_agent_turn {
             tool_definitions.extend(crate::memory_tools::email_agent_tool_definitions());
         }
     }
-    if options.enable_tools && state.settings.subagents_enabled() {
+    if options.enable_tools && state.settings.subagents_enabled() && !is_email_agent_turn {
         tool_definitions.extend(crate::subagents::tool_definitions());
+    }
+    if is_email_agent_turn {
+        // Belt-and-suspenders: never advertise tools outside the Email Agent mail pack.
+        tool_definitions.retain(|t| is_email_agent_permitted_tool_name(&t.name));
     }
     let memory_tools_ctx = memory_tools_active.then(|| {
         (
@@ -1042,7 +1106,7 @@ async fn run_chat_completion(
     let coding_ctx_ref = options.coding_context.as_ref();
     let settings_for_tools = Some(&*state.settings);
     // Long-running orchestrators need more rounds when subagents are enabled.
-    let max_tool_rounds = if state.settings.subagents_enabled() {
+    let max_tool_rounds = if state.settings.subagents_enabled() && !is_email_agent_turn {
         if is_coding_turn { 64 } else { 24 }
     } else if is_coding_turn {
         32
@@ -1111,7 +1175,9 @@ async fn run_chat_completion(
                         .content
                         .push_str(crate::correspondence_sync::system_hint());
                 }
-                if state.settings.moltbook_enabled() && state.settings.moltbook_agent_tools_enabled()
+                if !is_email_agent_turn
+                    && state.settings.moltbook_enabled()
+                    && state.settings.moltbook_agent_tools_enabled()
                 {
                     let guide = crate::moltbook_scheduler::moltbook_guidelines_appendix(state);
                     if !guide.is_empty() {
@@ -1923,4 +1989,79 @@ pub async fn chat_vision_supported(state: State<'_, NovaState>) -> Result<bool, 
     let engine = state.llm.read().await.clone();
     let info = engine.model_info();
     Ok(model_supports_vision(&info.provider_id, &info.model_id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ensure_tool_calls_are_advertised, is_email_agent_permitted_tool_name};
+    use crate::provider::{ToolCall, ToolDefinition};
+    use serde_json::json;
+
+    fn tool(name: &str) -> ToolDefinition {
+        ToolDefinition {
+            name: name.to_string(),
+            description: None,
+            parameters: json!({"type": "object"}),
+        }
+    }
+
+    fn call(name: &str) -> ToolCall {
+        ToolCall {
+            id: "call-1".into(),
+            name: name.to_string(),
+            arguments_json: "{}".into(),
+        }
+    }
+
+    #[test]
+    fn blocks_tool_calls_not_advertised_for_the_turn() {
+        let tools = vec![tool("gmail_read"), tool("correspondence_sync")];
+        assert!(ensure_tool_calls_are_advertised(&[call("gmail_read")], &tools).is_ok());
+        assert!(
+            ensure_tool_calls_are_advertised(&[call("workspace_write_file")], &tools).is_err()
+        );
+        assert!(ensure_tool_calls_are_advertised(&[call("task")], &tools).is_err());
+        assert!(ensure_tool_calls_are_advertised(&[call("fetch_url")], &tools).is_err());
+        assert!(ensure_tool_calls_are_advertised(&[call("spawn_subagent")], &tools).is_err());
+    }
+
+    #[test]
+    fn email_agent_tool_scope_excludes_local_and_subagent_packs() {
+        for allowed in [
+            "gmail_search",
+            "gmail_read",
+            "gmail_create_draft",
+            "gmail_send",
+            "correspondence_sync",
+            "memory_search",
+            "memory_search_all",
+        ] {
+            assert!(
+                is_email_agent_permitted_tool_name(allowed),
+                "expected {allowed} to be permitted"
+            );
+        }
+        for blocked in [
+            "workspace_write_file",
+            "workspace_read_file",
+            "fetch_url",
+            "web_search",
+            "fetch_browser",
+            "http_request",
+            "database_query",
+            "personality_update",
+            "moltbook_create_post",
+            "calendar_delete_event",
+            "drive_read_document",
+            "weather_current",
+            "task",
+            "spawn_subagent",
+            "coding_run_command",
+        ] {
+            assert!(
+                !is_email_agent_permitted_tool_name(blocked),
+                "expected {blocked} to be blocked for Email Agent"
+            );
+        }
+    }
 }
