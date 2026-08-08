@@ -355,6 +355,16 @@ pub trait ConversationMemory: Send + Sync {
     /// Current companion profile id used for personality-scoped memory ops.
     fn active_personality_id(&self) -> String;
 
+    /// Owner companion id for a conversation row, if it exists under any personality.
+    ///
+    /// Unlike [`Self::get_conversation`] / [`Self::list_conversations`], this is **not**
+    /// scoped to the active personality — used by global background agents (Email Agent)
+    /// that must keep a single durable thread across companion switches.
+    fn personality_id_for_conversation(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Option<String>, MemoryError>;
+
     /// Distinct personality ids that have anchors or conversations (for Email Agent cross-search).
     fn list_personality_ids_for_recall(&self) -> Result<Vec<String>, MemoryError>;
 
@@ -2656,6 +2666,34 @@ impl ConversationMemory for MemoryAnchor {
             .unwrap_or_else(|_| DEFAULT_PERSONALITY_ID.to_string())
     }
 
+    fn personality_id_for_conversation(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Option<String>, MemoryError> {
+        let id = conversation_id.trim();
+        if id.is_empty() {
+            return Ok(None);
+        }
+        let conn = self.conn()?;
+        let row = conn.query_row(
+            "SELECT personality_id FROM conversations WHERE id = ?1",
+            params![id],
+            |r| r.get::<_, String>(0),
+        );
+        match row {
+            Ok(pid) => {
+                let pid = pid.trim().to_string();
+                if pid.is_empty() {
+                    Ok(Some(DEFAULT_PERSONALITY_ID.to_string()))
+                } else {
+                    Ok(Some(pid))
+                }
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(MemoryError::from(e)),
+        }
+    }
+
     fn list_personality_ids_for_recall(&self) -> Result<Vec<String>, MemoryError> {
         let conn = self.conn()?;
         let mut ids = Vec::new();
@@ -2889,5 +2927,40 @@ mod anchor_storage_tests {
             c.iter().any(|s| s.chars().count() > 512),
             "expected a chunk >512 chars, got {c:?}"
         );
+    }
+
+    #[test]
+    fn personality_id_for_conversation_survives_active_companion_switch() {
+        let dir = std::env::temp_dir().join(format!("nova_mem_email_owner_{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        let path = dir.join("m.sqlite");
+        let mem = MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
+
+        ConversationMemory::set_active_personality(&mem, "alpha");
+        let conv = ConversationMemory::create_conversation(&mem, "Email Agent").expect("conv");
+        ConversationMemory::store_message(
+            &mem,
+            &conv,
+            MessageRole::Assistant,
+            "prior email agent turn",
+            None,
+            None,
+            None,
+        )
+        .expect("store");
+
+        ConversationMemory::set_active_personality(&mem, "beta");
+        let listed = ConversationMemory::list_conversations(&mem).expect("list");
+        assert!(
+            !listed.iter().any(|c| c.id == conv),
+            "active-companion list must not include the other companion's Email Agent thread"
+        );
+
+        let owner = ConversationMemory::personality_id_for_conversation(&mem, &conv)
+            .expect("lookup")
+            .expect("row must still exist");
+        assert_eq!(owner, "alpha");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

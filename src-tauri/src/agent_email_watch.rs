@@ -43,30 +43,56 @@ pub fn spawn_agent_email_watch_loop(app_handle: AppHandle) {
     });
 }
 
-/// One global Email Agent conversation — get-or-create, like Moltbook's scheduler thread.
-fn ensure_email_agent_conversation(state: &NovaState) -> Result<String, String> {
-    if let Some(existing) = state.settings.google_email_agent_conversation_id() {
-        let live = state
-            .memory
-            .list_conversations()
-            .map(|list| list.iter().any(|c| c.id == existing))
-            .unwrap_or(false);
-        if live {
-            return Ok(existing);
+/// Resolve the global Email Agent conversation without consulting the active companion list.
+///
+/// Returns `(conversation_id, owning_personality_id, created_new)`.
+fn resolve_email_agent_conversation(
+    memory: &dyn ConversationMemory,
+    stored_id: Option<String>,
+) -> Result<(String, String, bool), String> {
+    if let Some(existing) = stored_id {
+        match memory.personality_id_for_conversation(&existing) {
+            Ok(Some(owner)) => return Ok((existing, owner, false)),
+            Ok(None) => {
+                // Settings pointed at a deleted row — recreate below.
+            }
+            Err(e) => {
+                return Err(format!("could not resolve Email Agent thread: {e}"));
+            }
         }
     }
-    let id = state
-        .memory
+    let id = memory
         .create_conversation("Email Agent")
         .map_err(|e| format!("could not create Email Agent thread: {e}"))?;
-    state
-        .settings
-        .set_google_email_agent_conversation_id(Some(id.clone()))
-        .map_err(|e| e.to_string())?;
-    Ok(id)
+    let owner = memory.active_personality_id();
+    Ok((id, owner, true))
 }
 
-fn email_agent_needs_full_sync(state: &NovaState, conversation_id: &str) -> bool {
+/// One global Email Agent conversation — get-or-create.
+///
+/// Returns `(conversation_id, owning_personality_id)`. Existence is checked across
+/// all companions: the active-personality `list_conversations` filter must not treat
+/// a still-living thread as dead after a companion switch (that used to orphan the
+/// prior Email Agent transcript and overwrite `google_email_agent_conversation_id`).
+fn ensure_email_agent_conversation(state: &NovaState) -> Result<(String, String), String> {
+    let stored = state.settings.google_email_agent_conversation_id();
+    let (id, owner, created) = resolve_email_agent_conversation(&*state.memory, stored)?;
+    if created {
+        state
+            .settings
+            .set_google_email_agent_conversation_id(Some(id.clone()))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok((id, owner))
+}
+
+fn email_agent_needs_full_sync(
+    state: &NovaState,
+    conversation_id: &str,
+    owner_personality_id: &str,
+) -> bool {
+    // Reads are personality-scoped on tip; pin to the thread owner for the check.
+    ConversationMemory::set_active_personality(&*state.memory, owner_personality_id);
     // Cold start: no prior assistant turns → force full sync into the prompt.
     match state.memory.get_recent(conversation_id, 4) {
         Ok(msgs) => {
@@ -148,8 +174,8 @@ async fn run_watch_tick(app: &AppHandle, state: &NovaState, force: bool) -> Resu
         return Ok(());
     }
 
-    let cid = match ensure_email_agent_conversation(state) {
-        Ok(id) => id,
+    let (cid, owner_pid) = match ensure_email_agent_conversation(state) {
+        Ok(pair) => pair,
         Err(e) => {
             let _ = app.emit(
                 "agent-email:watch",
@@ -166,7 +192,7 @@ async fn run_watch_tick(app: &AppHandle, state: &NovaState, force: bool) -> Resu
         }
     };
 
-    let force_full_sync = email_agent_needs_full_sync(state, &cid);
+    let force_full_sync = email_agent_needs_full_sync(state, &cid, &owner_pid);
     let sync = correspondence_sync::load_for_email_agent_wake(
         &state.workspace_root,
         force_full_sync,
@@ -202,7 +228,9 @@ async fn run_watch_tick(app: &AppHandle, state: &NovaState, force: bool) -> Resu
     }
     let message = lines.join("\n");
 
-    let pid = state.personality.active_profile_id();
+    // Wake under the thread's owning companion so store_message / get_recent succeed
+    // even when the UI has switched to a different active personality.
+    let pid = owner_pid;
     let label = format!("Email Agent : {at} - ");
     let mut options = chat::ChatTurnOptions::pulse(label);
     if force {
@@ -210,7 +238,7 @@ async fn run_watch_tick(app: &AppHandle, state: &NovaState, force: bool) -> Resu
     }
 
     eprintln!(
-        "persistent-sage: email agent wake (conversation={cid}, full_sync={})",
+        "persistent-sage: email agent wake (conversation={cid}, owner={pid}, full_sync={})",
         sync.included_full_sync
     );
 
@@ -265,4 +293,72 @@ pub async fn agent_email_watch_run_now(
     state: tauri::State<'_, NovaState>,
 ) -> Result<(), String> {
     run_watch_tick(&app, &state, true).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::memory::{MemoryAnchor, MessageRole, SqliteProfile};
+    use uuid::Uuid;
+
+    #[test]
+    fn email_agent_conversation_survives_companion_switch() {
+        let dir = std::env::temp_dir().join(format!("nova_email_watch_{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        let path = dir.join("m.sqlite");
+        let mem = MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
+
+        ConversationMemory::set_active_personality(&mem, "alpha");
+        let (id, owner, created) =
+            resolve_email_agent_conversation(&mem, None).expect("create");
+        assert!(created);
+        assert_eq!(owner, "alpha");
+        ConversationMemory::store_message(
+            &mem,
+            &id,
+            MessageRole::Assistant,
+            "handled unread mail",
+            None,
+            None,
+            None,
+        )
+        .expect("store");
+
+        // Simulate UI companion switch before the next inbox wake.
+        ConversationMemory::set_active_personality(&mem, "beta");
+        let listed = ConversationMemory::list_conversations(&mem).expect("list");
+        assert!(
+            !listed.iter().any(|c| c.id == id),
+            "regression setup: personality-scoped list hides the Email Agent thread"
+        );
+
+        let (again, owner2, created2) =
+            resolve_email_agent_conversation(&mem, Some(id.clone())).expect("resolve");
+        assert!(!created2, "must not orphan/recreate after companion switch");
+        assert_eq!(again, id);
+        assert_eq!(owner2, "alpha");
+
+        // Wake path pins memory to the owner before get_recent / store_message.
+        ConversationMemory::set_active_personality(&mem, &owner2);
+        let recent = ConversationMemory::get_recent(&mem, &again, 4).expect("recent");
+        assert!(
+            recent
+                .iter()
+                .any(|m| matches!(m.role, MessageRole::Assistant)),
+            "prior Email Agent transcript must remain readable"
+        );
+
+        let before = ConversationMemory::list_conversations(&mem)
+            .expect("list owner")
+            .len();
+        ConversationMemory::set_active_personality(&mem, "beta");
+        let _ = resolve_email_agent_conversation(&mem, Some(id)).expect("resolve again");
+        ConversationMemory::set_active_personality(&mem, "alpha");
+        let after = ConversationMemory::list_conversations(&mem)
+            .expect("list owner after")
+            .len();
+        assert_eq!(before, after, "must not create duplicate Email Agent threads");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
