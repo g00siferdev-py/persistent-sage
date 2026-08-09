@@ -416,6 +416,8 @@ fn workspace_view_image(
     data_directory: &Path,
     conversation_id: &str,
     settings: &crate::settings::SettingsManager,
+    // Provider/model for the vision follow-up (turn engine; may be a subagent OpenRouter child).
+    vision_engine: Option<(&str, &str)>,
     rel: &str,
 ) -> Result<String, ProviderError> {
     let path = resolve_workspace_subpath(workspace_root, rel)?;
@@ -427,8 +429,13 @@ fn workspace_view_image(
     if !meta.is_file() {
         return Err(tool_err("path is not a regular file"));
     }
-    let provider = settings.selected_provider();
-    let model = settings_active_model_id(settings);
+    let (provider, model) = match vision_engine {
+        Some((p, m)) => (p.to_string(), m.to_string()),
+        None => (
+            settings.selected_provider(),
+            settings_active_model_id(settings),
+        ),
+    };
     if !crate::attachments::model_supports_vision(&provider, &model) {
         return Err(tool_err(format!(
             "The active model ({model}) does not support image input. Switch to a vision-capable model in Settings → Provider (e.g. gpt-4o, Claude 3+, kimi, llava), then retry workspace_view_image."
@@ -1357,6 +1364,8 @@ pub async fn run_builtin_tool(
     tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     settings: Option<&crate::settings::SettingsManager>,
     conversation_id: Option<&str>,
+    // Turn engine that will read vision follow-ups (subagents may differ from Settings).
+    vision_engine: Option<(&str, &str)>,
     name: &str,
     arguments_json: &str,
 ) -> Result<String, ProviderError> {
@@ -1475,7 +1484,7 @@ pub async fn run_builtin_tool(
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| tool_err("workspace_view_image requires an active conversation"))?;
             let p = v["path"].as_str().unwrap_or("").trim();
-            workspace_view_image(root, data_directory, cid, settings, p)
+            workspace_view_image(root, data_directory, cid, settings, vision_engine, p)
         }
         "project_list" | "project_create" | "project_read" | "project_write" | "project_set_active" => {
             let root = workspace_root.ok_or_else(|| tool_err("project tools are not available"))?;

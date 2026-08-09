@@ -241,6 +241,50 @@ pub(crate) fn web_tool_backend_for_provider(provider_id: &str) -> Option<AgentWe
     }
 }
 
+/// Append deferred workspace-vision user turns after every tool result for the round.
+///
+/// OpenAI-compatible and Ollama tool APIs require all `role:tool` messages for a
+/// round before any intervening user/assistant message. Injecting vision mid-loop
+/// (when `workspace_view_image` is not last) causes provider 400s / aborted turns.
+fn push_deferred_vision_followups(
+    messages: &mut Vec<ChatTurn>,
+    provider_id: &str,
+    data_directory: &Path,
+    pending: &[(String, String, String)],
+) -> bool {
+    let mut vision_injected = false;
+    for (display_body, rel, mime) in pending {
+        let caption = if display_body.trim().is_empty() {
+            "The workspace image is attached. Review it and answer the user.".to_string()
+        } else {
+            format!(
+                "{}\n\n(Image bytes follow for vision — review the screenshot and answer the user.)",
+                display_body.trim()
+            )
+        };
+        match attachments::chat_turn_from_attachment(
+            provider_id,
+            data_directory,
+            rel,
+            mime,
+            &caption,
+        ) {
+            Ok(turn) => {
+                messages.push(turn);
+                vision_injected = true;
+            }
+            Err(e) => {
+                eprintln!("persistent-sage: workspace vision inject failed: {e}");
+                messages.push(ChatTurn::text(
+                    "user",
+                    format!("Tool note: could not attach workspace image for vision ({e})."),
+                ));
+            }
+        }
+    }
+    vision_injected
+}
+
 async fn apply_tool_round_messages(
     http: &reqwest::Client,
     workspace_root: Option<&Path>,
@@ -254,15 +298,16 @@ async fn apply_tool_round_messages(
     tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     settings: Option<&crate::settings::SettingsManager>,
     conversation_id: &str,
+    // Provider + model for the next completion (may be a subagent OpenRouter engine).
+    vision_engine: (&str, &str),
     messages: &mut Vec<ChatTurn>,
     round: &CompletionResponse,
     backend: AgentWebToolBackend,
 ) -> Result<bool, ProviderError> {
     let mut personality_updated = false;
     let mut vision_injected = false;
-    let provider_id = settings
-        .map(|s| s.selected_provider())
-        .unwrap_or_default();
+    let (provider_id, model_id) = vision_engine;
+    let vision_engine = Some((provider_id, model_id));
 
     async fn exec_tool(
         http: &reqwest::Client,
@@ -280,6 +325,7 @@ async fn apply_tool_round_messages(
         tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
         settings: Option<&crate::settings::SettingsManager>,
         conversation_id: &str,
+        vision_engine: Option<(&str, &str)>,
         name: &str,
         arguments_json: &str,
     ) -> String {
@@ -344,6 +390,7 @@ async fn apply_tool_round_messages(
                         tool_stream,
                         settings,
                         Some(conversation_id),
+                        vision_engine,
                         name,
                         arguments_json,
                     )
@@ -366,6 +413,7 @@ async fn apply_tool_round_messages(
                 tool_stream,
                 settings,
                 Some(conversation_id),
+                vision_engine,
                 name,
                 arguments_json,
             )
@@ -378,44 +426,6 @@ async fn apply_tool_round_messages(
         body
     }
 
-    fn push_vision_followup(
-        messages: &mut Vec<ChatTurn>,
-        provider_id: &str,
-        data_directory: &Path,
-        display_body: &str,
-        rel: &str,
-        mime: &str,
-        vision_injected: &mut bool,
-    ) {
-        let caption = if display_body.trim().is_empty() {
-            "The workspace image is attached. Review it and answer the user.".to_string()
-        } else {
-            format!(
-                "{}\n\n(Image bytes follow for vision — review the screenshot and answer the user.)",
-                display_body.trim()
-            )
-        };
-        match attachments::chat_turn_from_attachment(
-            provider_id,
-            data_directory,
-            rel,
-            mime,
-            &caption,
-        ) {
-            Ok(turn) => {
-                messages.push(turn);
-                *vision_injected = true;
-            }
-            Err(e) => {
-                eprintln!("persistent-sage: workspace vision inject failed: {e}");
-                messages.push(ChatTurn::text(
-                    "user",
-                    format!("Tool note: could not attach workspace image for vision ({e})."),
-                ));
-            }
-        }
-    }
-
     match backend {
         AgentWebToolBackend::OpenAI => {
             messages.push(ChatTurn {
@@ -425,6 +435,7 @@ async fn apply_tool_round_messages(
                 ollama_message: None,
                 anthropic_message: None,
             });
+            let mut pending_visions: Vec<(String, String, String)> = Vec::new();
             for tc in &round.tool_calls {
                 let raw = exec_tool(
                     http,
@@ -439,6 +450,7 @@ async fn apply_tool_round_messages(
                     tool_stream,
                     settings,
                     conversation_id,
+                    vision_engine,
                     &tc.name,
                     &tc.arguments_json,
                 )
@@ -459,16 +471,16 @@ async fn apply_tool_round_messages(
                     anthropic_message: None,
                 });
                 if let Some((rel, mime)) = vision {
-                    push_vision_followup(
-                        messages,
-                        &provider_id,
-                        data_directory,
-                        &body,
-                        &rel,
-                        &mime,
-                        &mut vision_injected,
-                    );
+                    pending_visions.push((body, rel, mime));
                 }
+            }
+            if push_deferred_vision_followups(
+                messages,
+                provider_id,
+                data_directory,
+                &pending_visions,
+            ) {
+                vision_injected = true;
             }
         }
         AgentWebToolBackend::Ollama => {
@@ -479,6 +491,7 @@ async fn apply_tool_round_messages(
                 ollama_message: Some(ollama_assistant_with_tool_calls(round)),
                 anthropic_message: None,
             });
+            let mut pending_visions: Vec<(String, String, String)> = Vec::new();
             for tc in &round.tool_calls {
                 let raw = exec_tool(
                     http,
@@ -493,6 +506,7 @@ async fn apply_tool_round_messages(
                     tool_stream,
                     settings,
                     conversation_id,
+                    vision_engine,
                     &tc.name,
                     &tc.arguments_json,
                 )
@@ -513,16 +527,16 @@ async fn apply_tool_round_messages(
                     anthropic_message: None,
                 });
                 if let Some((rel, mime)) = vision {
-                    push_vision_followup(
-                        messages,
-                        &provider_id,
-                        data_directory,
-                        &body,
-                        &rel,
-                        &mime,
-                        &mut vision_injected,
-                    );
+                    pending_visions.push((body, rel, mime));
                 }
+            }
+            if push_deferred_vision_followups(
+                messages,
+                provider_id,
+                data_directory,
+                &pending_visions,
+            ) {
+                vision_injected = true;
             }
         }
         AgentWebToolBackend::Anthropic => {
@@ -550,6 +564,7 @@ async fn apply_tool_round_messages(
                     tool_stream,
                     settings,
                     conversation_id,
+                    vision_engine,
                     &tc.name,
                     &tc.arguments_json,
                 )
@@ -568,18 +583,20 @@ async fn apply_tool_round_messages(
                 ollama_message: None,
                 anthropic_message: Some(anthropic_user_tool_results(&round.tool_calls, &bodies)),
             });
-            for (body, vision) in bodies.iter().zip(visions.into_iter()) {
-                if let Some((rel, mime)) = vision {
-                    push_vision_followup(
-                        messages,
-                        &provider_id,
-                        data_directory,
-                        body,
-                        &rel,
-                        &mime,
-                        &mut vision_injected,
-                    );
-                }
+            let pending_visions: Vec<(String, String, String)> = bodies
+                .iter()
+                .zip(visions.into_iter())
+                .filter_map(|(body, vision)| {
+                    vision.map(|(rel, mime)| (body.clone(), rel, mime))
+                })
+                .collect();
+            if push_deferred_vision_followups(
+                messages,
+                provider_id,
+                data_directory,
+                &pending_visions,
+            ) {
+                vision_injected = true;
             }
         }
     }
@@ -660,6 +677,7 @@ pub(crate) async fn agent_complete_with_tools(
             );
         }
         let round = completion_for_tool_round(&resp, &tool_calls);
+        let model_id = engine.model_info().model_id;
         let vision_followup = apply_tool_round_messages(
             http,
             workspace_root,
@@ -673,6 +691,7 @@ pub(crate) async fn agent_complete_with_tools(
             tool_stream,
             settings,
             conversation_id,
+            (engine.provider_id(), model_id.as_str()),
             &mut messages,
             &round,
             backend,
@@ -738,6 +757,7 @@ async fn try_complete_after_embedded_tool_xml(
         usage: None,
     };
     let round = completion_for_tool_round(&resp, &calls);
+    let model_id = engine.model_info().model_id;
     let vision_followup = apply_tool_round_messages(
         http,
         workspace_root,
@@ -751,6 +771,7 @@ async fn try_complete_after_embedded_tool_xml(
         tool_stream,
         settings,
         conversation_id,
+        (engine.provider_id(), model_id.as_str()),
         &mut messages,
         &round,
         backend,
@@ -1923,4 +1944,104 @@ pub async fn chat_vision_supported(state: State<'_, NovaState>) -> Result<bool, 
     let engine = state.llm.read().await.clone();
     let info = engine.model_info();
     Ok(model_supports_vision(&info.provider_id, &info.model_id))
+}
+
+#[cfg(test)]
+mod vision_tool_round_tests {
+    use super::push_deferred_vision_followups;
+    use crate::attachments::chat_turn_includes_image;
+    use crate::provider::ChatTurn;
+    use std::path::PathBuf;
+
+    /// Minimal 1×1 PNG.
+    const TINY_PNG: &[u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90,
+        0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8,
+        0xCF, 0xC0, 0x00, 0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x05, 0xFE, 0xD4, 0xEF, 0x00, 0x00,
+        0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+
+    fn temp_data_dir(label: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "ps-vision-tool-round-{}-{}",
+            label,
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("attachments/c1")).unwrap();
+        std::fs::write(dir.join("attachments/c1/shot.png"), TINY_PNG).unwrap();
+        dir
+    }
+
+    #[test]
+    fn deferred_visions_keep_openai_tool_messages_contiguous() {
+        let dir = temp_data_dir("openai-order");
+        let mut messages = vec![
+            ChatTurn::text("assistant", ""),
+            ChatTurn {
+                role: "tool".into(),
+                content: "Loaded workspace image".into(),
+                openai_message: Some(serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": "call_vision",
+                    "content": "Loaded workspace image",
+                })),
+                ollama_message: None,
+                anthropic_message: None,
+            },
+            ChatTurn {
+                role: "tool".into(),
+                content: "dir listing".into(),
+                openai_message: Some(serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": "call_list",
+                    "content": "dir listing",
+                })),
+                ollama_message: None,
+                anthropic_message: None,
+            },
+        ];
+        // Vision came from the *first* tool call — must still land after both tool results.
+        let pending = vec![(
+            "Loaded workspace image".to_string(),
+            "attachments/c1/shot.png".to_string(),
+            "image/png".to_string(),
+        )];
+        assert!(push_deferred_vision_followups(
+            &mut messages,
+            "openai",
+            &dir,
+            &pending,
+        ));
+        let roles: Vec<&str> = messages.iter().map(|m| m.role.as_str()).collect();
+        assert_eq!(roles, ["assistant", "tool", "tool", "user"]);
+        assert!(chat_turn_includes_image(messages.last().unwrap()));
+        assert!(messages.last().unwrap().openai_message.is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn deferred_visions_use_turn_engine_provider_not_settings_shape() {
+        // Subagents often complete via OpenRouter while Settings → Provider is still Ollama.
+        // Vision follow-ups must populate openai_message for the child engine.
+        let dir = temp_data_dir("openrouter-shape");
+        let mut messages = Vec::new();
+        let pending = vec![(
+            "Loaded workspace image".to_string(),
+            "attachments/c1/shot.png".to_string(),
+            "image/png".to_string(),
+        )];
+        assert!(push_deferred_vision_followups(
+            &mut messages,
+            "openrouter",
+            &dir,
+            &pending,
+        ));
+        assert_eq!(messages.len(), 1);
+        assert!(messages[0].openai_message.is_some());
+        assert!(messages[0].ollama_message.is_none());
+        assert!(chat_turn_includes_image(&messages[0]));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
