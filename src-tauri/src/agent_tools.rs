@@ -416,8 +416,7 @@ fn workspace_view_image(
     data_directory: &Path,
     conversation_id: &str,
     settings: &crate::settings::SettingsManager,
-    /// Provider/model that will consume the vision follow-up (the active turn engine,
-    /// which may be a subagent OpenRouter child rather than Settings → Provider).
+    // Provider/model for the vision follow-up (turn engine; may be a subagent OpenRouter child).
     vision_engine: Option<(&str, &str)>,
     rel: &str,
 ) -> Result<String, ProviderError> {
@@ -1365,7 +1364,7 @@ pub async fn run_builtin_tool(
     tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     settings: Option<&crate::settings::SettingsManager>,
     conversation_id: Option<&str>,
-    /// Turn engine that will read vision follow-ups (subagents may differ from Settings).
+    // Turn engine that will read vision follow-ups (subagents may differ from Settings).
     vision_engine: Option<(&str, &str)>,
     name: &str,
     arguments_json: &str,

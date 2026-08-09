@@ -298,7 +298,7 @@ async fn apply_tool_round_messages(
     tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     settings: Option<&crate::settings::SettingsManager>,
     conversation_id: &str,
-    /// Provider + model that will consume the next completion (may be a subagent OpenRouter engine).
+    // Provider + model for the next completion (may be a subagent OpenRouter engine).
     vision_engine: (&str, &str),
     messages: &mut Vec<ChatTurn>,
     round: &CompletionResponse,
