@@ -141,6 +141,11 @@ pub struct SyncWakeContext {
 ///
 /// When `force_full` is true (e.g. brand-new Email Agent thread with no history),
 /// always include the full sync file so the agent is not flying blind.
+///
+/// **Does not** advance `sync_checked.txt`. Call [`mark_email_agent_sync_checked`]
+/// only after the wake turn actually succeeds — otherwise a busy skip / provider
+/// error would permanently drop correspondence context on the retry (the wake
+/// prompt is ephemeral and is not stored in the Email Agent transcript).
 pub fn load_for_email_agent_wake(
     workspace_root: &Path,
     force_full: bool,
@@ -171,12 +176,6 @@ pub fn load_for_email_agent_wake(
         });
     }
 
-    let ts = now_ts();
-    write_ts_file(workspace_root, SYNC_CHECKED, &ts).map_err(|e| e.to_string())?;
-    if modified.is_none() {
-        write_ts_file(workspace_root, SYNC_MODIFIED, &ts).map_err(|e| e.to_string())?;
-    }
-
     let body = std::fs::read_to_string(path_in(workspace_root, SYNC_FILE))
         .map_err(|e| format!("read {SYNC_FILE}: {e}"))?;
 
@@ -194,6 +193,23 @@ pub fn load_for_email_agent_wake(
              {body}"
         ),
     })
+}
+
+/// Record that the Email Agent successfully absorbed a full sync payload.
+///
+/// Only call this after `execute_chat_turn` returns `Ok` for a wake that used
+/// [`SyncWakeContext::included_full_sync`] = true.
+pub fn mark_email_agent_sync_checked(workspace_root: &Path) -> Result<(), String> {
+    let _guard = SYNC_LOCK
+        .lock()
+        .map_err(|_| "correspondence sync lock poisoned".to_string())?;
+    ensure_files_unlocked(workspace_root)?;
+    let ts = now_ts();
+    write_ts_file(workspace_root, SYNC_CHECKED, &ts).map_err(|e| e.to_string())?;
+    if read_ts_file(workspace_root, SYNC_MODIFIED).is_none() {
+        write_ts_file(workspace_root, SYNC_MODIFIED, &ts).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 fn ensure_files_unlocked(workspace_root: &Path) -> Result<(), String> {
@@ -882,6 +898,77 @@ mod tests {
         let body = std::fs::read_to_string(dir.join(SYNC_FILE)).unwrap();
         assert!(body.contains("robin@example.com"));
         assert!(body.contains("Ask about encryption"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn failed_wake_keeps_sync_dirty_until_mark_checked() {
+        let dir = std::env::temp_dir().join(format!("ps-corr-wake-{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        ensure_files(&dir).unwrap();
+
+        // Simulate another agent updating correspondence after the last check.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        write_ts_file(&dir, SYNC_MODIFIED, &now_ts()).unwrap();
+        let checked_before = read_ts_file(&dir, SYNC_CHECKED);
+
+        let first = load_for_email_agent_wake(&dir, false).unwrap();
+        assert!(
+            first.included_full_sync,
+            "dirty sync must be included in the wake prompt"
+        );
+        assert!(
+            first.prompt_block.contains("RE-READ REQUIRED"),
+            "{}",
+            first.prompt_block
+        );
+        assert_eq!(
+            read_ts_file(&dir, SYNC_CHECKED),
+            checked_before,
+            "load_for_email_agent_wake must not advance sync_checked before the turn succeeds"
+        );
+
+        // Simulate busy-skip / provider failure: retry must still see dirty sync.
+        let retry = load_for_email_agent_wake(&dir, false).unwrap();
+        assert!(
+            retry.included_full_sync,
+            "retry after failed wake must still re-include full correspondence sync"
+        );
+
+        mark_email_agent_sync_checked(&dir).unwrap();
+        let after_ok = load_for_email_agent_wake(&dir, false).unwrap();
+        assert!(
+            !after_ok.included_full_sync,
+            "successful mark_email_agent_sync_checked should clear dirty state"
+        );
+        assert!(after_ok.prompt_block.contains("UNCHANGED"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn force_full_also_defers_checked_until_mark() {
+        let dir = std::env::temp_dir().join(format!("ps-corr-force-{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        ensure_files(&dir).unwrap();
+        // Make timestamps equal so dirty=false; force_full still requires a reread.
+        let ts = now_ts();
+        write_ts_file(&dir, SYNC_MODIFIED, &ts).unwrap();
+        write_ts_file(&dir, SYNC_CHECKED, &ts).unwrap();
+
+        let forced = load_for_email_agent_wake(&dir, true).unwrap();
+        assert!(forced.included_full_sync);
+        assert_eq!(read_ts_file(&dir, SYNC_CHECKED).as_deref(), Some(ts.as_str()));
+
+        mark_email_agent_sync_checked(&dir).unwrap();
+        let checked_after = read_ts_file(&dir, SYNC_CHECKED).unwrap();
+        assert!(
+            checked_after >= ts,
+            "mark_email_agent_sync_checked should refresh sync_checked"
+        );
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

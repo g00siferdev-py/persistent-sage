@@ -39,6 +39,17 @@ fn pulse_due(entry: &PulseEntry, now: DateTime<Utc>) -> bool {
     elapsed.num_minutes() >= mins
 }
 
+/// Scheduled Pulse must not target the Email Agent conversation.
+///
+/// That thread may `gmail_send` with `account=agent` without the human-inbox
+/// send opt-in. Pulse check-ins inherit the open/bound conversation via
+/// `pulseConversationId`, so running Pulse there would autonomously gain
+/// agent-mailbox send authority. Inbox wakes use `agent_email_watch` instead;
+/// interactive chat on the Email Agent thread keeps send.
+pub(crate) fn pulse_blocked_on_email_agent_thread(is_email_agent_conversation: bool) -> bool {
+    is_email_agent_conversation
+}
+
 async fn run_one_pulse(
     app: &AppHandle,
     state: &NovaState,
@@ -105,6 +116,31 @@ async fn run_one_pulse(
         );
         return;
     };
+
+    if pulse_blocked_on_email_agent_thread(state.settings.is_email_agent_conversation(&cid)) {
+        // Advance last-run on the scheduler so a Pulse permanently bound to the
+        // Email Agent thread does not error-spam every 30s poll.
+        if !manual {
+            let _ = state.settings.touch_pulse_last_run(&entry.id, &at);
+        }
+        let _ = app.emit(
+            "pulse:tick",
+            PulseTickEvent {
+                ok: false,
+                at,
+                pulse_id: Some(entry.id.clone()),
+                pulse_name: Some(entry.name.clone()),
+                conversation_id: Some(cid),
+                summary: None,
+                error: Some(
+                    "Pulse cannot run on the Email Agent thread (agent-mailbox send authority). \
+                     Use Watch agent inbox for mailbox wakes, or bind this Pulse to a different chat."
+                        .into(),
+                ),
+            },
+        );
+        return;
+    }
 
     let instructions = entry.instructions.trim();
     let message = if instructions.is_empty() {
@@ -259,4 +295,15 @@ pub async fn pulse_run_now(
 ) -> Result<(), String> {
     run_pulse_tick(&app, &state, true, pulse_id.as_deref()).await;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pulse_blocked_on_email_agent_thread;
+
+    #[test]
+    fn pulse_is_blocked_on_email_agent_conversation() {
+        assert!(pulse_blocked_on_email_agent_thread(true));
+        assert!(!pulse_blocked_on_email_agent_thread(false));
+    }
 }
