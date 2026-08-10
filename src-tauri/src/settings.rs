@@ -27,6 +27,10 @@ const KEYRING_SERVICE: &str = "Persistent Sage";
 const LEGACY_KEYRING_SERVICE: &str = "Nova";
 const KEYRING_USER: &str = "settings_master_ikm";
 const SETTINGS_VERSION: u32 = 1;
+/// Soft cap for Email Agent seen message ids. Must stay well above a normal
+/// unread backlog: watch uses `is:unread` and never clears UNREAD, so a tiny
+/// ring buffer caused duplicate autonomous wakes / sends.
+const MAX_AGENT_EMAIL_SEEN_IDS: usize = 10_000;
 
 #[derive(Debug, Error)]
 pub enum SettingsError {
@@ -1180,26 +1184,19 @@ impl SettingsManager {
         self.persist()
     }
 
-    /// Remember message ids already handed to a companion watch turn (cap 80).
+    /// Remember message ids already handed to a companion watch turn.
+    ///
+    /// Soft-cap keeps settings.json bounded, but must stay far above a busy
+    /// agent mailbox's unread backlog: the watch queries `is:unread` and never
+    /// removes Gmail's UNREAD label, so draining a tiny ring (previously 80)
+    /// resurfaced old ids and could re-wake / re-`gmail_send` the same mail.
     pub fn mark_agent_email_seen(&self, ids: &[String]) -> Result<(), SettingsError> {
         {
             let mut inner = self
                 .inner
                 .write()
                 .map_err(|_| SettingsError::Crypto("lock poisoned".into()))?;
-            for id in ids {
-                let t = id.trim();
-                if t.is_empty() {
-                    continue;
-                }
-                if !inner.google_agent_email_seen_ids.iter().any(|x| x == t) {
-                    inner.google_agent_email_seen_ids.push(t.to_string());
-                }
-            }
-            let len = inner.google_agent_email_seen_ids.len();
-            if len > 80 {
-                inner.google_agent_email_seen_ids.drain(0..len - 80);
-            }
+            merge_agent_email_seen_ids(&mut inner.google_agent_email_seen_ids, ids);
         }
         self.persist()
     }
@@ -2249,7 +2246,10 @@ fn normalize_key_slot(provider: &str) -> Result<String, SettingsError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{default_ollama_cloud_model, normalize_key_slot};
+    use super::{
+        default_ollama_cloud_model, merge_agent_email_seen_ids, normalize_key_slot,
+        MAX_AGENT_EMAIL_SEEN_IDS,
+    };
 
     #[test]
     fn ollama_cloud_defaults_to_a_supported_cloud_model() {
@@ -2278,6 +2278,34 @@ mod tests {
             assert_eq!(normalize_key_slot(provider).unwrap(), slot);
         }
     }
+
+    #[test]
+    fn agent_email_seen_ids_retain_past_old_eighty_cap() {
+        let mut seen = Vec::new();
+        for i in 0..120 {
+            merge_agent_email_seen_ids(&mut seen, &[format!("msg-{i}")]);
+        }
+        assert_eq!(seen.len(), 120);
+        assert_eq!(seen.first().map(String::as_str), Some("msg-0"));
+        assert!(
+            seen.iter().any(|id| id == "msg-0"),
+            "oldest ids must remain so forever-unread mail is not re-woken"
+        );
+        assert!(seen.iter().any(|id| id == "msg-119"));
+    }
+
+    #[test]
+    fn agent_email_seen_ids_soft_cap_only_after_large_backlog() {
+        let mut seen = Vec::new();
+        let total = MAX_AGENT_EMAIL_SEEN_IDS + 25;
+        for i in 0..total {
+            merge_agent_email_seen_ids(&mut seen, &[format!("id-{i}")]);
+        }
+        assert_eq!(seen.len(), MAX_AGENT_EMAIL_SEEN_IDS);
+        let expected_first = format!("id-{}", total - MAX_AGENT_EMAIL_SEEN_IDS);
+        assert_eq!(seen.first().map(String::as_str), Some(expected_first.as_str()));
+        assert!(!seen.iter().any(|id| id == "id-0"));
+    }
 }
 
 fn normalize_thinking_effort(raw: &str) -> String {
@@ -2285,6 +2313,22 @@ fn normalize_thinking_effort(raw: &str) -> String {
         "low" => "low".into(),
         "high" => "high".into(),
         _ => "medium".into(),
+    }
+}
+
+fn merge_agent_email_seen_ids(existing: &mut Vec<String>, ids: &[String]) {
+    for id in ids {
+        let t = id.trim();
+        if t.is_empty() {
+            continue;
+        }
+        if !existing.iter().any(|x| x == t) {
+            existing.push(t.to_string());
+        }
+    }
+    let len = existing.len();
+    if len > MAX_AGENT_EMAIL_SEEN_IDS {
+        existing.drain(0..len - MAX_AGENT_EMAIL_SEEN_IDS);
     }
 }
 
