@@ -216,6 +216,16 @@ async fn run_watch_tick(app: &AppHandle, state: &NovaState, force: bool) -> Resu
 
     match chat::execute_chat_turn(app, state, &cid, &message, &pid, None, options).await {
         Ok(reply) => {
+            // Advance sync_checked only after a successful turn. The wake prompt is
+            // ephemeral (Pulse options); committing checked before execute_chat_turn
+            // made busy-skips / provider errors permanently drop correspondence context.
+            if sync.included_full_sync {
+                if let Err(e) =
+                    correspondence_sync::mark_email_agent_sync_checked(&state.workspace_root)
+                {
+                    eprintln!("persistent-sage: email agent mark sync_checked: {e}");
+                }
+            }
             let _ = state.settings.mark_agent_email_seen(&ids);
             let mut guard = LAST_QUERY.lock().map_err(|e| e.to_string())?;
             *guard = Some(std::time::Instant::now());
