@@ -48,6 +48,8 @@ pub fn tool_definition() -> ToolDefinition {
              (research, companion work, or coding). Prefer this for long-running or parallel work. \
              Pass `prompt` for a single child, or `prompts` (array) to run several in parallel. \
              Optional `mode`: companion | research | coding | auto. Optional `model` (OpenRouter id). \
+             From a coding-mode turn, children are always coding-scoped (companion/research packs are \
+             refused) so repo work cannot escalate to Google/web/Moltbook/DB tools. \
              Returns a condensed summary from each child — not the full child transcript. \
              Alias: spawn_subagent."
                 .into(),
@@ -67,7 +69,7 @@ pub fn tool_definition() -> ToolDefinition {
                 "mode": {
                     "type": "string",
                     "enum": ["auto", "companion", "research", "coding"],
-                    "description": "Tool pack for the child. auto = inherit parent (coding if in coding mode, else companion)"
+                    "description": "Tool pack for the child. auto = inherit parent (coding if in coding mode, else companion). Ignored escalation: coding parents always spawn coding children."
                 },
                 "model": {
                     "type": "string",
@@ -102,18 +104,20 @@ pub enum SubagentMode {
 }
 
 impl SubagentMode {
+    /// Resolve the requested child mode.
+    ///
+    /// Coding-mode parents are repo-scoped and deliberately omit Google / web / Moltbook /
+    /// DB / companion memory tools. Explicit `mode: companion` or `research` must not rebuild
+    /// those packs (or clear `coding_ctx` so a nested `task` can escalate further).
     fn parse(raw: &str, parent_is_coding: bool) -> Self {
+        if parent_is_coding {
+            return Self::Coding;
+        }
         match raw.trim().to_ascii_lowercase().as_str() {
             "research" => Self::Research,
             "coding" => Self::Coding,
             "companion" => Self::Companion,
-            _ => {
-                if parent_is_coding {
-                    Self::Coding
-                } else {
-                    Self::Companion
-                }
-            }
+            _ => Self::Companion,
         }
     }
 
@@ -406,9 +410,16 @@ async fn run_one_child_inner(
 fn collect_tools(
     settings: &SettingsManager,
     mode: SubagentMode,
-    _parent_is_coding: bool,
+    parent_is_coding: bool,
     allow_nested_task: bool,
 ) -> Vec<ToolDefinition> {
+    // Defense in depth: even if mode resolution drifts, coding parents never advertise
+    // companion/research packs (Google, Moltbook, web, DB, unrestricted workspace writes).
+    let mode = if parent_is_coding {
+        SubagentMode::Coding
+    } else {
+        mode
+    };
     let mut tools: Vec<ToolDefinition> = Vec::new();
     match mode {
         SubagentMode::Research => {
@@ -499,5 +510,33 @@ fn truncate(s: &str, max: usize) -> String {
     } else {
         let cut: String = t.chars().take(max.saturating_sub(1)).collect();
         format!("{cut}…")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn coding_parent_cannot_escalate_to_companion_or_research() {
+        // Concrete escape that this locks: coding turns omit Google/web/Moltbook/DB tools,
+        // but used to honor `mode: companion` / `research` on `task`, rebuilding those packs
+        // (and clearing coding_ctx so a nested task could escalate further).
+        assert_eq!(SubagentMode::parse("companion", true), SubagentMode::Coding);
+        assert_eq!(SubagentMode::parse("research", true), SubagentMode::Coding);
+        assert_eq!(SubagentMode::parse("auto", true), SubagentMode::Coding);
+        assert_eq!(SubagentMode::parse("", true), SubagentMode::Coding);
+        assert_eq!(SubagentMode::parse("coding", true), SubagentMode::Coding);
+    }
+
+    #[test]
+    fn non_coding_parent_honors_explicit_modes() {
+        assert_eq!(
+            SubagentMode::parse("companion", false),
+            SubagentMode::Companion
+        );
+        assert_eq!(SubagentMode::parse("research", false), SubagentMode::Research);
+        assert_eq!(SubagentMode::parse("coding", false), SubagentMode::Coding);
+        assert_eq!(SubagentMode::parse("auto", false), SubagentMode::Companion);
     }
 }
