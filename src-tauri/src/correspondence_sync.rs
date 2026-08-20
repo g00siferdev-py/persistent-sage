@@ -212,17 +212,42 @@ fn ensure_files_unlocked(workspace_root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// True if `rel` is a protected correspondence-sync path (must use the tool).
-pub fn is_protected_rel(rel: &str) -> bool {
-    let n = rel
-        .trim()
-        .trim_start_matches("./")
-        .replace('\\', "/")
-        .to_ascii_lowercase();
+fn is_protected_filename(name: &str) -> bool {
     matches!(
-        n.as_str(),
+        name.to_ascii_lowercase().as_str(),
         "correspondence_sync.md" | "sync_modified.txt" | "sync_checked.txt"
     )
+}
+
+/// True if `rel` resolves to a workspace-root correspondence-sync file (must use the tool).
+///
+/// Normalization matches `resolve_workspace_subpath`: empty / `.` segments are skipped, so
+/// aliases like `.//correspondence_sync.md` and `correspondence_sync.md/` still match.
+pub fn is_protected_rel(rel: &str) -> bool {
+    let rel = rel.trim().replace('\\', "/");
+    let mut segs: Vec<&str> = Vec::new();
+    for seg in rel.split('/') {
+        if seg.is_empty() || seg == "." {
+            continue;
+        }
+        if seg == ".." {
+            // `..` is rejected by the workspace resolver; this is not the root sync file.
+            return false;
+        }
+        segs.push(seg);
+    }
+    matches!(segs.as_slice(), [name] if is_protected_filename(name))
+}
+
+/// True if `path` is one of the three protected files at the workspace root.
+pub fn is_protected_workspace_path(workspace_root: &Path, path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+    if !is_protected_filename(name) {
+        return false;
+    }
+    path.parent() == Some(workspace_root)
 }
 
 pub fn tool_definitions() -> Vec<ToolDefinition> {
@@ -883,5 +908,51 @@ mod tests {
         assert!(body.contains("robin@example.com"));
         assert!(body.contains("Ask about encryption"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn protected_rel_matches_equivalent_workspace_paths() {
+        for rel in [
+            "correspondence_sync.md",
+            "./correspondence_sync.md",
+            ".//correspondence_sync.md",
+            "correspondence_sync.md/",
+            "correspondence_sync.md/.",
+            "./correspondence_sync.md/",
+            "CORRESPONDENCE_SYNC.MD",
+            "sync_checked.txt",
+            ".//sync_checked.txt",
+            "sync_modified.txt/",
+        ] {
+            assert!(
+                is_protected_rel(rel),
+                "expected protected rel {rel:?}"
+            );
+        }
+        for rel in [
+            "notes/correspondence_sync.md",
+            "other.md",
+            "sync_checked.bak",
+        ] {
+            assert!(!is_protected_rel(rel), "expected unprotected rel {rel:?}");
+        }
+    }
+
+    #[test]
+    fn protected_workspace_path_is_root_file_only() {
+        let root = std::path::PathBuf::from("/tmp/ps-workspace");
+        assert!(is_protected_workspace_path(
+            &root,
+            &root.join("correspondence_sync.md")
+        ));
+        assert!(is_protected_workspace_path(
+            &root,
+            &root.join("sync_checked.txt")
+        ));
+        assert!(!is_protected_workspace_path(
+            &root,
+            &root.join("notes").join("correspondence_sync.md")
+        ));
+        assert!(!is_protected_workspace_path(&root, &root.join("notes.md")));
     }
 }
