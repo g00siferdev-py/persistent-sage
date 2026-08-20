@@ -455,12 +455,14 @@ fn workspace_write_file(
     rel: &str,
     content: &str,
 ) -> Result<String, ProviderError> {
-    if crate::correspondence_sync::is_protected_rel(rel) {
+    let path = resolve_workspace_subpath(workspace_root, rel)?;
+    if crate::correspondence_sync::is_protected_rel(rel)
+        || crate::correspondence_sync::is_protected_workspace_path(workspace_root, &path)
+    {
         return Err(tool_err(
             "correspondence_sync.md / sync_*.txt are protected — use the correspondence_sync tool instead of workspace_write_file.",
         ));
     }
-    let path = resolve_workspace_subpath(workspace_root, rel)?;
     if content.as_bytes().len() > WORKSPACE_WRITE_MAX_BYTES {
         return Err(tool_err(format!(
             "content exceeds {} bytes",
@@ -1568,6 +1570,44 @@ mod tests {
         let tmp = std::env::temp_dir();
         let err = resolve_workspace_subpath(&tmp, "a/../../passwd").unwrap_err();
         assert!(err.to_string().contains(".."), "{err}");
+    }
+
+    #[test]
+    fn workspace_write_rejects_protected_path_aliases() {
+        let tmp = std::env::temp_dir().join(format!("ps-ws-prot-{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        crate::correspondence_sync::ensure_files(&tmp).unwrap();
+        let original = std::fs::read_to_string(tmp.join("correspondence_sync.md")).unwrap();
+        let checked = std::fs::read_to_string(tmp.join("sync_checked.txt")).unwrap();
+        for rel in [
+            "correspondence_sync.md",
+            "./correspondence_sync.md",
+            ".//correspondence_sync.md",
+            "correspondence_sync.md/",
+            "correspondence_sync.md/.",
+            "./correspondence_sync.md/",
+            "sync_checked.txt",
+            ".//sync_checked.txt",
+            "sync_modified.txt/",
+        ] {
+            let err = workspace_write_file(&tmp, rel, "pwned correspondence state").unwrap_err();
+            let msg = err.to_string().to_lowercase();
+            assert!(
+                msg.contains("protected") || msg.contains("correspondence"),
+                "rel={rel} err={err}"
+            );
+            let now = std::fs::read_to_string(tmp.join("correspondence_sync.md")).unwrap();
+            assert_eq!(now, original, "clobbered correspondence_sync.md via {rel}");
+            let now_checked = std::fs::read_to_string(tmp.join("sync_checked.txt")).unwrap();
+            assert_eq!(now_checked, checked, "clobbered sync_checked.txt via {rel}");
+        }
+        workspace_write_file(&tmp, "notes/correspondence_sync.md", "nested copy ok").unwrap();
+        let nested = std::fs::read_to_string(tmp.join("notes/correspondence_sync.md")).unwrap();
+        assert_eq!(nested, "nested copy ok");
+        let still = std::fs::read_to_string(tmp.join("correspondence_sync.md")).unwrap();
+        assert_eq!(still, original);
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
