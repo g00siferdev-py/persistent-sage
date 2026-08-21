@@ -198,9 +198,7 @@ pub enum MemoryError {
     #[error("unknown conversation: {0}")]
     UnknownConversation(String),
 
-    #[error(
-        "conversation is already bound to coding repo {existing}, not {requested}"
-    )]
+    #[error("conversation is already bound to coding repo {existing}, not {requested}")]
     CodingRepoMismatch { existing: String, requested: String },
 }
 
@@ -249,9 +247,13 @@ pub trait ConversationMemory: Send + Sync {
 
     fn create_conversation(&self, title: &str) -> Result<String, MemoryError>;
 
-    fn list_coding_conversations(&self, repo_id: &str) -> Result<Vec<StoredConversation>, MemoryError>;
+    fn list_coding_conversations(
+        &self,
+        repo_id: &str,
+    ) -> Result<Vec<StoredConversation>, MemoryError>;
 
-    fn create_coding_conversation(&self, repo_id: &str, title: &str) -> Result<String, MemoryError>;
+    fn create_coding_conversation(&self, repo_id: &str, title: &str)
+        -> Result<String, MemoryError>;
 
     fn get_or_create_coding_conversation(
         &self,
@@ -559,7 +561,10 @@ fn migrate_conversation_coding_columns(conn: &Connection) -> Result<(), MemoryEr
     if table_exists(conn, "conversations")?
         && !column_exists(conn, "conversations", "coding_repo_id")?
     {
-        conn.execute("ALTER TABLE conversations ADD COLUMN coding_repo_id TEXT", [])?;
+        conn.execute(
+            "ALTER TABLE conversations ADD COLUMN coding_repo_id TEXT",
+            [],
+        )?;
     }
     Ok(())
 }
@@ -1314,9 +1319,10 @@ impl MemoryAnchor {
                    AND (conversation_id IS NULL OR conversation_id = ?3)
                  LIMIT ?4",
             )?;
-            let rows = stmt.query_map(params![personality_id, SHARED_PERSONALITY_ID, cid, lim], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, Option<Vec<u8>>>(1)?))
-            })?;
+            let rows = stmt.query_map(
+                params![personality_id, SHARED_PERSONALITY_ID, cid, lim],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<Vec<u8>>>(1)?)),
+            )?;
             for row in rows {
                 let (id, blob_opt) = row?;
                 let Some(blob) = blob_opt else { continue };
@@ -1334,9 +1340,10 @@ impl MemoryAnchor {
                  WHERE personality_id IN (?1, ?2) AND embedding IS NOT NULL AND length(embedding) > 4
                  LIMIT ?3",
             )?;
-            let rows = stmt.query_map(params![personality_id, SHARED_PERSONALITY_ID, lim], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, Option<Vec<u8>>>(1)?))
-            })?;
+            let rows = stmt
+                .query_map(params![personality_id, SHARED_PERSONALITY_ID, lim], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, Option<Vec<u8>>>(1)?))
+                })?;
             for row in rows {
                 let (id, blob_opt) = row?;
                 let Some(blob) = blob_opt else { continue };
@@ -1561,9 +1568,8 @@ impl MemoryAnchor {
                 )?;
                 let rows = stmt.query_map(
                     params![match_expr, cid, take, personality_id, SHARED_PERSONALITY_ID],
-                    |row| {
-                        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
-                    })?;
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?)),
+                )?;
                 rows.collect::<Result<Vec<_>, _>>()?
             }
             None => {
@@ -1577,9 +1583,8 @@ impl MemoryAnchor {
                 )?;
                 let rows = stmt.query_map(
                     params![match_expr, take, personality_id, SHARED_PERSONALITY_ID],
-                    |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
-                })?;
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?)),
+                )?;
                 rows.collect::<Result<Vec<_>, _>>()?
             }
         };
@@ -1989,7 +1994,10 @@ impl MemoryAnchor {
         Ok(MemoryRecallBundle { anchors, messages })
     }
 
-    fn find_legacy_coding_conversation(&self, repo_id: &str) -> Result<Option<String>, MemoryError> {
+    fn find_legacy_coding_conversation(
+        &self,
+        repo_id: &str,
+    ) -> Result<Option<String>, MemoryError> {
         let conn = self.conn()?;
         let row = conn.query_row(
             "SELECT id FROM conversations
@@ -2220,8 +2228,12 @@ impl ConversationMemory for MemoryAnchor {
              WHERE personality_id = ?1 AND app_mode = 'coding' AND coding_repo_id = ?2
              ORDER BY datetime(updated_at) DESC, id DESC",
         )?;
-        let rows = stmt.query_map(params![pid, repo_id.trim()], MemoryAnchor::row_to_conversation)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(MemoryError::from)
+        let rows = stmt.query_map(
+            params![pid, repo_id.trim()],
+            MemoryAnchor::row_to_conversation,
+        )?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(MemoryError::from)
     }
 
     fn create_coding_conversation(
@@ -2245,11 +2257,7 @@ impl ConversationMemory for MemoryAnchor {
         repo_id: &str,
         repo_name: &str,
     ) -> Result<String, MemoryError> {
-        if let Some(c) = self
-            .list_coding_conversations(repo_id)?
-            .into_iter()
-            .next()
-        {
+        if let Some(c) = self.list_coding_conversations(repo_id)?.into_iter().next() {
             return Ok(c.id);
         }
         let pid = self.active_personality()?;
@@ -2341,14 +2349,7 @@ impl ConversationMemory for MemoryAnchor {
         let active = self.active_personality()?;
         let (pid, body) = resolve_anchor_personality_and_content(&active, content);
         let conn = self.conn()?;
-        Self::insert_anchor_row(
-            &conn,
-            conversation_id,
-            anchor_type,
-            &body,
-            importance,
-            &pid,
-        )
+        Self::insert_anchor_row(&conn, conversation_id, anchor_type, &body, importance, &pid)
     }
 
     fn upsert_project_anchor(&self, project_id: &str, title: &str) -> Result<String, MemoryError> {
@@ -2959,13 +2960,7 @@ mod anchor_storage_tests {
             .expect("detach back to companion");
         let detached = ConversationMemory::get_conversation(&mem, &conv).expect("get detached");
         assert_eq!(detached.app_mode.as_deref(), Some("companion"));
-        assert!(
-            detached
-                .coding_repo_id
-                .as_deref()
-                .unwrap_or("")
-                .is_empty()
-        );
+        assert!(detached.coding_repo_id.as_deref().unwrap_or("").is_empty());
 
         let _ = std::fs::remove_dir_all(&dir);
     }
