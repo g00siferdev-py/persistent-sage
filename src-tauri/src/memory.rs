@@ -197,6 +197,11 @@ pub enum MemoryError {
 
     #[error("unknown conversation: {0}")]
     UnknownConversation(String),
+
+    #[error(
+        "conversation is already bound to coding repo {existing}, not {requested}"
+    )]
+    CodingRepoMismatch { existing: String, requested: String },
 }
 
 // --- Trait --------------------------------------------------------------------
@@ -255,6 +260,10 @@ pub trait ConversationMemory: Send + Sync {
     ) -> Result<String, MemoryError>;
 
     /// Attach or detach a coding repo to any existing conversation.
+    ///
+    /// Rebinding a conversation that is already attached to a *different* repo
+    /// is rejected so each repository keeps its own coding thread (the UI falls
+    /// back to `get_or_create_coding_conversation`).
     fn set_conversation_coding_meta(
         &self,
         conversation_id: &str,
@@ -2263,6 +2272,20 @@ impl ConversationMemory for MemoryAnchor {
         let pid = self.active_personality()?;
         let conn = self.conn()?;
         if let Some(rid) = repo_id.filter(|s| !s.is_empty()) {
+            let existing: Option<String> = conn.query_row(
+                "SELECT coding_repo_id FROM conversations WHERE id = ?1 AND personality_id = ?2",
+                params![conversation_id, pid],
+                |r| r.get(0),
+            )?;
+            if let Some(current) = existing {
+                let current = current.trim();
+                if !current.is_empty() && current != rid {
+                    return Err(MemoryError::CodingRepoMismatch {
+                        existing: current.to_string(),
+                        requested: rid.to_string(),
+                    });
+                }
+            }
             conn.execute(
                 "UPDATE conversations SET app_mode = 'coding', coding_repo_id = ?2, updated_at = CURRENT_TIMESTAMP
                  WHERE id = ?1 AND personality_id = ?3",
@@ -2889,5 +2912,61 @@ mod anchor_storage_tests {
             c.iter().any(|s| s.chars().count() > 512),
             "expected a chunk >512 chars, got {c:?}"
         );
+    }
+
+    fn open_temp_memory(label: &str) -> (PathBuf, MemoryAnchor) {
+        let dir = std::env::temp_dir().join(format!("nova_mem_{label}_{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        let path = dir.join("m.sqlite");
+        let mem = MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
+        (dir, mem)
+    }
+
+    #[test]
+    fn set_coding_meta_attaches_companion_thread_but_refuses_repo_rebind() {
+        let (dir, mem) = open_temp_memory("coding_rebind");
+        let conv = ConversationMemory::create_conversation(&mem, "shared-chat").expect("conv");
+
+        ConversationMemory::set_conversation_coding_meta(&mem, &conv, Some("repo-a"))
+            .expect("companion thread can be attached to a repo");
+        let bound = ConversationMemory::get_conversation(&mem, &conv).expect("get");
+        assert_eq!(bound.app_mode.as_deref(), Some("coding"));
+        assert_eq!(bound.coding_repo_id.as_deref(), Some("repo-a"));
+
+        ConversationMemory::set_conversation_coding_meta(&mem, &conv, Some("repo-a"))
+            .expect("idempotent attach to the same repo");
+
+        let err = ConversationMemory::set_conversation_coding_meta(&mem, &conv, Some("repo-b"))
+            .expect_err("must not move a coding thread onto a different repo");
+        assert!(
+            matches!(
+                err,
+                MemoryError::CodingRepoMismatch {
+                    ref existing,
+                    ref requested
+                } if existing == "repo-a" && requested == "repo-b"
+            ),
+            "unexpected error: {err:?}"
+        );
+        let still = ConversationMemory::get_conversation(&mem, &conv).expect("get after reject");
+        assert_eq!(still.coding_repo_id.as_deref(), Some("repo-a"));
+
+        let other = ConversationMemory::get_or_create_coding_conversation(&mem, "repo-b", "B")
+            .expect("other repo still gets its own thread");
+        assert_ne!(other, conv);
+
+        ConversationMemory::set_conversation_coding_meta(&mem, &conv, None)
+            .expect("detach back to companion");
+        let detached = ConversationMemory::get_conversation(&mem, &conv).expect("get detached");
+        assert_eq!(detached.app_mode.as_deref(), Some("companion"));
+        assert!(
+            detached
+                .coding_repo_id
+                .as_deref()
+                .unwrap_or("")
+                .is_empty()
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
