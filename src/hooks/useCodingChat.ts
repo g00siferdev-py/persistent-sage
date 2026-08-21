@@ -54,11 +54,13 @@ export function useCodingChat({
   const loadSeq = useRef(0);
 
   useEffect(() => {
+    conversationIdRef.current = externalConversationId ?? null;
     setInternalConversationId(externalConversationId ?? null);
   }, [externalConversationId]);
 
   const setConversationId = useCallback(
     (id: string | null) => {
+      conversationIdRef.current = id;
       setInternalConversationId(id);
       onConversationIdChange?.(id);
     },
@@ -66,6 +68,7 @@ export function useCodingChat({
   );
 
   const setConversationIdInternal = useCallback((id: string | null) => {
+    conversationIdRef.current = id;
     setInternalConversationId(id);
   }, []);
 
@@ -87,10 +90,12 @@ export function useCodingChat({
       try {
         const recent = await memoryGetRecent(convId, 200);
         if (seq !== loadSeq.current) return;
+        if (conversationIdRef.current && conversationIdRef.current !== convId) return;
         setMessages(recent.map(storedToChatMessage));
         setError(null);
       } catch (e) {
         if (seq !== loadSeq.current) return;
+        if (conversationIdRef.current && conversationIdRef.current !== convId) return;
         setError(e instanceof Error ? e.message : String(e));
         if (!silent) setMessages([]);
       } finally {
@@ -109,6 +114,7 @@ export function useCodingChat({
     }
     let cancelled = false;
     (async () => {
+      loadSeq.current += 1;
       setLoading(true);
       setError(null);
       try {
@@ -284,7 +290,8 @@ export function useCodingChat({
           codingRepoId: repoId,
           uiTheme: getStoredTheme(),
         });
-        if (abortedTurn) {
+        const stillThisThread = conversationIdRef.current === convId;
+        if (abortedTurn || !stillThisThread) {
           setStreamAssistant(null);
         } else {
           setStreamAssistant({
@@ -294,10 +301,14 @@ export function useCodingChat({
             toolActivity: null,
           });
         }
-        await loadMessages(convId, { silent: true });
+        if (stillThisThread) {
+          await loadMessages(convId, { silent: true });
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
-        await loadMessages(convId, { silent: true });
+        if (conversationIdRef.current === convId) {
+          await loadMessages(convId, { silent: true });
+        }
       } finally {
         sendingRef.current = false;
         setStreamAssistant(null);
