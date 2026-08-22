@@ -367,6 +367,7 @@ export function CompanionLayout({
           layoutMode={settingsLayoutMode}
           onLayoutModeChange={setSettingsLayout}
           chatActiveProfileId={activePersonalityId}
+          activeConversationId={activeConversationId}
           onCompanionActiveProfileChange={(profileId) =>
             void applyActivePersonality(profileId)
           }

@@ -23,6 +23,7 @@ export function SettingsPanel({
   onLayoutModeChange,
   onCompanionActiveProfileChange,
   chatActiveProfileId,
+  activeConversationId,
   onRequestOnboarding,
 }: SettingsPanelProps) {
   const open = layoutMode !== "hidden";
@@ -218,6 +219,7 @@ export function SettingsPanel({
                     schedulePatch={schedulePatch}
                     setError={setError}
                     refreshSettings={refreshSettings}
+                    activeConversationId={activeConversationId}
                   />
                 ) : null}
 
@@ -231,6 +233,7 @@ export function SettingsPanel({
                     refreshSettings={refreshSettings}
                     onRequestOnboarding={onRequestOnboarding}
                     panelOpen={open}
+                    activeConversationId={activeConversationId}
                   />
                 ) : null}
               </div>
