@@ -1391,6 +1391,19 @@ pub async fn run_builtin_tool(
     }
 
     if n == "correspondence_sync" {
+        let settings =
+            settings.ok_or_else(|| tool_err("correspondence_sync needs settings context"))?;
+        if let Some(cid) = conversation_id.map(str::trim).filter(|s| !s.is_empty()) {
+            if settings
+                .moltbook_scheduler_conversation_id()
+                .as_deref()
+                .is_some_and(|sched| sched == cid)
+            {
+                return Err(tool_err(
+                    "correspondence_sync is not available on autonomous Moltbook scheduler turns.",
+                ));
+            }
+        }
         let root = workspace_root.ok_or_else(|| {
             tool_err("correspondence_sync needs the agent workspace (enable Google agent tools)")
         })?;
