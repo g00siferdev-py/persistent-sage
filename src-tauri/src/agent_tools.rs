@@ -50,6 +50,8 @@ fn tool_user_facing_label(name: &str) -> String {
         "workspace_view_image" => "View Workspace Image".into(),
         "workspace_read_pdf" => "Read PDF".into(),
         "workspace_write_pdf" => "Create PDF".into(),
+        "workspace_read_office" => "Read Office Document".into(),
+        "workspace_write_office" => "Create Office Document".into(),
         "correspondence_sync" => "Correspondence Sync".into(),
         "database_query" => "Database Query".into(),
         "personality_get" => "View Personality".into(),
@@ -280,6 +282,7 @@ pub fn workspace_tool_definitions() -> Vec<ToolDefinition> {
         },
     ];
     defs.extend(crate::pdf::pdf_tool_definitions());
+    defs.extend(crate::office::office_tool_definitions());
     defs
 }
 
@@ -1419,6 +1422,13 @@ pub async fn run_builtin_tool(
         let v: Value = serde_json::from_str(arguments_json)
             .map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
         return crate::pdf::run_pdf_tool(root, data_directory, n, &v).await;
+    }
+
+    if crate::office::is_office_tool_name(n) {
+        let root = workspace_root.ok_or_else(|| tool_err("workspace tools are not enabled"))?;
+        let v: Value = serde_json::from_str(arguments_json)
+            .map_err(|e| tool_err(format!("bad tool JSON: {e}")))?;
+        return crate::office::run_office_tool(root, n, &v).await;
     }
 
     let v: Value = serde_json::from_str(arguments_json)

@@ -32,7 +32,9 @@ mod embedding;
 mod memory;
 mod memory_extract;
 mod memory_tools;
+mod mcp_plugins;
 mod moltbook;
+mod office;
 mod moltbook_verify;
 mod moltbook_scheduler;
 mod personality;
@@ -224,6 +226,43 @@ fn app_data_paths(state: State<NovaState>) -> Result<AppDataPaths, String> {
 #[tauri::command]
 fn reveal_data_directory(state: State<NovaState>) -> Result<(), String> {
     paths::reveal_in_file_manager(state.data_directory.as_path())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct McpPluginsStatusResponse {
+    plugins_directory: String,
+    enabled: bool,
+    servers: Vec<crate::mcp_plugins::McpPluginStatus>,
+    load_errors: Vec<String>,
+}
+
+/// List configured MCP plugin servers and discovery status.
+#[tauri::command]
+async fn mcp_plugins_status(state: State<'_, NovaState>) -> Result<McpPluginsStatusResponse, String> {
+    let plugins_dir = crate::mcp_plugins::McpPluginManager::ensure_plugins_dir(state.data_directory.as_path())
+        .map_err(|e| e.to_string())?;
+    let mut mgr = crate::mcp_plugins::McpPluginManager::load(
+        state.data_directory.as_path(),
+        state.workspace_root.as_path(),
+    );
+    if state.settings.mcp_plugins_enabled() {
+        mgr.discover_tools().await;
+    }
+    Ok(McpPluginsStatusResponse {
+        plugins_directory: paths::display_path(&plugins_dir),
+        enabled: state.settings.mcp_plugins_enabled(),
+        servers: mgr.status(),
+        load_errors: mgr.load_errors().to_vec(),
+    })
+}
+
+/// Open the MCP plugins folder in the system file manager.
+#[tauri::command]
+fn reveal_mcp_plugins_directory(state: State<NovaState>) -> Result<(), String> {
+    let dir = crate::mcp_plugins::McpPluginManager::ensure_plugins_dir(state.data_directory.as_path())
+        .map_err(|e| e.to_string())?;
+    paths::reveal_in_file_manager(dir.as_path())
 }
 
 /// Open a workspace-relative or absolute file path in the system default app.
@@ -1267,6 +1306,8 @@ pub fn run() {
             install_store_updates,
             app_data_paths,
             reveal_data_directory,
+            mcp_plugins_status,
+            reveal_mcp_plugins_directory,
             open_feedback_issue,
             open_external_url,
             open_share_url,

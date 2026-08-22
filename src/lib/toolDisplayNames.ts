@@ -11,6 +11,8 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   workspace_view_image: "View Workspace Image",
   workspace_read_pdf: "Read PDF",
   workspace_write_pdf: "Create PDF",
+  workspace_read_office: "Read Office Document",
+  workspace_write_office: "Create Office Document",
   database_query: "Database Query",
   personality_get: "View Personality",
   personality_update: "Update Personality",

@@ -11,6 +11,8 @@ commands.allow = [
   "install_store_updates",
   "app_data_paths",
   "reveal_data_directory",
+  "mcp_plugins_status",
+  "reveal_mcp_plugins_directory",
   "open_feedback_issue",
   "open_external_url",
   "open_share_url",

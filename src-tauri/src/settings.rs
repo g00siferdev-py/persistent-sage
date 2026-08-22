@@ -230,6 +230,10 @@ pub struct SettingsFile {
     /// When true the companion gets Google agent tools (search mail, calendar, documents).
     #[serde(default)]
     pub google_agent_tools_enabled: bool,
+    pub mcp_plugins_enabled: bool,
+    /// When true, load MCP plugins from `{data_dir}/plugins/` (Claude Desktop / Claude Code format).
+    #[serde(default)]
+    pub mcp_plugins_enabled: bool,
     /// When true the agent may SEND email directly; otherwise it can only create drafts.
     #[serde(default)]
     pub google_agent_send_enabled: bool,
@@ -526,6 +530,7 @@ impl Default for SettingsFile {
             google_calendar_enabled: true,
             google_drive_enabled: true,
             google_agent_tools_enabled: false,
+            mcp_plugins_enabled: false,
             google_agent_send_enabled: false,
             google_account_email: String::new(),
             google_sage_account_email: String::new(),
@@ -619,6 +624,7 @@ pub struct SettingsView {
     pub google_calendar_enabled: bool,
     pub google_drive_enabled: bool,
     pub google_agent_tools_enabled: bool,
+    pub mcp_plugins_enabled: bool,
     pub google_agent_send_enabled: bool,
     pub google_account_email: String,
     pub has_google_client_secret: bool,
@@ -706,6 +712,7 @@ pub struct SettingsUpdatePayload {
     pub google_calendar_enabled: Option<bool>,
     pub google_drive_enabled: Option<bool>,
     pub google_agent_tools_enabled: Option<bool>,
+    pub mcp_plugins_enabled: Option<bool>,
     pub google_agent_send_enabled: Option<bool>,
     pub google_agent_email_watch_enabled: Option<bool>,
     pub google_agent_email_watch_interval_minutes: Option<u32>,
@@ -1040,6 +1047,13 @@ impl SettingsManager {
             .unwrap_or(false)
     }
 
+    pub fn mcp_plugins_enabled(&self) -> bool {
+        self.inner
+            .read()
+            .map(|g| g.mcp_plugins_enabled)
+            .unwrap_or(false)
+    }
+
     pub fn google_agent_send_enabled(&self) -> bool {
         self.inner
             .read()
@@ -1333,6 +1347,7 @@ impl SettingsManager {
             google_calendar_enabled: inner.google_calendar_enabled,
             google_drive_enabled: inner.google_drive_enabled,
             google_agent_tools_enabled: inner.google_agent_tools_enabled,
+            mcp_plugins_enabled: inner.mcp_plugins_enabled,
             google_agent_send_enabled: inner.google_agent_send_enabled,
             google_account_email: inner.google_account_email.clone(),
             has_google_client_secret: can_decrypt_api_blob(
@@ -2141,6 +2156,9 @@ impl SettingsManager {
         }
         if let Some(b) = patch.google_agent_tools_enabled {
             inner.google_agent_tools_enabled = b;
+        }
+        if let Some(b) = patch.mcp_plugins_enabled {
+            inner.mcp_plugins_enabled = b;
         }
         if let Some(b) = patch.google_agent_send_enabled {
             inner.google_agent_send_enabled = b;

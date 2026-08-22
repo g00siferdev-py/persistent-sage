@@ -5,6 +5,7 @@ use serde_json::json;
 use tauri::{AppHandle, Emitter, State};
 
 use std::path::Path;
+use std::sync::Arc;
 
 use crate::attachments::{self, model_supports_vision};
 use crate::coding::{CodingTurnContext, CODING_PERSONALITY_ID, CODING_SYSTEM_APPENDIX};
@@ -253,6 +254,7 @@ async fn apply_tool_round_messages(
     coding_ctx: Option<&crate::coding::CodingTurnContext>,
     tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     settings: Option<&crate::settings::SettingsManager>,
+    mcp_manager: Option<&Arc<crate::mcp_plugins::McpPluginManager>>,
     conversation_id: &str,
     messages: &mut Vec<ChatTurn>,
     round: &CompletionResponse,
@@ -279,6 +281,7 @@ async fn apply_tool_round_messages(
         coding_ctx: Option<&crate::coding::CodingTurnContext>,
         tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
         settings: Option<&crate::settings::SettingsManager>,
+        mcp_manager: Option<&Arc<crate::mcp_plugins::McpPluginManager>>,
         conversation_id: &str,
         name: &str,
         arguments_json: &str,
@@ -291,7 +294,21 @@ async fn apply_tool_round_messages(
         let args_parsed: serde_json::Value =
             serde_json::from_str(arguments_json).unwrap_or(serde_json::Value::Null);
 
-        let body = if crate::subagents::is_subagent_tool_name(name) {
+        let body = if crate::mcp_plugins::McpPluginManager::is_mcp_tool_name(name) {
+            let mgr = match mcp_manager {
+                Some(m) => m,
+                None => {
+                    if let Some(ts) = tool_stream {
+                        ts.end(name);
+                    }
+                    return "Tool error: MCP plugins are not enabled in Settings".into();
+                }
+            };
+            match mgr.run_tool(name, arguments_json).await {
+                Ok(s) => s,
+                Err(e) => format!("Tool error: {e}"),
+            }
+        } else if crate::subagents::is_subagent_tool_name(name) {
             let settings = match settings {
                 Some(s) => s,
                 None => {
@@ -438,6 +455,7 @@ async fn apply_tool_round_messages(
                     coding_ctx,
                     tool_stream,
                     settings,
+                    mcp_manager,
                     conversation_id,
                     &tc.name,
                     &tc.arguments_json,
@@ -492,6 +510,7 @@ async fn apply_tool_round_messages(
                     coding_ctx,
                     tool_stream,
                     settings,
+                    mcp_manager,
                     conversation_id,
                     &tc.name,
                     &tc.arguments_json,
@@ -549,6 +568,7 @@ async fn apply_tool_round_messages(
                     coding_ctx,
                     tool_stream,
                     settings,
+                    mcp_manager,
                     conversation_id,
                     &tc.name,
                     &tc.arguments_json,
@@ -606,6 +626,7 @@ pub(crate) async fn agent_complete_with_tools(
     coding_ctx: Option<&crate::coding::CodingTurnContext>,
     tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     settings: Option<&crate::settings::SettingsManager>,
+    mcp_manager: Option<&Arc<crate::mcp_plugins::McpPluginManager>>,
     conversation_id: &str,
     mut messages: Vec<ChatTurn>,
     max_tokens: Option<u32>,
@@ -672,6 +693,7 @@ pub(crate) async fn agent_complete_with_tools(
             coding_ctx,
             tool_stream,
             settings,
+            mcp_manager,
             conversation_id,
             &mut messages,
             &round,
@@ -713,6 +735,7 @@ async fn try_complete_after_embedded_tool_xml(
     coding_ctx: Option<&crate::coding::CodingTurnContext>,
     tool_stream: Option<&crate::tool_stream::ToolStreamEmitter>,
     settings: Option<&crate::settings::SettingsManager>,
+    mcp_manager: Option<&Arc<crate::mcp_plugins::McpPluginManager>>,
     conversation_id: &str,
     mut messages: Vec<ChatTurn>,
     assistant_xml: &str,
@@ -750,6 +773,7 @@ async fn try_complete_after_embedded_tool_xml(
         coding_ctx,
         tool_stream,
         settings,
+        mcp_manager,
         conversation_id,
         &mut messages,
         &round,
@@ -783,6 +807,7 @@ async fn try_complete_after_embedded_tool_xml(
         coding_ctx,
         tool_stream,
         settings,
+        mcp_manager,
         conversation_id,
         messages,
         max_tokens,
@@ -1033,6 +1058,24 @@ async fn run_chat_completion(
     if options.enable_tools && state.settings.subagents_enabled() {
         tool_definitions.extend(crate::subagents::tool_definitions());
     }
+    let mut mcp_manager: Option<Arc<crate::mcp_plugins::McpPluginManager>> = None;
+    if options.enable_tools && !is_coding_turn && state.settings.mcp_plugins_enabled() {
+        let mut mgr = crate::mcp_plugins::McpPluginManager::load(
+            state.data_directory.as_path(),
+            state.workspace_root.as_path(),
+        );
+        mgr.discover_tools().await;
+        for err in mgr.load_errors() {
+            eprintln!("persistent-sage: MCP plugin: {err}");
+        }
+        if !mgr.tool_definitions().is_empty() {
+            tool_definitions.extend(mgr.tool_definitions());
+        }
+        if mgr.server_count() > 0 {
+            mcp_manager = Some(Arc::new(mgr));
+        }
+    }
+    let mcp_manager_ref = mcp_manager.as_ref();
     let memory_tools_ctx = memory_tools_active.then(|| {
         (
             &*state.settings,
@@ -1156,6 +1199,7 @@ async fn run_chat_completion(
             coding_ctx_ref,
             tool_stream,
             settings_for_tools,
+            mcp_manager_ref,
             conversation_id,
             messages,
             max_tokens,
@@ -1281,6 +1325,7 @@ async fn run_chat_completion(
                     coding_ctx_ref,
                     tool_stream,
                     settings_for_tools,
+                    mcp_manager_ref,
                     conversation_id,
                     messages_for_tool_recovery,
                     &full,
