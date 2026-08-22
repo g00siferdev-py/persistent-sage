@@ -698,6 +698,7 @@ export function CodingLayout({
         <SettingsPanel
           layoutMode={settingsLayoutMode}
           onLayoutModeChange={setSettingsLayout}
+          activeConversationId={activeConversationId}
         />
       </div>
       <DonateFooter />

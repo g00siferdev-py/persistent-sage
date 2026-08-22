@@ -7,6 +7,11 @@ export type SettingsPanelProps = {
   onCompanionActiveProfileChange?: (profileId: string) => void | Promise<void>;
   /** Profile id currently used for chat memory (from `useChat`). */
   chatActiveProfileId?: string;
+  /**
+   * Live sidebar / coding conversation id. Settings snapshots `pulseConversationId`
+   * only when the panel opens, so bind actions must use this instead.
+   */
+  activeConversationId?: string | null;
   /** Re-open the first-run setup wizard (from ChatLayout). */
   onRequestOnboarding?: () => void;
 };

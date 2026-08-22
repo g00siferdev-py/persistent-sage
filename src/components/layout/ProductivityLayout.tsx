@@ -71,7 +71,7 @@ const WIDGET_ICONS: Record<WidgetKind, React.ReactNode> = {
 };
 
 /** Productivity mode — customizable canvas of movable widgets. */
-export function ProductivityLayout({ onModeChange }: Props) {
+export function ProductivityLayout({ activeConversationId, onModeChange }: Props) {
   const [layout, setLayout] = useState<WidgetLayout>(() => loadLayout());
   const [googleStatus, setGoogleStatus] = useState<GoogleStatus | null>(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -335,6 +335,7 @@ export function ProductivityLayout({ onModeChange }: Props) {
         <SettingsPanel
           layoutMode={settingsLayoutMode}
           onLayoutModeChange={setSettingsLayout}
+          activeConversationId={activeConversationId}
         />
       </div>
       <DonateFooter />

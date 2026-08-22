@@ -4,6 +4,7 @@ import { KeyRound } from "lucide-react";
 import { SettingsSection, SettingsToggleCard } from "@/components/settings/settingsUi";
 import {
   applySettingsPatch,
+  liveBoundConversationId,
   providerSupportsTools,
   providerToolsFootnote,
 } from "@/components/settings/settingsHelpers";
@@ -160,6 +161,8 @@ export type ToolsSettingsTabProps = {
   schedulePatch: (patch: SettingsPatch) => void;
   setError: (error: string | null) => void;
   refreshSettings: () => Promise<void>;
+  /** Live open thread — not the Settings snapshot of pulseConversationId. */
+  activeConversationId?: string | null;
 };
 
 export function ToolsSettingsTab({
@@ -171,6 +174,7 @@ export function ToolsSettingsTab({
   schedulePatch,
   setError,
   refreshSettings,
+  activeConversationId,
 }: ToolsSettingsTabProps) {
   const [githubPatInput, setGithubPatInput] = useState("");
   const [googleClientIdInput, setGoogleClientIdInput] = useState("");
@@ -1748,25 +1752,28 @@ export function ToolsSettingsTab({
                           void (async () => {
                             try {
                               setError(null);
-                              // Ensure exists by running a bound check path: bind current chat as the
-                              // global Email Agent if the user wants an explicit thread, otherwise
-                              // Check now will auto-create "Email Agent".
                               const googleEmailAgentConversationId =
-                                settings?.pulseConversationId?.trim() || null;
+                                liveBoundConversationId(
+                                  activeConversationId,
+                                  settings?.pulseConversationId,
+                                );
                               if (!googleEmailAgentConversationId) {
                                 setError(
                                   "Open any companion chat first to seed the Email Agent thread id, or turn on Watch / Check now to auto-create it.",
                                 );
                                 return;
                               }
+                              flushDebounce();
                               setSettings((s) =>
                                 s ? { ...s, googleEmailAgentConversationId } : s,
                               );
-                              schedulePatch({ googleEmailAgentConversationId });
+                              const next = await applySettingsPatch({
+                                googleEmailAgentConversationId,
+                              });
+                              setSettings(next);
                               setGoogleMsg(
                                 "Current chat bound as the global Email Agent (or rename it to Email Agent in the sidebar).",
                               );
-                              await refreshSettings();
                             } catch (err) {
                               setError(String(err));
                             }

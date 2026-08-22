@@ -15,6 +15,7 @@ import { SettingsSection, SettingsToggleCard } from "@/components/settings/setti
 import {
   applySettingsPatch,
   feedbackIssueUrl,
+  liveBoundConversationId,
   normalizeCacheInfo,
 } from "@/components/settings/settingsHelpers";
 import type {
@@ -69,6 +70,8 @@ export type GeneralSettingsTabProps = {
   onRequestOnboarding?: () => void;
   /** When false, clears destructive modal state (panel closed). */
   panelOpen: boolean;
+  /** Live open thread — not the Settings snapshot of pulseConversationId. */
+  activeConversationId?: string | null;
 };
 
 export function GeneralSettingsTab({
@@ -80,6 +83,7 @@ export function GeneralSettingsTab({
   refreshSettings,
   onRequestOnboarding,
   panelOpen,
+  activeConversationId,
 }: GeneralSettingsTabProps) {
   const { isDark, setDarkMode } = useTheme();
   const [backend, setBackend] = useState<string | null>(null);
@@ -101,6 +105,10 @@ export function GeneralSettingsTab({
   const [cacheInfo, setCacheInfo] = useState<CacheInfo | null>(null);
   const [cacheLoading, setCacheLoading] = useState(false);
   const [cacheError, setCacheError] = useState<string | null>(null);
+  const boundConversationId = liveBoundConversationId(
+    activeConversationId,
+    settings?.pulseConversationId,
+  );
 
   const loadVersion = useCallback(async () => {
     try {
@@ -429,6 +437,7 @@ export function GeneralSettingsTab({
             onClick={() => {
               if (!settings) return;
               const id = `pulse-${Date.now().toString(36)}`;
+              const conversationId = boundConversationId;
               const pulses = [
                 ...(settings.pulses ?? []),
                 {
@@ -437,7 +446,7 @@ export function GeneralSettingsTab({
                   enabled: false,
                   intervalMinutes: 15,
                   instructions: "",
-                  conversationId: settings.pulseConversationId ?? null,
+                  conversationId,
                   lastRunAt: null,
                 },
               ];
@@ -463,12 +472,12 @@ export function GeneralSettingsTab({
           thread. Example: check Sage&apos;s Gmail every 5 minutes with tools, and scrape a job site every
           10. Replies appear as <span className="font-mono text-ps-muted">Pulse (name) : [time] - …</span>.
         </p>
-        {settings?.pulseConversationId ? (
-          <p className="font-mono text-[10px] text-ps-faint" title={settings.pulseConversationId}>
+        {boundConversationId ? (
+          <p className="font-mono text-[10px] text-ps-faint" title={boundConversationId}>
             Default bound thread:{" "}
-            {settings.pulseConversationId.length > 14
-              ? `${settings.pulseConversationId.slice(0, 12)}…`
-              : settings.pulseConversationId}
+            {boundConversationId.length > 14
+              ? `${boundConversationId.slice(0, 12)}…`
+              : boundConversationId}
           </p>
         ) : (
           <p className="text-[10px] text-amber-400/90">No thread bound — select a conversation in the sidebar.</p>
@@ -562,7 +571,7 @@ export function GeneralSettingsTab({
                   !settings ||
                   pulseNowLoading ||
                   settings.selectedProvider === "placeholder" ||
-                  !(pulse.conversationId || settings.pulseConversationId)?.trim()
+                  !(pulse.conversationId || boundConversationId)?.trim()
                 }
                 onClick={() => {
                   void (async () => {
