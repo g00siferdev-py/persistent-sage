@@ -76,14 +76,38 @@ const WORKSPACE_TOOLS_INFO = (
   <>
     When enabled, your companion may use{" "}
     <strong className="font-medium text-ps-muted">
-      {toolLabelList(["workspace_list_directory", "workspace_read_file", "workspace_write_file", "workspace_view_image"])}
+      {toolLabelList([
+        "workspace_list_directory",
+        "workspace_read_file",
+        "workspace_write_file",
+        "workspace_view_image",
+        "workspace_read_pdf",
+        "workspace_write_pdf",
+        "workspace_read_office",
+        "workspace_write_office",
+      ])}
     </strong>{" "}
     in the Persistent Sage workspace, and{" "}
     <strong className="font-medium text-ps-muted">{toolDisplayName("database_query")}</strong> on{" "}
     <span className="font-mono text-ps-muted">.db</span> /{" "}
     <span className="font-mono text-ps-muted">.sqlite</span> files there (workspace location). Paths
-    are relative; <span className="font-mono text-ps-muted">..</span> is rejected. Off by default.
+    are relative; <span className="font-mono text-ps-muted">..</span> is rejected. Office tools create
+    real <span className="font-mono text-ps-muted">.docx</span>,{" "}
+    <span className="font-mono text-ps-muted">.xlsx</span>, and{" "}
+    <span className="font-mono text-ps-muted">.pptx</span> files. Off by default.
     For the live app database folder, enable App data directory databases below instead.
+  </>
+);
+
+const MCP_PLUGINS_INFO = (
+  <>
+    Load MCP servers from{" "}
+    <span className="font-mono text-ps-muted">plugins/claude_desktop_config.json</span> or drop Claude
+    Desktop / Claude Code plugin folders into{" "}
+    <span className="font-mono text-ps-muted">plugins/</span>. Tools appear as{" "}
+    <span className="font-mono text-ps-muted">mcp_*</span> in the agent tool list. Supports stdio
+    servers (<span className="font-mono text-ps-muted">command</span> +{" "}
+    <span className="font-mono text-ps-muted">args</span>). Off by default.
   </>
 );
 
@@ -192,6 +216,8 @@ export function ToolsSettingsTab({
   );
   const [submoltsLoading, setSubmoltsLoading] = useState(false);
   const [submoltsError, setSubmoltsError] = useState<string | null>(null);
+  const [mcpPluginsDir, setMcpPluginsDir] = useState<string | null>(null);
+  const [mcpStatusMsg, setMcpStatusMsg] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -203,6 +229,26 @@ export function ToolsSettingsTab({
       }
     })();
   }, [settings?.googleEnabled, settings?.googleClientId]);
+
+  useEffect(() => {
+    if (!settings?.mcpPluginsEnabled) {
+      setMcpPluginsDir(null);
+      setMcpStatusMsg(null);
+      return;
+    }
+    void (async () => {
+      try {
+        const s = await invoke<{
+          pluginsDirectory: string;
+          loadErrors: string[];
+        }>("mcp_plugins_status");
+        setMcpPluginsDir(s.pluginsDirectory);
+        setMcpStatusMsg(s.loadErrors.length > 0 ? s.loadErrors.join(" · ") : null);
+      } catch {
+        setMcpPluginsDir(null);
+      }
+    })();
+  }, [settings?.mcpPluginsEnabled]);
 
   useEffect(() => {
     setPreferSubmolt(Boolean(settings?.moltbookDefaultSubmolt?.trim()));
@@ -566,6 +612,48 @@ export function ToolsSettingsTab({
               {dataPaths.workspaceDirectory}
             </p>
           ) : null}
+        </SettingsToggleCard>
+
+        <SettingsToggleCard
+          id="mcp-plugins"
+          title="MCP plugins (Claude Desktop / Claude Code)"
+          compact
+          info={MCP_PLUGINS_INFO}
+          footnote={providerToolsFootnote(settings)}
+          checked={settings?.mcpPluginsEnabled ?? false}
+          disabled={!providerSupportsTools(settings)}
+          onChange={(mcpPluginsEnabled) => {
+            setSettings((s) => (s ? { ...s, mcpPluginsEnabled } : s));
+            flushDebounce();
+            void (async () => {
+              try {
+                setError(null);
+                const next = await applySettingsPatch({ mcpPluginsEnabled });
+                setSettings(next);
+              } catch (err) {
+                setError(String(err));
+                await refreshSettings();
+              }
+            })();
+          }}
+        >
+          {mcpPluginsDir ? (
+            <p className="break-all font-mono text-[10px] text-ps-faint" title={mcpPluginsDir}>
+              {mcpPluginsDir}
+            </p>
+          ) : null}
+          {mcpStatusMsg ? (
+            <p className="text-[10px] leading-relaxed text-amber-600 dark:text-amber-400">{mcpStatusMsg}</p>
+          ) : null}
+          <button
+            type="button"
+            className="mt-2 text-[11px] font-medium text-ps-accent underline-offset-2 hover:underline"
+            onClick={() => {
+              void invoke("reveal_mcp_plugins_directory").catch((err) => setError(String(err)));
+            }}
+          >
+            Open plugins folder
+          </button>
         </SettingsToggleCard>
 
         <p className="flex items-center gap-2 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ps-accent">

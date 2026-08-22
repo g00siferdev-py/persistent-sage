@@ -96,6 +96,7 @@ export type SettingsView = {
   googleCalendarEnabled: boolean;
   googleDriveEnabled: boolean;
   googleAgentToolsEnabled: boolean;
+  mcpPluginsEnabled: boolean;
   googleAgentSendEnabled: boolean;
   googleAccountEmail: string;
   hasGoogleClientSecret: boolean;
@@ -189,6 +190,7 @@ export type SettingsPatch = {
   googleCalendarEnabled?: boolean;
   googleDriveEnabled?: boolean;
   googleAgentToolsEnabled?: boolean;
+  mcpPluginsEnabled?: boolean;
   googleAgentSendEnabled?: boolean;
   googleAgentEmailWatchEnabled?: boolean;
   googleAgentEmailWatchIntervalMinutes?: number;
