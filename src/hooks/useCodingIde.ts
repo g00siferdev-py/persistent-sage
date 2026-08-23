@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { applyCleanFileRefresh } from "@/lib/codingEditorRefresh";
 
 export type OpenEditorFile = {
   pathRel: string;
@@ -245,12 +246,10 @@ export function useCodingIde(activeRepoId: string | null) {
         setOpenFiles((prev) =>
           prev.map((x) =>
             x.pathRel === f.pathRel
-              ? {
-                  ...x,
+              ? applyCleanFileRefresh(x, {
                   content: file.content,
-                  savedContent: file.content,
                   language: file.language,
-                }
+                })
               : x,
           ),
         );

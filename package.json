@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "test": "node --experimental-strip-types --test tests/**/*.test.ts",
     "tauri": "tauri",
     "branding:nsis": "node scripts/generate-nsis-branding.mjs",
     "branding:icons": "npx tauri icon packaging/branding/SageIcon1024.png -o src-tauri/icons",
