@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { markWrittenContentSaved } from "@/lib/codingEditorSave";
 
 export type OpenEditorFile = {
   pathRel: string;
@@ -183,15 +184,14 @@ export function useCodingIde(activeRepoId: string | null) {
     const file = openFiles.find((f) => f.pathRel === activePath);
     if (!file || file.loading || file.error) return false;
     try {
+      const writtenContent = file.content;
       await invoke("coding_write_file", {
         repoId: activeRepoId,
         pathRel: file.pathRel,
-        content: file.content,
+        content: writtenContent,
       });
       setOpenFiles((prev) =>
-        prev.map((f) =>
-          f.pathRel === file.pathRel ? { ...f, savedContent: f.content } : f,
-        ),
+        markWrittenContentSaved(prev, file.pathRel, writtenContent),
       );
       appendTerminal("info", `Saved ${file.pathRel}`);
       return true;
