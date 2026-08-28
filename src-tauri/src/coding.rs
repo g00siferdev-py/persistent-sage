@@ -1,17 +1,78 @@
 //! Coding-mode system prompt and turn context (Persistent Sage v2).
 
+use std::sync::{Arc, Mutex};
+
 /// Fixed personality scope for coding threads in SQLite (not a companion profile).
 pub const CODING_PERSONALITY_ID: &str = "__coding__";
 
 pub const APP_MODE_COMPANION: &str = "companion";
 pub const APP_MODE_CODING: &str = "coding";
 
-/// Active repository context injected into coding chat turns.
 #[derive(Clone, Debug)]
+struct CodingTurnInner {
+    repo_id: String,
+    repo_name: String,
+    path_rel: String,
+}
+
+/// Active repository context injected into coding chat turns.
+///
+/// Shared across sequential tool calls in one turn so `coding_repo_create` /
+/// `coding_git_clone` can rebind later tools to the new repo.
+#[derive(Clone)]
 pub struct CodingTurnContext {
-    pub repo_id: String,
-    pub repo_name: String,
-    pub path_rel: String,
+    inner: Arc<Mutex<CodingTurnInner>>,
+}
+
+impl std::fmt::Debug for CodingTurnContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let inner = self.lock();
+        f.debug_struct("CodingTurnContext")
+            .field("repo_id", &inner.repo_id)
+            .field("repo_name", &inner.repo_name)
+            .field("path_rel", &inner.path_rel)
+            .finish()
+    }
+}
+
+impl CodingTurnContext {
+    pub fn new(
+        repo_id: impl Into<String>,
+        repo_name: impl Into<String>,
+        path_rel: impl Into<String>,
+    ) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(CodingTurnInner {
+                repo_id: repo_id.into(),
+                repo_name: repo_name.into(),
+                path_rel: path_rel.into(),
+            })),
+        }
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, CodingTurnInner> {
+        self.inner.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub fn repo_id(&self) -> String {
+        self.lock().repo_id.clone()
+    }
+
+    pub fn repo_name(&self) -> String {
+        self.lock().repo_name.clone()
+    }
+
+    pub fn path_rel(&self) -> String {
+        self.lock().path_rel.clone()
+    }
+
+    /// Point this turn's coding tools at a newly created or cloned repo.
+    pub fn rebind(&self, repo_id: String, repo_name: String, path_rel: String) {
+        let mut inner = self.lock();
+        inner.repo_id = repo_id;
+        inner.repo_name = repo_name;
+        inner.path_rel = path_rel;
+    }
 }
 
 pub const CODING_SYSTEM_APPENDIX: &str = r#"

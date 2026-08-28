@@ -1567,7 +1567,7 @@ pub async fn execute_chat_turn(
             let mut briefing = if let Some(ref ctx) = coding_ctx {
                 let mut b = format!(
                     "# Coding session\n\nRepository: **{}** (`{}`)\n\nWorkspace-relative root for file tools: `{}`.",
-                    ctx.repo_name, ctx.path_rel, ctx.path_rel
+                    ctx.repo_name(), ctx.path_rel(), ctx.path_rel()
                 );
                 let hints = crate::coding_tools::repo_layout_hints(&workspace_root, ctx);
                 if !hints.is_empty() {
@@ -1678,7 +1678,7 @@ pub async fn execute_chat_turn(
         };
         format!(
             "{coding_block}\n\n---\n\n# Active repository\n\n**{}** — `{}`\n\n---\n\n# Session\n\n{briefing}",
-            ctx.repo_name, ctx.path_rel
+            ctx.repo_name(), ctx.path_rel()
         )
     } else {
         let p = persona.trim();
@@ -1839,11 +1839,11 @@ pub async fn chat_send_message(
             .ok_or_else(|| "coding mode requires codingRepoId".to_string())?;
         let meta = crate::repos::get_repo_meta(&state.workspace_root, repo_id)
             .map_err(|e| e.to_string())?;
-        ChatTurnOptions::coding(CodingTurnContext {
-            repo_id: meta.id.clone(),
-            repo_name: meta.name.clone(),
-            path_rel: meta.path_rel.clone(),
-        })
+        ChatTurnOptions::coding(CodingTurnContext::new(
+            meta.id.clone(),
+            meta.name.clone(),
+            meta.path_rel.clone(),
+        ))
     } else if silent_user_message == Some(true) {
         ChatTurnOptions::silent_user_turn()
     } else {
