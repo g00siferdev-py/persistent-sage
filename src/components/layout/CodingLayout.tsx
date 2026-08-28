@@ -273,6 +273,9 @@ export function CodingLayout({
         name: cloneName.trim() || null,
       });
       setRepoView(view);
+      if (view.activeRepoId) {
+        onActiveRepoIdChange(view.activeRepoId);
+      }
       setCloneUrl("");
       setCloneName("");
     } catch (e) {
@@ -280,7 +283,7 @@ export function CodingLayout({
     } finally {
       setCloning(false);
     }
-  }, [cloneName, cloneUrl]);
+  }, [cloneName, cloneUrl, onActiveRepoIdChange]);
 
   const createProject = useCallback(async () => {
     const name = newProjectName.trim();
@@ -296,13 +299,16 @@ export function CodingLayout({
         template: newProjectTemplate,
       });
       setRepoView(view);
+      if (view.activeRepoId) {
+        onActiveRepoIdChange(view.activeRepoId);
+      }
       setNewProjectName("");
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : String(e));
     } finally {
       setCreating(false);
     }
-  }, [newProjectName, newProjectTemplate]);
+  }, [newProjectName, newProjectTemplate, onActiveRepoIdChange]);
 
   const collapseTree = useCallback(() => {
     const version = expandVersion + 1;

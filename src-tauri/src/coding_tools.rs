@@ -228,7 +228,8 @@ pub fn repo_create_tool_definition() -> ToolDefinition {
         name: "coding_repo_create".into(),
         description: Some(
             "Create a new git repository under workspace/repos with a starter template. \
-             Does not require GitHub — use for greenfield projects. Sets the new repo as active."
+             Does not require GitHub — use for greenfield projects. After this succeeds, \
+             subsequent coding tools in this turn target the new repository (use repo-relative paths)."
                 .into(),
         ),
         parameters: json!({
@@ -250,8 +251,8 @@ pub fn repo_create_tool_definition() -> ToolDefinition {
 }
 
 /// Workspace-relative path for the active repo, e.g. `repos/persistent-sage`.
-pub fn repo_workspace_rel(ctx: &CodingTurnContext) -> &str {
-    ctx.path_rel.as_str()
+pub fn repo_workspace_rel(ctx: &CodingTurnContext) -> String {
+    ctx.path_rel()
 }
 
 fn workspace_path_for_repo_file(
@@ -259,7 +260,11 @@ fn workspace_path_for_repo_file(
     ctx: &CodingTurnContext,
     repo_rel: &str,
 ) -> Result<PathBuf, ProviderError> {
-    resolve_repo_file_path(workspace_root, ctx.path_rel.trim(), repo_rel)
+    resolve_repo_file_path(workspace_root, ctx.path_rel().trim(), repo_rel)
+}
+
+fn bind_turn_to_repo(ctx: &CodingTurnContext, meta: &crate::repos::RepoMeta) {
+    ctx.rebind(meta.id.clone(), meta.name.clone(), meta.path_rel.clone());
 }
 
 /// Resolve a repo-relative file path under `workspace/repos/{repo}/`.
@@ -789,9 +794,11 @@ pub async fn run_coding_tool(
         let template = v["template"].as_str().map(str::trim).filter(|s| !s.is_empty());
         let meta = crate::repos::create_repository(workspace_root, project_name, template)
             .map_err(tool_err)?;
+        bind_turn_to_repo(ctx, &meta);
         let template_label = template.unwrap_or("empty");
         return Ok(format!(
-            "Created repo `{project_name}` with template `{template_label}` at `{}` (id: {}). It is now the active repo.",
+            "Created repo `{project_name}` with template `{template_label}` at `{}` (id: {}). \
+             Subsequent coding tools in this turn now target that repository.",
             meta.path_rel, meta.id
         ));
     }
@@ -900,8 +907,9 @@ pub async fn run_coding_tool(
             )
             .await
             .map_err(tool_err)?;
+            bind_turn_to_repo(ctx, &meta);
             Ok(format!(
-                "Cloned `{}` into `{}` (id: {}).",
+                "Cloned `{}` into `{}` (id: {}). Subsequent coding tools in this turn now target that repository.",
                 url, meta.path_rel, meta.id
             ))
         }
@@ -1018,6 +1026,22 @@ pub fn is_coding_tool_name(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::{Path, PathBuf};
+
+    fn tmp_workspace() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("target").join(format!(
+            "coding-tools-test-{}",
+            uuid::Uuid::new_v4()
+        ))
+    }
+
+    fn block_on<F: std::future::Future>(fut: F) -> F::Output {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime")
+            .block_on(fut)
+    }
 
     #[test]
     fn validate_blocks_rm_rf() {
@@ -1027,5 +1051,65 @@ mod tests {
     #[test]
     fn validate_allows_cargo() {
         assert!(validate_command("cargo test").is_ok());
+    }
+
+    #[test]
+    fn repo_create_rebinds_turn_so_later_patches_hit_new_repo() {
+        let workspace = tmp_workspace();
+        std::fs::create_dir_all(&workspace).unwrap();
+        let original =
+            crate::repos::create_repository(&workspace, "original-app", Some("empty")).unwrap();
+        let ctx = CodingTurnContext::new(
+            original.id.clone(),
+            original.name.clone(),
+            original.path_rel.clone(),
+        );
+        let original_readme = workspace
+            .join("repos")
+            .join(&original.id)
+            .join("README.md");
+        let original_before = std::fs::read_to_string(&original_readme).unwrap();
+
+        let created = block_on(run_coding_tool(
+            &workspace,
+            &ctx,
+            "coding_repo_create",
+            r#"{"name":"fresh-app","template":"empty"}"#,
+            None,
+            None,
+            &workspace,
+        ))
+        .expect("create repo");
+        assert!(
+            created.contains("Subsequent coding tools in this turn now target that repository"),
+            "{created}"
+        );
+        assert_eq!(ctx.path_rel(), "repos/fresh-app");
+        assert_eq!(ctx.repo_id(), "fresh-app");
+
+        let patched = block_on(run_coding_tool(
+            &workspace,
+            &ctx,
+            "coding_apply_patch",
+            r#"{"path":"README.md","old_string":"Created with Persistent Sage coding mode.","new_string":"Patched in the new repo."}"#,
+            None,
+            None,
+            &workspace,
+        ))
+        .expect("patch new repo");
+        assert!(patched.contains("Patched `README.md`"), "{patched}");
+
+        let new_readme = std::fs::read_to_string(workspace.join("repos/fresh-app/README.md")).unwrap();
+        assert!(
+            new_readme.contains("Patched in the new repo."),
+            "{new_readme}"
+        );
+        let original_after = std::fs::read_to_string(&original_readme).unwrap();
+        assert_eq!(
+            original_before, original_after,
+            "patch must not land in the repo the turn started in"
+        );
+
+        let _ = std::fs::remove_dir_all(&workspace);
     }
 }
