@@ -702,6 +702,44 @@ fn should_skip_tree_entry(name: &str) -> bool {
         || SKIP_DIR_NAMES.iter().any(|s| name.eq_ignore_ascii_case(s))
 }
 
+/// Reject git-option injection in a model-supplied repo-relative path.
+///
+/// `coding_git_diff` used to pass `path` straight through as a `git diff` argument.
+/// Values like `--output=../../../settings.json` make git write the diff outside the
+/// repo (confirmed: `git diff --output=<file>` creates/overwrites that file).
+fn git_scoped_repo_path(path: &str) -> Result<&str, ProviderError> {
+    let p = path.trim();
+    if p.is_empty() {
+        return Err(tool_err("path is empty"));
+    }
+    if p.starts_with('-') {
+        return Err(tool_err(
+            "path must be a repo-relative file or directory, not a git option",
+        ));
+    }
+    Ok(p)
+}
+
+fn coding_git_diff_args(
+    workspace_root: &Path,
+    ctx: &CodingTurnContext,
+    path: Option<&str>,
+    staged: bool,
+) -> Result<Vec<String>, ProviderError> {
+    let mut args = vec!["diff".to_string()];
+    if staged {
+        args.push("--cached".into());
+    }
+    if let Some(raw) = path {
+        let p = git_scoped_repo_path(raw)?;
+        // Ensure `..` / absolute / out-of-repo paths cannot be used either.
+        let _resolved = workspace_path_for_repo_file(workspace_root, ctx, p)?;
+        args.push("--".into());
+        args.push(p.to_string());
+    }
+    Ok(args)
+}
+
 fn coding_apply_patch(
     workspace_root: &Path,
     ctx: &CodingTurnContext,
@@ -834,13 +872,7 @@ pub async fn run_coding_tool(
         "coding_git_diff" => {
             let staged = v["staged"].as_bool().unwrap_or(false);
             let path = v["path"].as_str().map(str::trim).filter(|s| !s.is_empty());
-            let mut args: Vec<String> = vec!["diff".into()];
-            if staged {
-                args.push("--cached".into());
-            }
-            if let Some(p) = path {
-                args.push(p.to_string());
-            }
+            let args = coding_git_diff_args(workspace_root, ctx, path, staged)?;
             let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
             run_git(&repo_dir, &arg_refs).await
         }
@@ -1027,5 +1059,61 @@ mod tests {
     #[test]
     fn validate_allows_cargo() {
         assert!(validate_command("cargo test").is_ok());
+    }
+
+    #[test]
+    fn git_diff_path_rejects_option_injection() {
+        assert!(git_scoped_repo_path("--output=../../../settings.json").is_err());
+        assert!(git_scoped_repo_path("--output=/tmp/pwned").is_err());
+        assert!(git_scoped_repo_path("-C").is_err());
+        assert!(git_scoped_repo_path("--no-index").is_err());
+        assert_eq!(git_scoped_repo_path("src/main.rs").unwrap(), "src/main.rs");
+        assert_eq!(git_scoped_repo_path("README.md").unwrap(), "README.md");
+    }
+
+    #[test]
+    fn git_diff_args_reject_output_option_and_keep_safe_paths_after_dashdash() {
+        let tmp = std::env::temp_dir().join(format!(
+            "ps-git-diff-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let workspace = tmp.join("workspace");
+        let repo = workspace.join("repos").join("demo");
+        std::fs::create_dir_all(&repo).unwrap();
+        std::fs::write(repo.join("README.md"), "hi\n").unwrap();
+        let ctx = CodingTurnContext {
+            repo_id: "r1".into(),
+            repo_name: "demo".into(),
+            path_rel: "repos/demo".into(),
+        };
+
+        let err = coding_git_diff_args(
+            &workspace,
+            &ctx,
+            Some("--output=../../../settings.json"),
+            false,
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("git option") || msg.contains("not a git option"),
+            "unexpected error: {msg}"
+        );
+
+        let args = coding_git_diff_args(&workspace, &ctx, Some("README.md"), true).unwrap();
+        assert_eq!(
+            args,
+            vec![
+                "diff".to_string(),
+                "--cached".into(),
+                "--".into(),
+                "README.md".into()
+            ]
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }
