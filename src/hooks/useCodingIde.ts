@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  applyOpenedFileFromDisk,
+  shouldFetchEditorFile,
+} from "@/lib/codingEditorOpen";
 
 export type OpenEditorFile = {
   pathRel: string;
@@ -61,7 +65,10 @@ export function useCodingIde(activeRepoId: string | null) {
   const [terminalOpen, setTerminalOpen] = useState(true);
   const [terminalHeight, setTerminalHeight] = useState(loadTerminalHeight);
   const [shellRunning, setShellRunning] = useState(false);
-  const openSeq = useRef(0);
+  const openFilesRef = useRef<OpenEditorFile[]>([]);
+  openFilesRef.current = openFiles;
+  /** Per-path generation so opening B does not cancel A's in-flight read. */
+  const loadGenRef = useRef<Map<string, number>>(new Map());
 
   const setViewMode = useCallback((mode: CodingViewMode) => {
     setViewModeState(mode);
@@ -85,6 +92,7 @@ export function useCodingIde(activeRepoId: string | null) {
   useEffect(() => {
     setOpenFiles([]);
     setActivePath(null);
+    loadGenRef.current.clear();
   }, [activeRepoId]);
 
   const appendTerminal = useCallback((kind: TerminalLine["kind"], text: string) => {
@@ -104,45 +112,44 @@ export function useCodingIde(activeRepoId: string | null) {
       const path = pathRel.trim();
       if (!path) return;
 
-      setOpenFiles((prev) => {
-        if (prev.some((f) => f.pathRel === path)) return prev;
-        return [
-          ...prev,
-          {
-            pathRel: path,
-            content: "",
-            savedContent: "",
-            language: "plaintext",
-            loading: true,
-            error: null,
-          },
-        ];
-      });
       setActivePath(path);
+      // Re-clicking an already-open file in the tree must not re-read disk:
+      // that overwrites unsaved edits with the on-disk snapshot.
+      if (!shouldFetchEditorFile(openFilesRef.current, path)) {
+        return;
+      }
 
-      const seq = ++openSeq.current;
+      setOpenFiles((prev) => {
+        const next = prev.some((f) => f.pathRel === path)
+          ? prev.map((f) =>
+              f.pathRel === path ? { ...f, loading: true, error: null } : f,
+            )
+          : [
+              ...prev,
+              {
+                pathRel: path,
+                content: "",
+                savedContent: "",
+                language: "plaintext",
+                loading: true,
+                error: null,
+              },
+            ];
+        openFilesRef.current = next;
+        return next;
+      });
+
+      const gen = (loadGenRef.current.get(path) ?? 0) + 1;
+      loadGenRef.current.set(path, gen);
       try {
         const file = await invoke<CodingFileView>("coding_read_file", {
           repoId: activeRepoId,
           pathRel: path,
         });
-        if (seq !== openSeq.current) return;
-        setOpenFiles((prev) =>
-          prev.map((f) =>
-            f.pathRel === path
-              ? {
-                  pathRel: file.pathRel,
-                  content: file.content,
-                  savedContent: file.content,
-                  language: file.language,
-                  loading: false,
-                  error: null,
-                }
-              : f,
-          ),
-        );
+        if (loadGenRef.current.get(path) !== gen) return;
+        setOpenFiles((prev) => applyOpenedFileFromDisk(prev, path, file));
       } catch (e) {
-        if (seq !== openSeq.current) return;
+        if (loadGenRef.current.get(path) !== gen) return;
         const msg = e instanceof Error ? e.message : String(e);
         setOpenFiles((prev) =>
           prev.map((f) =>
@@ -158,6 +165,7 @@ export function useCodingIde(activeRepoId: string | null) {
     (pathRel: string) => {
       setOpenFiles((prev) => {
         const next = prev.filter((f) => f.pathRel !== pathRel);
+        openFilesRef.current = next;
         setActivePath((cur) => {
           if (cur !== pathRel) return cur;
           return next.length > 0 ? next[next.length - 1].pathRel : null;
