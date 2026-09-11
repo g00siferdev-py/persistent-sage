@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Loader2, NotepadText, Plus, Save, Send, Trash2 } from "lucide-react";
+import {
+  codingNoteNeedsFlush,
+  shouldClearDirtyAfterWrite,
+  shouldReloadCodingNoteFromDisk,
+} from "@/lib/codingNotepadPersist";
 
 type NoteMeta = {
   name: string;
@@ -26,6 +31,11 @@ export function CodingNotepad({ open, onToggle }: Props) {
   const [newName, setNewName] = useState("");
   const dirtyRef = useRef(false);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftRef = useRef(draft);
+  const activeNameRef = useRef(activeName);
+  const loadedNameRef = useRef<string | null>(null);
+  draftRef.current = draft;
+  activeNameRef.current = activeName;
 
   const loadList = useCallback(async () => {
     try {
@@ -46,6 +56,7 @@ export function CodingNotepad({ open, onToggle }: Props) {
       const content = await invoke<string>("coding_notes_read", { name });
       setDraft(content);
       dirtyRef.current = false;
+      loadedNameRef.current = name;
     } catch (e) {
       setError(String(e));
     } finally {
@@ -58,7 +69,16 @@ export function CodingNotepad({ open, onToggle }: Props) {
   }, [loadList]);
 
   useEffect(() => {
-    if (open) void loadNote(activeName);
+    if (
+      !shouldReloadCodingNoteFromDisk({
+        open,
+        activeName,
+        loadedName: loadedNameRef.current,
+      })
+    ) {
+      return;
+    }
+    void loadNote(activeName);
   }, [activeName, open, loadNote]);
 
   const persist = useCallback(
@@ -67,10 +87,22 @@ export function CodingNotepad({ open, onToggle }: Props) {
       setError(null);
       try {
         await invoke("coding_notes_write", { name, content });
-        dirtyRef.current = false;
+        if (
+          shouldClearDirtyAfterWrite({
+            writtenName: name,
+            writtenContent: content,
+            currentName: activeNameRef.current,
+            currentContent: draftRef.current,
+          })
+        ) {
+          dirtyRef.current = false;
+        }
         await loadList();
       } catch (e) {
         setError(String(e));
+        if (activeNameRef.current === name) {
+          dirtyRef.current = true;
+        }
       } finally {
         setSaving(false);
       }
@@ -78,18 +110,60 @@ export function CodingNotepad({ open, onToggle }: Props) {
     [loadList],
   );
 
+  const cancelAutosave = useCallback(() => {
+    if (autosaveTimer.current) {
+      clearTimeout(autosaveTimer.current);
+      autosaveTimer.current = null;
+    }
+  }, []);
+
+  const flushIfDirty = useCallback(
+    (kind: "switch-note" | "collapse" | "unmount" | "create-note") => {
+      if (!codingNoteNeedsFlush(dirtyRef.current, kind)) return;
+      cancelAutosave();
+      const name = activeNameRef.current;
+      const content = draftRef.current;
+      // Drop dirty before changing notes so the autosave effect cannot write
+      // this buffer into the next file while load is in flight.
+      dirtyRef.current = false;
+      void persist(name, content);
+    },
+    [cancelAutosave, persist],
+  );
+
   useEffect(() => {
-    if (!open || !dirtyRef.current) return;
-    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    if (!open || loading || !dirtyRef.current) return;
+    cancelAutosave();
     autosaveTimer.current = setTimeout(() => {
       void persist(activeName, draft);
     }, AUTOSAVE_MS);
     return () => {
-      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+      cancelAutosave();
     };
-  }, [draft, activeName, open, persist]);
+  }, [draft, activeName, open, loading, persist, cancelAutosave]);
+
+  const flushIfDirtyRef = useRef(flushIfDirty);
+  flushIfDirtyRef.current = flushIfDirty;
+
+  useEffect(() => {
+    return () => {
+      flushIfDirtyRef.current("unmount");
+    };
+  }, []);
 
   const handleSave = () => void persist(activeName, draft);
+
+  const handleToggle = () => {
+    if (open) flushIfDirty("collapse");
+    onToggle();
+  };
+
+  const handleSelectNote = (next: string) => {
+    if (next === activeName) return;
+    flushIfDirty("switch-note");
+    loadedNameRef.current = null;
+    setActiveName(next);
+  };
 
   const handleSubmit = () => {
     const stamp = new Date().toLocaleString();
@@ -105,9 +179,11 @@ export function CodingNotepad({ open, onToggle }: Props) {
     const name = newName.trim();
     if (!name) return;
     try {
+      flushIfDirty("create-note");
       const created = await invoke<string>("coding_notes_create", { name });
       setNewName("");
       await loadList();
+      loadedNameRef.current = null;
       setActiveName(created);
     } catch (e) {
       setError(String(e));
@@ -118,7 +194,10 @@ export function CodingNotepad({ open, onToggle }: Props) {
     if (activeName === DEFAULT_NOTE) return;
     if (!window.confirm(`Delete ${activeName}?`)) return;
     try {
+      cancelAutosave();
+      dirtyRef.current = false;
       await invoke("coding_notes_delete", { name: activeName });
+      loadedNameRef.current = null;
       setActiveName(DEFAULT_NOTE);
       await loadList();
     } catch (e) {
@@ -132,7 +211,7 @@ export function CodingNotepad({ open, onToggle }: Props) {
     <div className="shrink-0 overflow-hidden rounded-lg border border-ps-border bg-white shadow-sm dark:border-ps-border dark:bg-ps-elevated dark:shadow-none">
       <button
         type="button"
-        onClick={onToggle}
+        onClick={handleToggle}
         className="flex w-full items-center justify-between border-b border-ps-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-ps-muted hover:bg-ps-elevated dark:border-ps-border dark:text-ps-faint dark:hover:bg-ps-surface dark:hover:text-ps-muted"
         aria-expanded={open}
       >
@@ -148,7 +227,7 @@ export function CodingNotepad({ open, onToggle }: Props) {
           <div className="flex items-center gap-1">
             <select
               value={activeName}
-              onChange={(e) => setActiveName(e.target.value)}
+              onChange={(e) => handleSelectNote(e.target.value)}
               className="ps-select min-w-0 flex-1 px-1.5 py-1 text-[11px]"
             >
               {notes.map((n) => (
