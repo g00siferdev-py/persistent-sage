@@ -15,7 +15,8 @@
     "msix:assets": "node scripts/prepare-msix-assets.mjs",
     "msix:pack": "npm run build && npm run tauri -- build --no-bundle --config src-tauri/tauri.store.conf.json && npm run msix:assets && pwsh -NoProfile -ExecutionPolicy Bypass -Command \"New-Item -ItemType Directory -Force msix-dist | Out-Null; Copy-Item -Force src-tauri/target/release/persistent-sage.exe msix-dist/; winapp pack ./msix-dist --manifest Package.appxmanifest --output PersistentSage_3.0.0.0_x64.msix\"",
     "build:windows-installer": "npm run build && tauri build -- --bundles nsis",
-    "package:portable": "node scripts/package-portable.mjs"
+    "package:portable": "node scripts/package-portable.mjs",
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
