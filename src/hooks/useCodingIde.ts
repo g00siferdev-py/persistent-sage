@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  applyRepoFileRefresh,
+  canSaveEditorFile,
+  dirtyBuffersToStash,
+  shouldApplyAsyncEditorResult,
+  type StashedRepoBuffers,
+} from "@/lib/codingEditorRepoGuard";
 
 export type OpenEditorFile = {
   pathRel: string;
   content: string;
   savedContent: string;
   language: string;
+  repoId: string;
   loading?: boolean;
   error?: string | null;
 };
@@ -62,6 +70,15 @@ export function useCodingIde(activeRepoId: string | null) {
   const [terminalHeight, setTerminalHeight] = useState(loadTerminalHeight);
   const [shellRunning, setShellRunning] = useState(false);
   const openSeq = useRef(0);
+  const activeRepoIdRef = useRef(activeRepoId);
+  const openFilesRef = useRef<OpenEditorFile[]>([]);
+  const activePathRef = useRef<string | null>(null);
+  const buffersByRepo = useRef<Map<string, StashedRepoBuffers<OpenEditorFile>>>(new Map());
+  const prevRepoIdRef = useRef<string | null>(null);
+
+  activeRepoIdRef.current = activeRepoId;
+  openFilesRef.current = openFiles;
+  activePathRef.current = activePath;
 
   const setViewMode = useCallback((mode: CodingViewMode) => {
     setViewModeState(mode);
@@ -83,6 +100,25 @@ export function useCodingIde(activeRepoId: string | null) {
   }, []);
 
   useEffect(() => {
+    const prev = prevRepoIdRef.current;
+    openSeq.current += 1;
+
+    if (prev && prev !== activeRepoId) {
+      const stash = dirtyBuffersToStash(openFilesRef.current, activePathRef.current);
+      if (stash) buffersByRepo.current.set(prev, stash);
+      else buffersByRepo.current.delete(prev);
+    }
+
+    prevRepoIdRef.current = activeRepoId;
+
+    if (activeRepoId) {
+      const restored = buffersByRepo.current.get(activeRepoId);
+      if (restored) {
+        setOpenFiles(restored.files);
+        setActivePath(restored.activePath);
+        return;
+      }
+    }
     setOpenFiles([]);
     setActivePath(null);
   }, [activeRepoId]);
@@ -101,11 +137,12 @@ export function useCodingIde(activeRepoId: string | null) {
   const openFile = useCallback(
     async (pathRel: string) => {
       if (!activeRepoId) return;
+      const repoId = activeRepoId;
       const path = pathRel.trim();
       if (!path) return;
 
       setOpenFiles((prev) => {
-        if (prev.some((f) => f.pathRel === path)) return prev;
+        if (prev.some((f) => f.pathRel === path && f.repoId === repoId)) return prev;
         return [
           ...prev,
           {
@@ -113,6 +150,7 @@ export function useCodingIde(activeRepoId: string | null) {
             content: "",
             savedContent: "",
             language: "plaintext",
+            repoId,
             loading: true,
             error: null,
           },
@@ -123,18 +161,28 @@ export function useCodingIde(activeRepoId: string | null) {
       const seq = ++openSeq.current;
       try {
         const file = await invoke<CodingFileView>("coding_read_file", {
-          repoId: activeRepoId,
+          repoId,
           pathRel: path,
         });
-        if (seq !== openSeq.current) return;
+        if (
+          !shouldApplyAsyncEditorResult({
+            startedSeq: seq,
+            currentSeq: openSeq.current,
+            startedRepoId: repoId,
+            currentRepoId: activeRepoIdRef.current,
+          })
+        ) {
+          return;
+        }
         setOpenFiles((prev) =>
           prev.map((f) =>
-            f.pathRel === path
+            f.pathRel === path && f.repoId === repoId
               ? {
                   pathRel: file.pathRel,
                   content: file.content,
                   savedContent: file.content,
                   language: file.language,
+                  repoId,
                   loading: false,
                   error: null,
                 }
@@ -142,11 +190,20 @@ export function useCodingIde(activeRepoId: string | null) {
           ),
         );
       } catch (e) {
-        if (seq !== openSeq.current) return;
+        if (
+          !shouldApplyAsyncEditorResult({
+            startedSeq: seq,
+            currentSeq: openSeq.current,
+            startedRepoId: repoId,
+            currentRepoId: activeRepoIdRef.current,
+          })
+        ) {
+          return;
+        }
         const msg = e instanceof Error ? e.message : String(e);
         setOpenFiles((prev) =>
           prev.map((f) =>
-            f.pathRel === path ? { ...f, loading: false, error: msg } : f,
+            f.pathRel === path && f.repoId === repoId ? { ...f, loading: false, error: msg } : f,
           ),
         );
       }
@@ -181,19 +238,23 @@ export function useCodingIde(activeRepoId: string | null) {
   const saveActive = useCallback(async () => {
     if (!activeRepoId || !activePath) return false;
     const file = openFiles.find((f) => f.pathRel === activePath);
-    if (!file || file.loading || file.error) return false;
+    if (!file || !canSaveEditorFile(file, activeRepoId)) return false;
+    const repoId = file.repoId;
+    const pathRel = file.pathRel;
+    const content = file.content;
     try {
       await invoke("coding_write_file", {
-        repoId: activeRepoId,
-        pathRel: file.pathRel,
-        content: file.content,
+        repoId,
+        pathRel,
+        content,
       });
+      if (activeRepoIdRef.current !== repoId) return true;
       setOpenFiles((prev) =>
         prev.map((f) =>
-          f.pathRel === file.pathRel ? { ...f, savedContent: f.content } : f,
+          f.pathRel === pathRel && f.repoId === repoId ? { ...f, savedContent: f.content } : f,
         ),
       );
-      appendTerminal("info", `Saved ${file.pathRel}`);
+      appendTerminal("info", `Saved ${pathRel}`);
       return true;
     } catch (e) {
       appendTerminal("error", e instanceof Error ? e.message : String(e));
@@ -235,24 +296,44 @@ export function useCodingIde(activeRepoId: string | null) {
 
   const refreshCleanFiles = useCallback(async () => {
     if (!activeRepoId) return;
-    const toRefresh = openFiles.filter((f) => f.content === f.savedContent && !f.loading);
+    const repoId = activeRepoId;
+    const seq = openSeq.current;
+    const toRefresh = openFiles.filter(
+      (f) => f.repoId === repoId && f.content === f.savedContent && !f.loading,
+    );
     for (const f of toRefresh) {
+      if (
+        !shouldApplyAsyncEditorResult({
+          startedSeq: seq,
+          currentSeq: openSeq.current,
+          startedRepoId: repoId,
+          currentRepoId: activeRepoIdRef.current,
+        })
+      ) {
+        return;
+      }
       try {
         const file = await invoke<CodingFileView>("coding_read_file", {
-          repoId: activeRepoId,
+          repoId,
           pathRel: f.pathRel,
         });
+        if (
+          !shouldApplyAsyncEditorResult({
+            startedSeq: seq,
+            currentSeq: openSeq.current,
+            startedRepoId: repoId,
+            currentRepoId: activeRepoIdRef.current,
+          })
+        ) {
+          return;
+        }
         setOpenFiles((prev) =>
-          prev.map((x) =>
-            x.pathRel === f.pathRel
-              ? {
-                  ...x,
-                  content: file.content,
-                  savedContent: file.content,
-                  language: file.language,
-                }
-              : x,
-          ),
+          applyRepoFileRefresh(prev, {
+            pathRel: f.pathRel,
+            content: file.content,
+            language: file.language,
+            repoId,
+          }),
         );
       } catch {
         /* ignore stale paths */
