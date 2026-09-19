@@ -59,6 +59,19 @@ pub struct PlaygroundTelemetryRecord {
     pub error: Option<String>,
 }
 
+pub const PLAYGROUND_RUN_COMMAND_DISABLED_MESSAGE: &str =
+    "Playground execution is disabled. Enable Run Command in Settings -> Tools -> Coding mode (v2) to run code snippets.";
+
+pub fn ensure_playground_run_allowed(
+    settings: &crate::settings::SettingsManager,
+) -> Result<(), String> {
+    if settings.agent_coding_shell_enabled() {
+        Ok(())
+    } else {
+        Err(PLAYGROUND_RUN_COMMAND_DISABLED_MESSAGE.into())
+    }
+}
+
 fn sanitize_filename(input: &str) -> String {
     input
         .chars()
@@ -280,6 +293,7 @@ pub async fn coding_playground_run(
     state: tauri::State<'_, crate::NovaState>,
     request: PlaygroundRunRequest,
 ) -> Result<PlaygroundRunResult, String> {
+    ensure_playground_run_allowed(&state.settings)?;
     run_playground_request(&state.data_directory, request).await
 }
 
