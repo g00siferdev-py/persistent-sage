@@ -6,18 +6,22 @@
 //!   HTML, or plain text — rendered through the same headless Chrome/Chromium/Edge engine
 //!   used by `fetch_browser`, so the HTML/Markdown the agent produces prints with real
 //!   layout, fonts, and styling. It can also convert an existing workspace `.md`/`.html`/
-//!   `.txt` file to PDF via `source_path`.
+//!   `.txt` file to PDF via `source_path`. Active markup is sanitized and Chromium is
+//!   launched with network isolation so print-time fetches cannot reach local/private URLs.
 //!
 //! "Editing" a PDF is a read → modify → rewrite loop: read the text with
 //! `workspace_read_pdf`, change it, then rewrite the PDF with `workspace_write_pdf`.
 //!
 //! All paths are jailed to the workspace root (same sanitizer as the other workspace tools).
 
+use std::collections::HashSet;
 use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
 
+use ammonia::Builder as AmmoniaBuilder;
 use pulldown_cmark::{html as md_html, Options as MdOptions, Parser as MdParser};
+use scraper::{Html, Selector};
 use serde_json::{json, Value};
 use url::Url;
 
@@ -281,16 +285,127 @@ fn escape_html(s: &str) -> String {
     out
 }
 
+/// Pull the body contents out of a full HTML document so we never pass through
+/// attacker-controlled `<head>`/`<base>`/`<script>` chrome.
+fn extract_html_body(raw: &str) -> String {
+    let trimmed = raw.trim_start();
+    let lower = trimmed.to_ascii_lowercase();
+    if !(lower.starts_with("<!doctype") || lower.starts_with("<html")) {
+        return raw.to_string();
+    }
+    let doc = Html::parse_document(raw);
+    let Ok(sel) = Selector::parse("body") else {
+        return raw.to_string();
+    };
+    if let Some(body) = doc.select(&sel).next() {
+        return body.inner_html();
+    }
+    raw.to_string()
+}
+
+fn is_safe_pdf_img_src(value: &str) -> bool {
+    let v = value.trim();
+    // Only self-contained images — remote/file URLs would be fetched by Chromium
+    // while printing and can leak local/internal content into the PDF.
+    v.starts_with("data:image/")
+}
+
+fn is_safe_pdf_anchor_href(value: &str) -> bool {
+    let v = value.trim();
+    if v.starts_with('#') {
+        return true;
+    }
+    match Url::parse(v) {
+        Ok(u) => matches!(u.scheme(), "http" | "https" | "mailto"),
+        Err(_) => false,
+    }
+}
+
+/// Strip active / resource-bearing markup before headless Chromium prints it.
+///
+/// `workspace_write_pdf` stages model-controlled HTML as a local `file://` page.
+/// Without this, `<iframe>`, `<img>`, `<script>`, and CSS `url(...)` can make
+/// Chromium fetch local files or private-network URLs and bake the response into
+/// the output PDF — bypassing the workspace path jail and the SSRF guards used
+/// by `fetch_browser` / `http_request`.
+fn sanitize_html_for_pdf(html: &str) -> String {
+    let mut builder = AmmoniaBuilder::default();
+    builder.tags(HashSet::from([
+        "a",
+        "p",
+        "br",
+        "hr",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "ul",
+        "ol",
+        "li",
+        "blockquote",
+        "pre",
+        "code",
+        "em",
+        "strong",
+        "del",
+        "s",
+        "table",
+        "thead",
+        "tbody",
+        "tr",
+        "th",
+        "td",
+        "img",
+        "span",
+        "div",
+        "sup",
+        "sub",
+        "kbd",
+    ]));
+    // `data` is required for self-contained images; http(s)/mailto kept for inert anchors.
+    builder.url_schemes(HashSet::from(["data", "http", "https", "mailto"]));
+    builder.url_relative(ammonia::UrlRelative::Deny);
+    builder.attribute_filter(|element, attribute, value| match (element, attribute) {
+        ("img", "src") => {
+            if is_safe_pdf_img_src(value) {
+                Some(std::borrow::Cow::Borrowed(value))
+            } else {
+                None
+            }
+        }
+        ("a", "href") => {
+            if is_safe_pdf_anchor_href(value) {
+                Some(std::borrow::Cow::Borrowed(value))
+            } else {
+                None
+            }
+        }
+        _ => Some(std::borrow::Cow::Borrowed(value)),
+    });
+    builder.clean(html).to_string()
+}
+
+/// Chrome flags that keep PDF rendering offline (defense in depth with HTML sanitization).
+fn pdf_chrome_isolation_args() -> Vec<String> {
+    vec![
+        "--disable-background-networking".into(),
+        "--disable-extensions".into(),
+        "--disable-component-update".into(),
+        "--disable-sync".into(),
+        "--disable-default-apps".into(),
+        // Fail DNS for every host — including loopback — so print-time fetches die.
+        "--host-resolver-rules=MAP * ~NOTFOUND".into(),
+        // Route any remaining traffic to a dead proxy (empty bypass list so localhost
+        // is not excluded the way Chromium's defaults would).
+        "--proxy-server=http://127.0.0.1:1".into(),
+        "--proxy-bypass-list=".into(),
+    ]
+}
+
 /// Wrap the source in a full, print-friendly HTML document.
 fn build_html_document(raw: &str, fmt: PdfSourceFormat, title: Option<&str>) -> String {
-    // Full HTML documents are rendered as-is (the author controls the whole page).
-    if fmt == PdfSourceFormat::Html {
-        let lower = raw.trim_start().to_ascii_lowercase();
-        if lower.starts_with("<!doctype") || lower.starts_with("<html") {
-            return raw.to_string();
-        }
-    }
-
     let body = match fmt {
         PdfSourceFormat::Markdown => {
             let mut opts = MdOptions::empty();
@@ -303,10 +418,11 @@ fn build_html_document(raw: &str, fmt: PdfSourceFormat, title: Option<&str>) -> 
             md_html::push_html(&mut html_out, parser);
             html_out
         }
-        PdfSourceFormat::Html => raw.to_string(),
+        PdfSourceFormat::Html => extract_html_body(raw),
         PdfSourceFormat::Text => format!("<pre>{}</pre>", escape_html(raw)),
     };
 
+    let body = sanitize_html_for_pdf(&body);
     let doc_title = escape_html(title.unwrap_or("Document"));
 
     format!(
@@ -401,6 +517,7 @@ async fn render_html_to_pdf(
         "--virtual-time-budget=8000".into(),
         format!("--print-to-pdf={}", out_pdf.display()),
     ];
+    args.extend(pdf_chrome_isolation_args());
     args.extend(crate::browser_fetch::chrome_extra_launch_args());
     args.push(file_url.as_str().to_string());
 
@@ -458,10 +575,57 @@ mod tests {
     }
 
     #[test]
-    fn full_html_document_passthrough() {
-        let src = "<!DOCTYPE html><html><body><p>hi</p></body></html>";
-        let doc = build_html_document(src, PdfSourceFormat::Html, None);
-        assert_eq!(doc, src);
+    fn full_html_document_is_wrapped_and_sanitized() {
+        let src = "<!DOCTYPE html><html><head><script>fetch('http://127.0.0.1/x')</script>\
+                   <base href=\"file:///etc/\"></head><body><p>hi</p>\
+                   <iframe src=\"http://127.0.0.1:9/secret\"></iframe></body></html>";
+        let doc = build_html_document(src, PdfSourceFormat::Html, Some("Safe"));
+        assert!(doc.contains("<!DOCTYPE html>"));
+        assert!(doc.contains("<p>hi</p>"), "{doc}");
+        assert!(!doc.contains("<script"), "{doc}");
+        assert!(!doc.contains("<iframe"), "{doc}");
+        assert!(!doc.contains("<base"), "{doc}");
+        assert!(!doc.contains("127.0.0.1"), "{doc}");
+        assert!(doc.contains("<title>Safe</title>"), "{doc}");
+    }
+
+    #[test]
+    fn sanitize_strips_remote_images_and_file_urls() {
+        let dirty = r#"<p>x</p><img src="http://127.0.0.1:8765/secret.png"><img src="file:///etc/passwd">
+            <img src="data:image/png;base64,aaaa"><a href="file:///etc/shadow">bad</a>
+            <a href="https://example.com">ok</a><iframe src="http://169.254.169.254/"></iframe>
+            <script>alert(1)</script>"#;
+        let clean = sanitize_html_for_pdf(dirty);
+        assert!(clean.contains("<p>x</p>"), "{clean}");
+        assert!(clean.contains("data:image/png;base64,aaaa"), "{clean}");
+        assert!(clean.contains("https://example.com"), "{clean}");
+        assert!(!clean.contains("127.0.0.1"), "{clean}");
+        assert!(!clean.contains("file:///"), "{clean}");
+        assert!(!clean.contains("169.254.169.254"), "{clean}");
+        assert!(!clean.contains("<iframe"), "{clean}");
+        assert!(!clean.contains("<script"), "{clean}");
+        assert!(!clean.contains("alert"), "{clean}");
+    }
+
+    #[test]
+    fn markdown_remote_image_is_stripped() {
+        let doc = build_html_document(
+            "Hello\n\n![leak](http://127.0.0.1:9/secret)\n\n![ok](data:image/gif;base64,R0lGODlhAQABAAAAACw=)",
+            PdfSourceFormat::Markdown,
+            None,
+        );
+        assert!(doc.contains("Hello"), "{doc}");
+        assert!(!doc.contains("127.0.0.1"), "{doc}");
+        assert!(doc.contains("data:image/gif"), "{doc}");
+    }
+
+    #[test]
+    fn pdf_chrome_isolation_blocks_network() {
+        let args = pdf_chrome_isolation_args();
+        let joined = args.join(" ");
+        assert!(joined.contains("--host-resolver-rules=MAP * ~NOTFOUND"), "{joined}");
+        assert!(joined.contains("--proxy-server=http://127.0.0.1:1"), "{joined}");
+        assert!(args.iter().any(|a| a == "--proxy-bypass-list="), "{args:?}");
     }
 
     #[test]
