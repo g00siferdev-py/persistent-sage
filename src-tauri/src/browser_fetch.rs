@@ -691,6 +691,9 @@ async fn run_chrome(
     let mut cmd = Command::new(chrome);
     cmd.args(&args);
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    // Match playground/coding: a timed-out `output()` future must kill Chrome so it
+    // cannot keep holding the profile SingletonLock or leak a multi-hundred-MB tree.
+    cmd.kill_on_drop(true);
     apply_chrome_launch_env(&mut cmd);
     let fut = cmd.output();
     let output = tokio::time::timeout(Duration::from_secs(BROWSER_FETCH_TIMEOUT_SECS), fut)

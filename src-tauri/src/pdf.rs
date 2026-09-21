@@ -407,6 +407,10 @@ async fn render_html_to_pdf(
     let mut cmd = tokio::process::Command::new(&chrome);
     cmd.args(&args);
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    // Dropping a timed-out `output()` future must kill Chrome. Without this, a hang
+    // (e.g. Markdown/HTML loading a blackhole image URL) leaves the process tree alive,
+    // holds the shared profile SingletonLock, and breaks every later PDF render.
+    cmd.kill_on_drop(true);
     crate::browser_fetch::apply_chrome_launch_env(&mut cmd);
 
     let output = tokio::time::timeout(Duration::from_secs(PDF_RENDER_TIMEOUT_SECS), cmd.output())
@@ -474,5 +478,46 @@ mod tests {
             format_from_extension("notes/report.md"),
             Some(PdfSourceFormat::Markdown)
         ));
+    }
+
+    #[test]
+    fn markdown_external_image_becomes_img_tag() {
+        // Concrete hang trigger for PDF renders: Markdown images become <img src=...>
+        // that headless Chrome will fetch. A blackhole URL can prevent Chrome from
+        // exiting, so render launches must use kill_on_drop(true).
+        let doc = build_html_document(
+            "![x](http://10.255.255.1:81/never.png)",
+            PdfSourceFormat::Markdown,
+            None,
+        );
+        assert!(
+            doc.contains("<img src=\"http://10.255.255.1:81/never.png\""),
+            "{doc}"
+        );
+    }
+
+    /// Regression for the PDF/browser Chrome timeout pattern: when `kill_on_drop(true)`
+    /// is set, dropping a timed-out wait must reap the child (avoids SingletonLock DoS).
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn timed_out_output_future_kills_child_when_kill_on_drop() {
+        let mut cmd = tokio::process::Command::new("sleep");
+        cmd.arg("30");
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::null());
+        cmd.kill_on_drop(true);
+
+        let child = cmd.spawn().expect("spawn sleep");
+        let pid = child.id().expect("child pid");
+        let timed_out =
+            tokio::time::timeout(Duration::from_millis(250), child.wait_with_output()).await;
+        assert!(timed_out.is_err(), "sleep should still be running at timeout");
+
+        // Allow the OS a beat to reap the SIGKILL from Child::drop.
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        assert!(
+            !Path::new(&format!("/proc/{pid}")).exists(),
+            "timed-out child PID {pid} should be killed by kill_on_drop"
+        );
     }
 }
