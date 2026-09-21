@@ -3209,6 +3209,7 @@ dependencies = [
  "hex",
  "image",
  "keyring",
+ "libc",
  "nokhwa",
  "opener",
  "pdf-extract",
