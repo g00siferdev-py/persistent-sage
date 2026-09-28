@@ -4,6 +4,7 @@
 //! `document.md` file the agent can read/write via tools or conversation.
 
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -18,6 +19,19 @@ const DOCUMENT_NAME: &str = "document.md";
 const MAX_PROJECTS: usize = 64;
 const MAX_DOC_BYTES: usize = 400_000;
 const MAX_FORM_FIELDS: usize = 48;
+
+/// Serializes read-modify-write of `projects/_index.json`.
+///
+/// Creates and document updates (chat tools, parallel subagents, and the
+/// Productivity widget) otherwise load a stale or truncated index and drop
+/// projects that were just written.
+static PROJECT_INDEX_LOCK: Mutex<()> = Mutex::new(());
+
+fn projects_lock() -> MutexGuard<'static, ()> {
+    PROJECT_INDEX_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -84,7 +98,10 @@ fn save_index(workspace_root: &Path, index: &ProjectIndex) -> Result<(), String>
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let json = serde_json::to_string_pretty(index).map_err(|e| e.to_string())?;
-    std::fs::write(path, json).map_err(|e| e.to_string())
+    // Write aside and rename so a concurrent reader never observes a truncated file.
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, json).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
 fn project_dir_rel(id: &str) -> String {
@@ -169,10 +186,12 @@ pub struct ProjectListView {
 }
 
 pub fn list_projects(workspace_root: &Path) -> Result<Vec<ProjectMeta>, String> {
+    let _guard = projects_lock();
     Ok(load_index(workspace_root)?.projects)
 }
 
 pub fn list_projects_view(workspace_root: &Path) -> Result<ProjectListView, String> {
+    let _guard = projects_lock();
     let index = load_index(workspace_root)?;
     Ok(ProjectListView {
         projects: index.projects,
@@ -181,6 +200,7 @@ pub fn list_projects_view(workspace_root: &Path) -> Result<ProjectListView, Stri
 }
 
 pub fn get_project(workspace_root: &Path, id: &str) -> Result<Option<ProjectMeta>, String> {
+    let _guard = projects_lock();
     let id = slugify_id(id)?;
     Ok(load_index(workspace_root)?
         .projects
@@ -189,12 +209,32 @@ pub fn get_project(workspace_root: &Path, id: &str) -> Result<Option<ProjectMeta
 }
 
 pub fn set_active_project(workspace_root: &Path, id: Option<&str>) -> Result<(), String> {
+    let _guard = projects_lock();
     let mut index = load_index(workspace_root)?;
     index.active_project_id = id.map(slugify_id).transpose()?;
     save_index(workspace_root, &index)
 }
 
 pub fn create_project(
+    workspace_root: &Path,
+    id: &str,
+    title: &str,
+    kind: &str,
+    conversation_id: Option<&str>,
+    initial_document: Option<&str>,
+) -> Result<ProjectMeta, String> {
+    let _guard = projects_lock();
+    create_project_locked(
+        workspace_root,
+        id,
+        title,
+        kind,
+        conversation_id,
+        initial_document,
+    )
+}
+
+fn create_project_locked(
     workspace_root: &Path,
     id: &str,
     title: &str,
@@ -220,15 +260,12 @@ pub fn create_project(
     let now = Utc::now().to_rfc3339();
     let doc_path = document_rel(&id);
     let dir_rel = project_dir_rel(&id);
-    let dir = resolve_workspace_subpath(workspace_root, &dir_rel)
-        .map_err(|e| e.to_string())?;
+    let dir = resolve_workspace_subpath(workspace_root, &dir_rel).map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
-    let default_doc = format!(
-        "# {title}\n\n_Created {now}. Edit via chat or workspace files._\n"
-    );
+    let default_doc = format!("# {title}\n\n_Created {now}. Edit via chat or workspace files._\n");
     let doc_body = initial_document.unwrap_or(default_doc.as_str());
-    write_document(workspace_root, &id, doc_body)?;
+    write_document_locked(workspace_root, &id, doc_body)?;
 
     let meta = ProjectMeta {
         id: id.clone(),
@@ -247,6 +284,7 @@ pub fn create_project(
 }
 
 pub fn read_document(workspace_root: &Path, id: &str) -> Result<String, String> {
+    let _guard = projects_lock();
     let id = slugify_id(id)?;
     let rel = document_rel(&id);
     let path = resolve_workspace_subpath(workspace_root, &rel).map_err(|e| e.to_string())?;
@@ -262,6 +300,11 @@ pub fn read_document(workspace_root: &Path, id: &str) -> Result<String, String> 
 }
 
 pub fn write_document(workspace_root: &Path, id: &str, content: &str) -> Result<(), String> {
+    let _guard = projects_lock();
+    write_document_locked(workspace_root, id, content)
+}
+
+fn write_document_locked(workspace_root: &Path, id: &str, content: &str) -> Result<(), String> {
     let id = slugify_id(id)?;
     if content.len() > MAX_DOC_BYTES {
         return Err(format!("document too large (max {MAX_DOC_BYTES} bytes)"));
@@ -282,7 +325,12 @@ pub fn write_document(workspace_root: &Path, id: &str, content: &str) -> Result<
     save_index(workspace_root, &index)
 }
 
-pub fn touch_conversation(workspace_root: &Path, id: &str, conversation_id: &str) -> Result<(), String> {
+pub fn touch_conversation(
+    workspace_root: &Path,
+    id: &str,
+    conversation_id: &str,
+) -> Result<(), String> {
+    let _guard = projects_lock();
     let id = slugify_id(id)?;
     let mut index = load_index(workspace_root)?;
     if let Some(p) = index.projects.iter_mut().find(|p| p.id == id) {
@@ -398,19 +446,15 @@ pub async fn run_project_tool(
             let title = v["title"].as_str().unwrap_or("").trim();
             let kind = v["kind"].as_str().unwrap_or("").trim();
             let initial = v.get("initialDocument").and_then(|x| x.as_str());
-            let meta = create_project(
-                workspace_root,
-                id,
-                title,
-                kind,
-                conversation_id,
-                initial,
-            )
-            .map_err(|e| tool_err(e))?;
+            let meta = create_project(workspace_root, id, title, kind, conversation_id, initial)
+                .map_err(|e| tool_err(e))?;
             if let Some((_, memory)) = memory_tools {
                 let _ = memory.upsert_project_anchor(&meta.id, &meta.title);
             }
-            Ok(format!("Created project `{}` at {}", meta.id, meta.doc_path))
+            Ok(format!(
+                "Created project `{}` at {}",
+                meta.id, meta.doc_path
+            ))
         }
         "project_read" => {
             let id = v["id"].as_str().unwrap_or("").trim();
@@ -459,11 +503,7 @@ pub fn validate_form_body(body: &Value) -> Result<(), String> {
         return Err(format!("form has too many fields (max {MAX_FORM_FIELDS})"));
     }
     for f in fields {
-        let id = f
-            .get("id")
-            .and_then(|x| x.as_str())
-            .unwrap_or("")
-            .trim();
+        let id = f.get("id").and_then(|x| x.as_str()).unwrap_or("").trim();
         if id.is_empty() {
             return Err("each form field needs a non-empty id".into());
         }
@@ -478,7 +518,10 @@ pub fn validate_form_body(body: &Value) -> Result<(), String> {
             other => return Err(format!("unsupported form field kind: {other}")),
         }
         if (kind == "select" || kind == "radio")
-            && !f.get("options").and_then(|o| o.as_array()).is_some_and(|a| !a.is_empty())
+            && !f
+                .get("options")
+                .and_then(|o| o.as_array())
+                .is_some_and(|a| !a.is_empty())
         {
             return Err(format!("field `{id}` needs a non-empty options array"));
         }
@@ -496,12 +539,56 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("opensage-proj-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
-        let meta = create_project(&tmp, "test-budget", "Test Budget", "budget", None, None).unwrap();
+        let meta =
+            create_project(&tmp, "test-budget", "Test Budget", "budget", None, None).unwrap();
         assert_eq!(meta.id, "test-budget");
         let doc = read_document(&tmp, "test-budget").unwrap();
         assert!(doc.contains("Test Budget"));
         let list = list_projects(&tmp).unwrap();
         assert_eq!(list.len(), 1);
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    /// Parallel `project_create` calls (subagents, or the widget plus a chat tool)
+    /// must not drop entries from `projects/_index.json`.
+    #[test]
+    fn concurrent_creates_keep_every_project() {
+        let tmp = std::env::temp_dir().join(format!(
+            "opensage-proj-race-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        const N: usize = 8;
+        let mut handles = Vec::with_capacity(N);
+        for i in 0..N {
+            let root = tmp.clone();
+            handles.push(std::thread::spawn(move || {
+                create_project(
+                    &root,
+                    &format!("proj-{i}"),
+                    &format!("Project {i}"),
+                    "document",
+                    None,
+                    Some("body"),
+                )
+                .expect("create");
+            }));
+        }
+        for handle in handles {
+            handle.join().expect("thread");
+        }
+
+        let list = list_projects(&tmp).unwrap();
+        let mut ids: Vec<_> = list.iter().map(|p| p.id.clone()).collect();
+        ids.sort();
+        let expected: Vec<_> = (0..N).map(|i| format!("proj-{i}")).collect();
+        assert_eq!(ids, expected, "lost project index entries: {ids:?}");
         let _ = fs::remove_dir_all(&tmp);
     }
 }
