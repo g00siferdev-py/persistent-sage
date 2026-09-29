@@ -894,11 +894,27 @@ pub async fn gmail_list(
     Ok(json!({ "messages": messages, "totalListed": messages.len() }))
 }
 
+/// Gmail `body.data` is base64url and usually omits `=` padding. `URL_SAFE` rejects that.
+fn decode_gmail_body_data(data: &str) -> Option<Vec<u8>> {
+    let data = data.trim();
+    if data.is_empty() {
+        return Some(Vec::new());
+    }
+    let pad = (4 - (data.len() % 4)) % 4;
+    if pad == 0 {
+        return base64::engine::general_purpose::URL_SAFE.decode(data).ok();
+    }
+    let mut padded = String::with_capacity(data.len() + pad);
+    padded.push_str(data);
+    padded.extend(std::iter::repeat('=').take(pad));
+    base64::engine::general_purpose::URL_SAFE.decode(padded).ok()
+}
+
 fn walk_for_body(part: &Value, prefer: &str) -> Option<String> {
     let mime = part.get("mimeType").and_then(Value::as_str).unwrap_or("");
     if mime.eq_ignore_ascii_case(prefer) {
         if let Some(data) = part.pointer("/body/data").and_then(Value::as_str) {
-            if let Ok(bytes) = base64::engine::general_purpose::URL_SAFE.decode(data) {
+            if let Some(bytes) = decode_gmail_body_data(data) {
                 return Some(String::from_utf8_lossy(&bytes).into_owned());
             }
         }
@@ -2387,5 +2403,36 @@ mod tests {
             .expect("write");
         let code = wait.join().expect("join").expect("code");
         assert_eq!(code, "test-auth-code");
+    }
+
+    #[test]
+    fn gmail_body_decodes_unpadded_base64url() {
+        // Gmail omits '=' padding. "Hello, this is the full message body."
+        let part = json!({
+            "mimeType": "text/plain",
+            "body": { "data": "SGVsbG8sIHRoaXMgaXMgdGhlIGZ1bGwgbWVzc2FnZSBib2R5Lg" }
+        });
+        let text = walk_for_body(&part, "text/plain").expect("decoded body");
+        assert_eq!(text, "Hello, this is the full message body.");
+    }
+
+    #[test]
+    fn gmail_body_still_decodes_padded_base64url() {
+        let part = json!({
+            "mimeType": "text/plain",
+            "body": { "data": "SGVsbG8sIHRoaXMgaXMgdGhlIGZ1bGwgbWVzc2FnZSBib2R5Lg==" }
+        });
+        let text = walk_for_body(&part, "text/plain").expect("decoded body");
+        assert_eq!(text, "Hello, this is the full message body.");
+    }
+
+    #[test]
+    fn strict_url_safe_rejects_the_unpadded_gmail_payload() {
+        let data = "SGVsbG8sIHRoaXMgaXMgdGhlIGZ1bGwgbWVzc2FnZSBib2R5Lg";
+        assert!(base64::engine::general_purpose::URL_SAFE.decode(data).is_err());
+        assert_eq!(
+            decode_gmail_body_data(data).as_deref(),
+            Some(b"Hello, this is the full message body.".as_slice())
+        );
     }
 }
