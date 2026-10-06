@@ -269,7 +269,6 @@ pub async fn run_memory_search_all(
         return Ok("No agent memories found.".into());
     }
 
-    let prev = memory.active_personality_id();
     let per_agent_anchors = ((anchor_limit + personalities.len() - 1) / personalities.len()).max(4);
     let per_agent_messages = if message_limit == 0 {
         0
@@ -284,19 +283,16 @@ pub async fn run_memory_search_all(
     let mut any = false;
 
     for pid in &personalities {
-        memory.set_active_personality(pid);
         let bundle = memory
-            .memory_recall(
+            .memory_recall_for_personality(
+                pid,
                 query,
                 None,
                 per_agent_anchors.min(24),
                 per_agent_messages.min(16),
                 query_emb.as_deref(),
             )
-            .map_err(|e| {
-                memory.set_active_personality(&prev);
-                MemoryToolError::Msg(e.to_string())
-            })?;
+            .map_err(|e| MemoryToolError::Msg(e.to_string()))?;
         if bundle.anchors.is_empty() && bundle.messages.is_empty() {
             continue;
         }
@@ -310,8 +306,6 @@ pub async fn run_memory_search_all(
         out.push_str(&format_recall_for_prompt(&bundle, 2_500));
         out.push_str("\n\n");
     }
-
-    memory.set_active_personality(&prev);
 
     if !any {
         return Ok("No matching memories across agents.".into());

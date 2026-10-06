@@ -25,6 +25,7 @@ pub fn spawn_post_message_memory(
     http: reqwest::Client,
     settings: Arc<SettingsManager>,
     memory: Arc<dyn ConversationMemory + Send + Sync>,
+    personality_id: String,
     conversation_id: String,
     user_text: String,
 ) {
@@ -37,6 +38,7 @@ pub fn spawn_post_message_memory(
             &http,
             &settings,
             memory.as_ref(),
+            &personality_id,
             &conversation_id,
             &user_text,
             false,
@@ -50,6 +52,7 @@ pub fn spawn_post_message_memory_coding(
     http: reqwest::Client,
     settings: Arc<SettingsManager>,
     memory: Arc<dyn ConversationMemory + Send + Sync>,
+    personality_id: String,
     conversation_id: String,
     user_text: String,
 ) {
@@ -62,6 +65,7 @@ pub fn spawn_post_message_memory_coding(
             &http,
             &settings,
             memory.as_ref(),
+            &personality_id,
             &conversation_id,
             &user_text,
             true,
@@ -198,6 +202,7 @@ pub async fn process_user_memory_turn(
     http: &reqwest::Client,
     settings: &SettingsManager,
     memory: &dyn ConversationMemory,
+    personality_id: &str,
     conversation_id: &str,
     user_text: &str,
     coding_mode: bool,
@@ -205,7 +210,11 @@ pub async fn process_user_memory_turn(
     let provider = settings.selected_provider();
 
     if !coding_mode {
-        match memory.ingest_user_message_anchors(conversation_id, user_text) {
+        match memory.ingest_user_message_anchors_for_personality(
+            personality_id,
+            conversation_id,
+            user_text,
+        ) {
             Ok(ids) if !ids.is_empty() => {
                 eprintln!(
                     "persistent-sage: deterministic memory ingest stored {} raw anchor(s)",
@@ -219,9 +228,26 @@ pub async fn process_user_memory_turn(
 
     if provider != "placeholder" && settings.memory_llm_extraction_enabled() {
         let result = if coding_mode {
-            extract_and_store_coding(http, settings, memory, conversation_id, user_text).await
+            extract_and_store_coding(
+                http,
+                settings,
+                memory,
+                personality_id,
+                conversation_id,
+                user_text,
+            )
+            .await
         } else {
-            extract_and_store(http, settings, memory, conversation_id, user_text, EXTRACT_SYSTEM).await
+            extract_and_store(
+                http,
+                settings,
+                memory,
+                personality_id,
+                conversation_id,
+                user_text,
+                EXTRACT_SYSTEM,
+            )
+            .await
         };
         match result {
             Ok(n) if n > 0 => eprintln!("persistent-sage: LLM memory extract stored {n} anchor(s)"),
@@ -231,7 +257,9 @@ pub async fn process_user_memory_turn(
     }
 
     if provider != "placeholder" && settings.memory_semantic_enabled() {
-        if let Err(e) = embed_pending_anchors(http, settings, memory, EMBED_MAX_PER_RUN).await {
+        if let Err(e) =
+            embed_pending_anchors(http, settings, memory, personality_id, EMBED_MAX_PER_RUN).await
+        {
             eprintln!("persistent-sage: embedding anchors failed: {e}");
         }
     }
@@ -241,6 +269,7 @@ async fn extract_and_store(
     http: &reqwest::Client,
     settings: &SettingsManager,
     memory: &dyn ConversationMemory,
+    personality_id: &str,
     conversation_id: &str,
     user_text: &str,
     system_prompt: &str,
@@ -249,6 +278,7 @@ async fn extract_and_store(
         http,
         settings,
         memory,
+        personality_id,
         conversation_id,
         user_text,
         system_prompt,
@@ -261,6 +291,7 @@ async fn extract_and_store_coding(
     http: &reqwest::Client,
     settings: &SettingsManager,
     memory: &dyn ConversationMemory,
+    personality_id: &str,
     conversation_id: &str,
     user_text: &str,
 ) -> Result<usize, String> {
@@ -268,6 +299,7 @@ async fn extract_and_store_coding(
         http,
         settings,
         memory,
+        personality_id,
         conversation_id,
         user_text,
         CODING_EXTRACT_SYSTEM,
@@ -280,6 +312,7 @@ async fn extract_and_store_inner(
     http: &reqwest::Client,
     settings: &SettingsManager,
     memory: &dyn ConversationMemory,
+    personality_id: &str,
     conversation_id: &str,
     user_text: &str,
     system_prompt: &str,
@@ -291,7 +324,7 @@ async fn extract_and_store_inner(
     }
 
     let recent = memory
-        .get_recent(conversation_id, 8)
+        .get_recent_for_personality(personality_id, conversation_id, 8)
         .map_err(|e| e.to_string())?;
     let mut context = String::new();
     for m in recent.iter().filter(|m| m.role == MessageRole::User) {
@@ -341,7 +374,13 @@ async fn extract_and_store_inner(
             Some(conversation_id)
         };
 
-        match memory.upsert_memory_anchor(conv_scope, ty, content, importance) {
+        match memory.upsert_memory_anchor_for_personality(
+            personality_id,
+            conv_scope,
+            ty,
+            content,
+            importance,
+        ) {
             Ok(id) => {
                 stored += 1;
                 eprintln!(
@@ -359,11 +398,12 @@ async fn embed_pending_anchors(
     http: &reqwest::Client,
     settings: &SettingsManager,
     memory: &dyn ConversationMemory,
+    personality_id: &str,
     max_anchors: usize,
 ) -> Result<(), String> {
     let spec = embedding::resolve_embedding_spec(settings).map_err(|e| e.to_string())?;
     let pending = memory
-        .list_anchors_without_embedding(max_anchors)
+        .list_anchors_without_embedding_for_personality(personality_id, max_anchors)
         .map_err(|e| e.to_string())?;
     if pending.is_empty() {
         return Ok(());
@@ -378,7 +418,12 @@ async fn embed_pending_anchors(
         for (anchor, vec) in chunk.iter().zip(vectors.iter()) {
             let blob = embedding::serialize_embedding(vec);
             memory
-                .set_anchor_embedding(&anchor.id, &blob, &spec.model)
+                .set_anchor_embedding_for_personality(
+                    personality_id,
+                    &anchor.id,
+                    &blob,
+                    &spec.model,
+                )
                 .map_err(|e| e.to_string())?;
             embedded_total += 1;
         }
@@ -396,11 +441,12 @@ pub async fn reindex_all_embeddings(
     settings: &SettingsManager,
     memory: &dyn ConversationMemory,
 ) -> Result<u32, String> {
+    let personality_id = memory.active_personality_id();
     memory.clear_all_embeddings().map_err(|e| e.to_string())?;
     loop {
-        embed_pending_anchors(http, settings, memory, 32).await?;
+        embed_pending_anchors(http, settings, memory, &personality_id, 32).await?;
         if memory
-            .list_anchors_without_embedding(1)
+            .list_anchors_without_embedding_for_personality(&personality_id, 1)
             .map_err(|e| e.to_string())?
             .is_empty()
         {
