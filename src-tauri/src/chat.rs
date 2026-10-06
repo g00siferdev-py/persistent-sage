@@ -1502,6 +1502,14 @@ pub async fn execute_chat_turn(
         ConversationMemory::set_active_personality(&*state.memory, pid);
     }
 
+    // Capture before prep/LLM awaits. Background extraction must keep writing this
+    // companion's anchors even if the user switches profiles while the turn runs.
+    let extract_personality = if options.coding_context.is_some() && !companion_linked {
+        CODING_PERSONALITY_ID.to_string()
+    } else {
+        pid.to_string()
+    };
+
     let engine: std::sync::Arc<dyn LLMProviderEngine + Send + Sync> =
         match build_engine(&state.http, &state.settings) {
             Ok(e) => {
@@ -1650,6 +1658,7 @@ pub async fn execute_chat_turn(
                 state.http.clone(),
                 state.settings.clone(),
                 state.memory.clone(),
+                extract_personality,
                 conversation_id.to_string(),
                 text.to_string(),
             );
@@ -1658,6 +1667,7 @@ pub async fn execute_chat_turn(
                 state.http.clone(),
                 state.settings.clone(),
                 state.memory.clone(),
+                extract_personality,
                 conversation_id.to_string(),
                 text.to_string(),
             );

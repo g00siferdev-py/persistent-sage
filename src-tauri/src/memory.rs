@@ -218,6 +218,14 @@ pub trait ConversationMemory: Send + Sync {
         limit: usize,
     ) -> Result<Vec<StoredMessage>, MemoryError>;
 
+    /// Recent messages for one companion, even if another profile is currently active.
+    fn get_recent_for_personality(
+        &self,
+        personality_id: &str,
+        conversation_id: &str,
+        limit: usize,
+    ) -> Result<Vec<StoredMessage>, MemoryError>;
+
     /// Star or unstar a message (favorites).
     fn set_message_favorite(&self, message_id: i64, favorite: bool) -> Result<(), MemoryError>;
 
@@ -289,6 +297,14 @@ pub trait ConversationMemory: Send + Sync {
         content: &str,
     ) -> Result<Vec<String>, MemoryError>;
 
+    /// Same as [`ingest_user_message_anchors`] for an explicit companion, ignoring the process-wide active id.
+    fn ingest_user_message_anchors_for_personality(
+        &self,
+        personality_id: &str,
+        conversation_id: &str,
+        content: &str,
+    ) -> Result<Vec<String>, MemoryError>;
+
     /// Keyword recall; optional scope to one thread (plus always matches global anchors).
     fn recall_anchors(
         &self,
@@ -307,9 +323,31 @@ pub trait ConversationMemory: Send + Sync {
         query_embedding: Option<&[f32]>,
     ) -> Result<MemoryRecallBundle, MemoryError>;
 
+    /// Recall scoped to one companion without changing the process-wide active personality.
+    fn memory_recall_for_personality(
+        &self,
+        personality_id: &str,
+        query: &str,
+        scope_conversation_id: Option<&str>,
+        anchor_limit: usize,
+        message_limit: usize,
+        query_embedding: Option<&[f32]>,
+    ) -> Result<MemoryRecallBundle, MemoryError>;
+
     /// Insert or skip duplicate memory (exact content match on scope).
     fn upsert_memory_anchor(
         &self,
+        conversation_id: Option<&str>,
+        anchor_type: AnchorType,
+        content: &str,
+        importance: i32,
+    ) -> Result<String, MemoryError>;
+
+    /// Insert an anchor for an explicit companion. Background jobs must use this so a
+    /// mid-flight companion switch cannot file the fact under the wrong profile.
+    fn upsert_memory_anchor_for_personality(
+        &self,
+        personality_id: &str,
         conversation_id: Option<&str>,
         anchor_type: AnchorType,
         content: &str,
@@ -323,8 +361,22 @@ pub trait ConversationMemory: Send + Sync {
         model_label: &str,
     ) -> Result<(), MemoryError>;
 
+    fn set_anchor_embedding_for_personality(
+        &self,
+        personality_id: &str,
+        anchor_id: &str,
+        embedding_blob: &[u8],
+        model_label: &str,
+    ) -> Result<(), MemoryError>;
+
     fn list_anchors_without_embedding(
         &self,
+        limit: usize,
+    ) -> Result<Vec<StoredAnchor>, MemoryError>;
+
+    fn list_anchors_without_embedding_for_personality(
+        &self,
+        personality_id: &str,
         limit: usize,
     ) -> Result<Vec<StoredAnchor>, MemoryError>;
 
@@ -386,6 +438,15 @@ fn resolve_anchor_personality_and_content(active_pid: &str, content: &str) -> (S
         (SHARED_PERSONALITY_ID.to_string(), trimmed)
     } else {
         (active_pid.to_string(), trimmed)
+    }
+}
+
+fn canonical_personality_id(personality_id: &str) -> String {
+    let s = personality_id.trim();
+    if s.is_empty() {
+        DEFAULT_PERSONALITY_ID.to_string()
+    } else {
+        s.to_string()
     }
 }
 
@@ -954,8 +1015,13 @@ impl MemoryAnchor {
     }
 
     fn assert_conversation_exists(&self, id: &str) -> Result<(), MemoryError> {
-        let conn = self.conn()?;
         let pid = self.active_personality()?;
+        self.assert_conversation_for(&pid, id)
+    }
+
+    fn assert_conversation_for(&self, personality_id: &str, id: &str) -> Result<(), MemoryError> {
+        let pid = canonical_personality_id(personality_id);
+        let conn = self.conn()?;
         let n: i64 = conn.query_row(
             "SELECT COUNT(*) FROM conversations WHERE id = ?1 AND personality_id = ?2",
             params![id, pid],
@@ -1741,6 +1807,7 @@ impl MemoryAnchor {
     /// Hybrid: FTS5 + keyword + optional cosine similarity on anchor embeddings.
     fn hybrid_recall(
         &self,
+        personality_id: &str,
         query: &str,
         scope_conversation_id: Option<&str>,
         anchor_limit: usize,
@@ -1764,7 +1831,7 @@ impl MemoryAnchor {
             exp.message_terms
         );
 
-        let personality_id = self.active_personality()?;
+        let personality_id = canonical_personality_id(personality_id);
         let scope = scope_conversation_id.filter(|s| !s.is_empty());
         let alim: i64 = anchor_limit.max(1).min(64) as i64 * 3;
         let mlim: i64 = message_limit.max(0).min(24) as i64;
@@ -2062,8 +2129,18 @@ impl ConversationMemory for MemoryAnchor {
         conversation_id: &str,
         limit: usize,
     ) -> Result<Vec<StoredMessage>, MemoryError> {
-        self.assert_conversation_exists(conversation_id)?;
         let pid = self.active_personality()?;
+        self.get_recent_for_personality(&pid, conversation_id, limit)
+    }
+
+    fn get_recent_for_personality(
+        &self,
+        personality_id: &str,
+        conversation_id: &str,
+        limit: usize,
+    ) -> Result<Vec<StoredMessage>, MemoryError> {
+        let pid = canonical_personality_id(personality_id);
+        self.assert_conversation_for(&pid, conversation_id)?;
         let limit_i: i64 = limit.try_into().unwrap_or(i64::MAX);
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
@@ -2402,7 +2479,18 @@ impl ConversationMemory for MemoryAnchor {
         conversation_id: &str,
         content: &str,
     ) -> Result<Vec<String>, MemoryError> {
-        self.assert_conversation_exists(conversation_id)?;
+        let pid = self.active_personality()?;
+        self.ingest_user_message_anchors_for_personality(&pid, conversation_id, content)
+    }
+
+    fn ingest_user_message_anchors_for_personality(
+        &self,
+        personality_id: &str,
+        conversation_id: &str,
+        content: &str,
+    ) -> Result<Vec<String>, MemoryError> {
+        let pid = canonical_personality_id(personality_id);
+        self.assert_conversation_for(&pid, conversation_id)?;
         let trimmed = content.trim();
         if trimmed.chars().count() < ANCHOR_EXTRACT_MIN_CHARS {
             return Ok(vec![]);
@@ -2415,8 +2503,6 @@ impl ConversationMemory for MemoryAnchor {
         if candidates.is_empty() {
             return Ok(vec![]);
         }
-
-        let pid = self.active_personality()?;
         let conn = self.conn()?;
         let mut ids = Vec::new();
 
@@ -2452,8 +2538,9 @@ impl ConversationMemory for MemoryAnchor {
         scope_conversation_id: Option<&str>,
         limit: usize,
     ) -> Result<Vec<StoredAnchor>, MemoryError> {
+        let pid = self.active_personality()?;
         Ok(self
-            .hybrid_recall(query, scope_conversation_id, limit, 0, None)?
+            .hybrid_recall(&pid, query, scope_conversation_id, limit, 0, None)?
             .anchors)
     }
 
@@ -2465,7 +2552,29 @@ impl ConversationMemory for MemoryAnchor {
         message_limit: usize,
         query_embedding: Option<&[f32]>,
     ) -> Result<MemoryRecallBundle, MemoryError> {
+        let pid = self.active_personality()?;
+        self.memory_recall_for_personality(
+            &pid,
+            query,
+            scope_conversation_id,
+            anchor_limit,
+            message_limit,
+            query_embedding,
+        )
+    }
+
+    fn memory_recall_for_personality(
+        &self,
+        personality_id: &str,
+        query: &str,
+        scope_conversation_id: Option<&str>,
+        anchor_limit: usize,
+        message_limit: usize,
+        query_embedding: Option<&[f32]>,
+    ) -> Result<MemoryRecallBundle, MemoryError> {
+        let pid = canonical_personality_id(personality_id);
         self.hybrid_recall(
+            &pid,
             query,
             scope_conversation_id,
             anchor_limit.max(1).min(64),
@@ -2481,8 +2590,27 @@ impl ConversationMemory for MemoryAnchor {
         content: &str,
         importance: i32,
     ) -> Result<String, MemoryError> {
+        let pid = self.active_personality()?;
+        self.upsert_memory_anchor_for_personality(
+            &pid,
+            conversation_id,
+            anchor_type,
+            content,
+            importance,
+        )
+    }
+
+    fn upsert_memory_anchor_for_personality(
+        &self,
+        personality_id: &str,
+        conversation_id: Option<&str>,
+        anchor_type: AnchorType,
+        content: &str,
+        importance: i32,
+    ) -> Result<String, MemoryError> {
+        let personality_id = canonical_personality_id(personality_id);
         if let Some(cid) = conversation_id {
-            self.assert_conversation_exists(cid)?;
+            self.assert_conversation_for(&personality_id, cid)?;
         }
         let trimmed = content.trim();
         if trimmed.is_empty() {
@@ -2490,8 +2618,7 @@ impl ConversationMemory for MemoryAnchor {
                 "anchor content is empty".into(),
             ));
         }
-        let active = self.active_personality()?;
-        let (pid, body) = resolve_anchor_personality_and_content(&active, trimmed);
+        let (pid, body) = resolve_anchor_personality_and_content(&personality_id, trimmed);
         let conn = self.conn()?;
         if let Some(existing) = Self::anchor_id_for_content(&conn, conversation_id, &body, &pid)? {
             let imp = importance.clamp(1, 5);
@@ -2515,9 +2642,20 @@ impl ConversationMemory for MemoryAnchor {
         &self,
         anchor_id: &str,
         embedding_blob: &[u8],
-        _model_label: &str,
+        model_label: &str,
     ) -> Result<(), MemoryError> {
         let pid = self.active_personality()?;
+        self.set_anchor_embedding_for_personality(&pid, anchor_id, embedding_blob, model_label)
+    }
+
+    fn set_anchor_embedding_for_personality(
+        &self,
+        personality_id: &str,
+        anchor_id: &str,
+        embedding_blob: &[u8],
+        _model_label: &str,
+    ) -> Result<(), MemoryError> {
+        let pid = canonical_personality_id(personality_id);
         let conn = self.conn()?;
         let n = conn.execute(
             "UPDATE anchors SET embedding = ?1 WHERE id = ?2 AND personality_id = ?3",
@@ -2536,6 +2674,15 @@ impl ConversationMemory for MemoryAnchor {
         limit: usize,
     ) -> Result<Vec<StoredAnchor>, MemoryError> {
         let pid = self.active_personality()?;
+        self.list_anchors_without_embedding_for_personality(&pid, limit)
+    }
+
+    fn list_anchors_without_embedding_for_personality(
+        &self,
+        personality_id: &str,
+        limit: usize,
+    ) -> Result<Vec<StoredAnchor>, MemoryError> {
+        let pid = canonical_personality_id(personality_id);
         let lim: i64 = limit.try_into().unwrap_or(i64::MAX);
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
@@ -2878,6 +3025,80 @@ mod anchor_storage_tests {
             bundle.anchors,
             bundle.messages
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scoped_anchor_write_ignores_active_companion_switch() {
+        let dir = std::env::temp_dir().join(format!("nova_mem_scope_{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        let path = dir.join("m.sqlite");
+        let mem = MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
+        let conv = ConversationMemory::create_conversation(&mem, "health").expect("conv");
+        ConversationMemory::set_active_personality(&mem, "work");
+
+        ConversationMemory::upsert_memory_anchor_for_personality(
+            &mem,
+            "default",
+            Some(&conv),
+            AnchorType::Fact,
+            "User takes 12 units of insulin at night.",
+            4,
+        )
+        .expect("scoped upsert");
+        let ingest_ids = ConversationMemory::ingest_user_message_anchors_for_personality(
+            &mem,
+            "default",
+            &conv,
+            "I am colorblind and prefer high-contrast themes.",
+        )
+        .expect("scoped ingest");
+        assert!(!ingest_ids.is_empty());
+
+        assert_eq!(ConversationMemory::active_personality_id(&mem), "work");
+        let leaked = ConversationMemory::memory_recall(&mem, "insulin", None, 8, 0, None)
+            .expect("recall work");
+        assert!(
+            leaked
+                .anchors
+                .iter()
+                .all(|a| !a.content.to_lowercase().contains("insulin")),
+            "active companion must not see the other profile's fact: {:?}",
+            leaked.anchors
+        );
+        let colorblind_leak =
+            ConversationMemory::memory_recall(&mem, "colorblind", None, 8, 0, None)
+                .expect("recall work colorblind");
+        assert!(
+            colorblind_leak
+                .anchors
+                .iter()
+                .all(|a| !a.content.to_lowercase().contains("colorblind")),
+            "ingest must stay on the source companion: {:?}",
+            colorblind_leak.anchors
+        );
+
+        let kept = ConversationMemory::memory_recall_for_personality(
+            &mem,
+            "default",
+            "insulin",
+            None,
+            8,
+            0,
+            None,
+        )
+        .expect("recall default");
+        assert!(
+            kept.anchors.iter().any(|a| a.content.contains("insulin")),
+            "source companion should keep the fact: {:?}",
+            kept.anchors
+        );
+        assert_eq!(
+            ConversationMemory::active_personality_id(&mem),
+            "work",
+            "scoped recall must not switch the active companion"
+        );
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 
