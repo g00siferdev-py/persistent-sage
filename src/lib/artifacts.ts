@@ -1,4 +1,8 @@
 import { compile, type TopLevelSpec } from "vega-lite";
+import {
+  keepUnpromotedAssistantText,
+  stripPromotedArtifactFences,
+} from "@/lib/assistantVisibleText";
 import { buildChartHtmlDocument } from "@/lib/chartArtifact";
 
 export { buildChartHtmlDocument } from "@/lib/chartArtifact";
@@ -301,7 +305,7 @@ export function prepareAssistantMessage(
   if (existingArtifactJson?.trim()) {
     const parsed = parseArtifactJson(existingArtifactJson);
     if (parsed) {
-      const cleaned = cleanAssistantDisplayText(content);
+      const cleaned = stripPromotedArtifactFences(content);
       return {
         content: cleaned || parsed.title,
         artifactJson: existingArtifactJson,
@@ -314,7 +318,12 @@ export function prepareAssistantMessage(
     return split;
   }
 
-  return { content: cleanAssistantDisplayText(content) || content, artifactJson: undefined };
+  // Fences that were not promoted (HTML fragments, XML, unparsed artifact JSON)
+  // must stay in the bubble. Stripping them here deletes the only copy the user can see.
+  return {
+    content: keepUnpromotedAssistantText(content) || content,
+    artifactJson: undefined,
+  };
 }
 
 function splitAssistantContent(content: string): PreparedAssistantMessage {
@@ -593,14 +602,3 @@ function inferHtmlTitle(html: string): string {
   return "Report";
 }
 
-/**
- * Strip leftover artifact/html fences that were already promoted to `artifactJson`.
- * Do NOT strip normal markdown code fences (`bash`, `typescript`, plain ```, etc.) —
- * those must reach MessageContent for syntax-highlighted rendering.
- */
-function cleanAssistantDisplayText(text: string): string {
-  return text
-    .replace(/```(?:artifact|html|htm|xml)\b[\s\S]*?```/gi, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
