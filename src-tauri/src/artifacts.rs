@@ -584,8 +584,11 @@ fn extract_markdown_table(text: &str) -> Option<(String, String, Vec<Vec<String>
     if table_lines.len() < 2 {
         return None;
     }
-    let sep = table_lines[1].trim();
-    if !sep.contains('|') || !sep.chars().any(|c| c == '-' || c == ':') {
+    // A separator is only `|`, `-`, `:`, and whitespace (same rule as the
+    // frontend). A data row such as `| 9:00 | Standup |` contains a colon
+    // but is not a separator — treating it as one drops that row forever
+    // when the reply is stored.
+    if !is_markdown_table_separator(table_lines[1]) {
         return None;
     }
     let parse_row = |line: &str| -> Vec<String> {
@@ -626,6 +629,22 @@ fn extract_markdown_table(text: &str) -> Option<(String, String, Vec<Vec<String>
         title
     };
     Some((before, after, rows, title))
+}
+
+/// GFM separator: `| --- | :---: |` and nothing else. Digits, letters, and
+/// punctuation other than `-` `:` `|` mean this is a data row.
+fn is_markdown_table_separator(line: &str) -> bool {
+    let trimmed = line.trim();
+    if !trimmed.starts_with('|') || !trimmed.ends_with('|') || trimmed.len() < 2 {
+        return false;
+    }
+    let inner = &trimmed[1..trimmed.len() - 1];
+    if inner.is_empty() {
+        return false;
+    }
+    inner
+        .chars()
+        .all(|c| matches!(c, ' ' | '\t' | '-' | ':' | '|'))
 }
 
 fn markdown_table_to_html_document(rows: &[Vec<String>], title: &str) -> String {
@@ -852,6 +871,40 @@ mod tests {
         let input = format!("Plan below.\n\n```HTML\n{html}\n```");
         let (_, stored) = split_assistant_reply(&input);
         assert!(stored.is_some());
+    }
+
+    #[test]
+    fn schedule_table_without_separator_keeps_every_row() {
+        let input = "Tomorrow morning:\n\n| Time | Event |\n| 9:00 | Standup |\n| 10:30 | Review |\n";
+        let (display, stored) = split_assistant_reply(input);
+        assert!(
+            stored.is_none(),
+            "a clock time is not a markdown separator; promoting it drops that row"
+        );
+        assert!(display.contains("9:00"));
+        assert!(display.contains("Standup"));
+        assert!(display.contains("10:30"));
+        assert!(display.contains("Review"));
+    }
+
+    #[test]
+    fn price_row_with_dash_is_not_a_separator() {
+        let input = "| Plan | Price |\n| Basic - $10 | Good |\n| Pro | Better |\n";
+        let (display, stored) = split_assistant_reply(input);
+        assert!(stored.is_none());
+        assert!(display.contains("Basic - $10"));
+        assert!(display.contains("Pro"));
+    }
+
+    #[test]
+    fn real_markdown_table_keeps_time_rows_in_the_artifact() {
+        let input = "Schedule\n\n| Time | Event |\n| --- | --- |\n| 9:00 | Standup |\n| 10:30 | Review |\n";
+        let (_display, stored) = split_assistant_reply(input);
+        let stored = stored.expect("separator row should promote the table");
+        assert!(stored.contains("9:00"));
+        assert!(stored.contains("Standup"));
+        assert!(stored.contains("10:30"));
+        assert!(stored.contains("Review"));
     }
 
     #[test]
