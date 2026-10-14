@@ -335,7 +335,7 @@ function splitAssistantContent(content: string): PreparedAssistantMessage {
   }
 
   for (const lang of ["html", "htm", "xml"]) {
-    const fence = extractCaseInsensitiveFence(content, lang);
+    const fence = extractCaseInsensitiveFence(content, lang, true);
     if (fence && looksLikeHtml(fence.body)) {
       const artifact = buildHtmlArtifact(inferHtmlTitle(fence.body), fence.body);
       return finalizeSplit(content, fence, serializeArtifact(artifact));
@@ -376,20 +376,67 @@ function splitAssistantContent(content: string): PreparedAssistantMessage {
 
 type FenceParts = { before: string; body: string; after: string };
 
-function extractCaseInsensitiveFence(text: string, lang: string): FenceParts | null {
+/** Next line that is only a closing fence (3+ backticks). Inline ``` is not a closer. */
+function findClosingFenceLine(text: string): { index: number; length: number } | null {
+  let offset = 0;
+  const parts = text.split("\n");
+  for (let i = 0; i < parts.length; i += 1) {
+    const line = parts[i] ?? "";
+    const hasNewline = i < parts.length - 1;
+    const core = line.replace(/\r$/, "").trim();
+    const length = line.length + (hasNewline ? 1 : 0);
+    if (core.length >= 3 && /^`+$/.test(core)) {
+      return { index: offset, length };
+    }
+    offset += length;
+  }
+  return null;
+}
+
+/**
+ * HTML reports often contain nested code fences before `</html>`.
+ * Use the first closing line whose body includes `</html>` or `</svg>`.
+ * If the document never closes, keep the first fence so a later block is not swallowed.
+ */
+function findHtmlDocumentFenceEnd(text: string): { index: number; length: number } | null {
+  let searchFrom = 0;
+  let first: { index: number; length: number } | null = null;
+  while (searchFrom < text.length) {
+    const found = findClosingFenceLine(text.slice(searchFrom));
+    if (!found) break;
+    const abs = searchFrom + found.index;
+    if (!first) first = { index: abs, length: found.length };
+    const body = text.slice(0, abs).toLowerCase();
+    if (body.includes("</html>") || body.includes("</svg>")) {
+      return { index: abs, length: found.length };
+    }
+    const next = abs + found.length;
+    if (next <= searchFrom) break;
+    searchFrom = next;
+  }
+  return first;
+}
+
+function extractCaseInsensitiveFence(
+  text: string,
+  lang: string,
+  extendHtml = false,
+): FenceParts | null {
   const lower = text.toLowerCase();
   const marker = `\`\`\`${lang.toLowerCase()}`;
   const start = lower.indexOf(marker);
   if (start < 0) return null;
   const afterMarker = text.slice(start + marker.length).replace(/^[\r\n]+/, "");
-  const end = afterMarker.indexOf("```");
-  if (end < 0) return null;
-  const body = afterMarker.slice(0, end).trim();
+  const closing = extendHtml
+    ? findHtmlDocumentFenceEnd(afterMarker)
+    : findClosingFenceLine(afterMarker);
+  if (!closing) return null;
+  const body = afterMarker.slice(0, closing.index).trim();
   if (!body) return null;
   return {
     before: text.slice(0, start).trimEnd(),
     body,
-    after: afterMarker.slice(end + 3).trimStart(),
+    after: afterMarker.slice(closing.index + closing.length).trimStart(),
   };
 }
 
@@ -411,9 +458,9 @@ function extractUnlabeledHtmlFence(text: string): FenceParts | null {
       searchFrom = start + 3;
       continue;
     }
-    const end = bodyStart.indexOf("```");
-    if (end < 0) return null;
-    const body = bodyStart.slice(0, end).trim();
+    const closing = findHtmlDocumentFenceEnd(bodyStart);
+    if (!closing) return null;
+    const body = bodyStart.slice(0, closing.index).trim();
     if (!body) {
       searchFrom = start + 3;
       continue;
@@ -421,7 +468,7 @@ function extractUnlabeledHtmlFence(text: string): FenceParts | null {
     return {
       before: text.slice(0, start).trimEnd(),
       body,
-      after: bodyStart.slice(end + 3).trimStart(),
+      after: bodyStart.slice(closing.index + closing.length).trimStart(),
     };
   }
 }

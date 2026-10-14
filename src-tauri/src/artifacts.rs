@@ -527,17 +527,63 @@ fn infer_html_title(html: &str) -> String {
     "Report".into()
 }
 
+/// Start index and byte length of the next line that is only a closing fence (3+ backticks).
+/// Inline ``` in a sentence is not a closer — CommonMark closes on a fence line.
+fn find_closing_fence_line(text: &str) -> Option<(usize, usize)> {
+    let mut offset = 0usize;
+    for line in text.split_inclusive('\n') {
+        let core = line.trim_end_matches(['\r', '\n']).trim();
+        if core.len() >= 3 && core.bytes().all(|b| b == b'`') {
+            return Some((offset, line.len()));
+        }
+        offset += line.len();
+    }
+    None
+}
+
+/// HTML reports often contain nested code fences before `</html>`.
+/// Take the first closing line whose body includes `</html>` or `</svg>`.
+/// If the document never closes, keep the first fence so a later code block is not swallowed.
+fn find_html_document_fence_end(text: &str) -> Option<(usize, usize)> {
+    let mut search_from = 0usize;
+    let mut first: Option<(usize, usize)> = None;
+    while search_from < text.len() {
+        let Some((rel, len)) = find_closing_fence_line(&text[search_from..]) else {
+            break;
+        };
+        let abs = search_from + rel;
+        if first.is_none() {
+            first = Some((abs, len));
+        }
+        let body = text[..abs].to_ascii_lowercase();
+        if body.contains("</html>") || body.contains("</svg>") {
+            return Some((abs, len));
+        }
+        let next = abs + len;
+        if next <= search_from {
+            break;
+        }
+        search_from = next;
+    }
+    first
+}
+
 fn extract_language_fence_ci<'a>(text: &'a str, lang: &str) -> Option<(&'a str, &'a str, &'a str)> {
     let lower = text.to_ascii_lowercase();
     let marker = format!("```{lang}");
     let start = lower.find(&marker)?;
     let after_marker = text[start + marker.len()..].trim_start_matches(['\r', '\n']);
-    let end_fence = after_marker.find("```")?;
-    let body = after_marker[..end_fence].trim();
+    let extend_html = matches!(lang, "html" | "htm" | "xml");
+    let (end_at, fence_len) = if extend_html {
+        find_html_document_fence_end(after_marker)?
+    } else {
+        find_closing_fence_line(after_marker)?
+    };
+    let body = after_marker[..end_at].trim();
     if body.is_empty() {
         return None;
     }
-    let after = after_marker[end_fence + 3..].trim_start();
+    let after = after_marker[end_at + fence_len..].trim_start();
     let before = text[..start].trim_end();
     Some((before, body, after))
 }
@@ -698,13 +744,15 @@ fn extract_unlabeled_html_fence<'a>(text: &'a str) -> Option<(&'a str, &'a str, 
             search_from = start + 3;
             continue;
         }
-        let end_fence = body_start.find("```")?;
-        let body = body_start[..end_fence].trim();
+        let Some((end_at, fence_len)) = find_html_document_fence_end(body_start) else {
+            return None;
+        };
+        let body = body_start[..end_at].trim();
         if body.is_empty() {
             search_from = start + 3;
             continue;
         }
-        let after = body_start[end_fence + 3..].trim_start();
+        let after = body_start[end_at + fence_len..].trim_start();
         let before = text[..start].trim_end();
         return Some((before, body, after));
     }
@@ -722,9 +770,9 @@ fn extract_artifact_fence(text: &str) -> Option<(&str, &str, &str)> {
     let start = lower.find(&marker)?;
     let after_marker = text[start + marker.len()..]
         .trim_start_matches(['\r', '\n']);
-    let end_fence = after_marker.find("```")?;
-    let json_str = after_marker[..end_fence].trim();
-    let after = after_marker[end_fence + 3..].trim_start();
+    let (end_at, fence_len) = find_closing_fence_line(after_marker)?;
+    let json_str = after_marker[..end_at].trim();
+    let after = after_marker[end_at + fence_len..].trim_start();
     let before = text[..start].trim_end();
     Some((before, json_str, after))
 }
@@ -852,6 +900,78 @@ mod tests {
         let input = format!("Plan below.\n\n```HTML\n{html}\n```");
         let (_, stored) = split_assistant_reply(&input);
         assert!(stored.is_some());
+    }
+
+    #[test]
+    fn html_fence_keeps_document_when_body_mentions_backticks() {
+        let html = "<!DOCTYPE html><html><body><h1>Notes</h1><p>Use ``` to open a fence.</p><table><tr><td>Mon</td></tr></table></body></html>";
+        let input = format!("Plan:\n\n```html\n{html}\n```\n\nDone.");
+        let (display, stored) = split_assistant_reply(&input);
+        let stored = stored.expect("html fence should promote");
+        let parsed = parse_stored_artifact(&stored).unwrap();
+        let body = parsed.body.as_str().unwrap();
+        assert!(
+            body.contains("Use ``` to open a fence."),
+            "inline fence text dropped: {body}"
+        );
+        assert!(body.contains("</html>"), "document truncated: {body}");
+        assert!(body.contains("<table>"), "table dropped: {body}");
+        assert!(!display.contains("</html>"), "raw html leaked into chat: {display}");
+        assert!(display.contains("Plan:"));
+        assert!(display.contains("Done."));
+    }
+
+    #[test]
+    fn html_fence_includes_nested_code_sample_before_document_end() {
+        let input = "\
+Report:
+
+```html
+<!DOCTYPE html>
+<html>
+<body>
+<pre>
+```js
+console.log(1)
+```
+</pre>
+</body>
+</html>
+```
+
+Thanks.";
+        let (display, stored) = split_assistant_reply(input);
+        let stored = stored.expect("html fence should promote");
+        let body = parse_stored_artifact(&stored).unwrap().body;
+        let body = body.as_str().unwrap();
+        assert!(body.contains("console.log(1)"), "{body}");
+        assert!(body.contains("</html>"), "{body}");
+        assert!(display.contains("Report:"));
+        assert!(display.contains("Thanks."));
+        assert!(!display.contains("console.log"), "{display}");
+    }
+
+    #[test]
+    fn html_fence_does_not_swallow_a_following_code_block() {
+        let input = "\
+```html
+<table><tr><td>Only</td></tr></table>
+```
+
+```python
+print('keep me')
+```";
+        let (display, stored) = split_assistant_reply(input);
+        let stored = stored.expect("table html should promote");
+        let body = parse_stored_artifact(&stored)
+            .unwrap()
+            .body
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(body.contains("<table>"));
+        assert!(!body.contains("print"), "{body}");
+        assert!(display.contains("print('keep me')"), "{display}");
     }
 
     #[test]
