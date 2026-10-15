@@ -542,22 +542,55 @@ fn extract_language_fence_ci<'a>(text: &'a str, lang: &str) -> Option<(&'a str, 
     Some((before, body, after))
 }
 
-/// ``` with no language tag but body starts with HTML.
+/// A raw HTML document (not wrapped in a fence) that should become an artifact.
+///
+/// The opening tag must be at the start of a line and outside a markdown fence.
+/// A mention such as "the <html> … </html> tags", or a page inside a code
+/// sample, must stay in the chat text. Promoting that span deletes it from
+/// the stored message.
 fn extract_bare_html_document(text: &str) -> Option<(String, String, String)> {
-    let lower = text.to_ascii_lowercase();
-    let idx = ["<!doctype", "<html"]
-        .iter()
-        .filter_map(|needle| lower.find(needle))
-        .min()?;
+    let mut in_fence = false;
+    let mut doc_start: Option<usize> = None;
+    let mut offset = 0usize;
+    for line in text.split_inclusive('\n') {
+        let body = line.strip_suffix('\n').unwrap_or(line);
+        let body = body.strip_suffix('\r').unwrap_or(body);
+        let trimmed = body.trim();
+        if trimmed.starts_with("```") {
+            in_fence = !in_fence;
+        } else if !in_fence && doc_start.is_none() {
+            if let Some(rel) = line_opens_html_document(body) {
+                doc_start = Some(offset + rel);
+            }
+        }
+        offset += line.len();
+    }
+    let idx = doc_start?;
     let html_part = &text[idx..];
     let end = html_part.to_ascii_lowercase().find("</html>")?;
-    let html = html_part[..end + 7].trim();
+    let raw = &html_part[..end + "</html>".len()];
+    // A fence between the opener and the closer means this is not one document.
+    if raw.lines().any(|line| line.trim().starts_with("```")) {
+        return None;
+    }
+    let html = raw.trim();
     if !looks_like_html(html) {
         return None;
     }
     let before = text[..idx].trim_end().to_string();
-    let after = html_part[end + 7..].trim_start().to_string();
+    let after = html_part[end + "</html>".len()..].trim_start().to_string();
     Some((before, html.to_string(), after))
+}
+
+/// Byte offset of `<` when `line` is a bare document opener (`<!doctype` / `<html`).
+fn line_opens_html_document(line: &str) -> Option<usize> {
+    let trimmed = line.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("<!doctype") || lower.starts_with("<html") {
+        line.find('<')
+    } else {
+        None
+    }
 }
 
 fn extract_markdown_table(text: &str) -> Option<(String, String, Vec<Vec<String>>, String)> {
@@ -852,6 +885,46 @@ mod tests {
         let input = format!("Plan below.\n\n```HTML\n{html}\n```");
         let (_, stored) = split_assistant_reply(&input);
         assert!(stored.is_some());
+    }
+
+    #[test]
+    fn bare_html_document_is_promoted() {
+        let input = "Here is the page.\n\n<!DOCTYPE html>\n<html><body><h1>Plan</h1></body></html>\n\nDone.";
+        let (display, stored) = split_assistant_reply(input);
+        assert!(stored.is_some());
+        let parsed = parse_stored_artifact(stored.as_ref().unwrap()).unwrap();
+        assert!(parsed.body.as_str().unwrap().contains("<h1>Plan</h1>"));
+        assert!(display.contains("Here is the page."));
+        assert!(display.contains("Done."));
+        assert!(!display.contains("<h1>Plan</h1>"));
+    }
+
+    #[test]
+    fn bare_html_document_crlf_is_promoted() {
+        let input = "Here is the page.\r\n\r\n<!DOCTYPE html>\r\n<html><body><p>Hi</p></body></html>\r\n\r\nDone.";
+        let (display, stored) = split_assistant_reply(input);
+        assert!(stored.is_some());
+        assert!(display.contains("Here is the page."));
+        assert!(display.contains("Done."));
+        assert!(!display.contains("<p>Hi</p>"));
+    }
+
+    #[test]
+    fn html_tag_mention_is_not_promoted() {
+        let input = "The <html> element is the root, and you close it with </html>. Then add a body.";
+        let (display, stored) = split_assistant_reply(input);
+        assert!(stored.is_none());
+        assert_eq!(display, input);
+    }
+
+    #[test]
+    fn html_page_inside_code_fence_is_not_promoted() {
+        let input = "```python\nfrom pathlib import Path\nPath(\"page.html\").write_text(\"\"\"<!DOCTYPE html>\n<html>\n<body><h1>Hello</h1></body>\n</html>\n\"\"\")\nprint(\"done\")\n```\n";
+        let (display, stored) = split_assistant_reply(input);
+        assert!(stored.is_none(), "code sample must not become an artifact");
+        assert_eq!(display, input);
+        assert!(display.contains("print(\"done\")"));
+        assert!(display.contains("<h1>Hello</h1>"));
     }
 
     #[test]

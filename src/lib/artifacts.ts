@@ -1,4 +1,5 @@
 import { compile, type TopLevelSpec } from "vega-lite";
+import { extractBareHtmlDocument } from "@/lib/bareHtmlDocument";
 import { buildChartHtmlDocument } from "@/lib/chartArtifact";
 
 export { buildChartHtmlDocument } from "@/lib/chartArtifact";
@@ -426,27 +427,6 @@ function extractUnlabeledHtmlFence(text: string): FenceParts | null {
   }
 }
 
-function extractBareHtmlDocument(text: string): { before: string; html: string; after: string } | null {
-  const lower = text.toLowerCase();
-  const idx = Math.min(
-    ...["<!doctype", "<html"].map((needle) => {
-      const i = lower.indexOf(needle);
-      return i < 0 ? Number.MAX_SAFE_INTEGER : i;
-    }),
-  );
-  if (idx === Number.MAX_SAFE_INTEGER) return null;
-  const htmlPart = text.slice(idx);
-  const endMatch = htmlPart.match(/<\/html>/i);
-  const html = endMatch
-    ? htmlPart.slice(0, endMatch.index! + endMatch[0].length)
-    : htmlPart.trim();
-  if (!looksLikeHtml(html)) return null;
-  return {
-    before: text.slice(0, idx).trimEnd(),
-    html: html.trim(),
-    after: endMatch ? htmlPart.slice(endMatch.index! + endMatch[0].length).trimStart() : "",
-  };
-}
 
 function extractMarkdownTable(
   text: string,
