@@ -560,11 +560,56 @@ fn extract_bare_html_document(text: &str) -> Option<(String, String, String)> {
     Some((before, html.to_string(), after))
 }
 
+/// Opening CommonMark fence: a line of at least three `` ` `` or `~`, optionally
+/// followed by an info string that does not contain the fence character.
+fn opening_fence(line: &str) -> Option<(char, usize)> {
+    let trimmed = line.trim();
+    let bytes = trimmed.as_bytes();
+    if bytes.is_empty() {
+        return None;
+    }
+    let ch = bytes[0];
+    if ch != b'`' && ch != b'~' {
+        return None;
+    }
+    let mut len = 0usize;
+    while len < bytes.len() && bytes[len] == ch {
+        len += 1;
+    }
+    if len < 3 || bytes[len..].contains(&ch) {
+        return None;
+    }
+    Some((ch as char, len))
+}
+
+fn is_closing_fence(line: &str, ch: char, min_len: usize) -> bool {
+    let bytes = line.trim().as_bytes();
+    bytes.len() >= min_len && bytes.iter().all(|b| *b == ch as u8)
+}
+
 fn extract_markdown_table(text: &str) -> Option<(String, String, Vec<Vec<String>>, String)> {
     let lines: Vec<&str> = text.lines().collect();
     let mut start = None;
     let mut end = None;
+    let mut fence: Option<(char, usize)> = None;
     for (i, line) in lines.iter().enumerate() {
+        if let Some((ch, len)) = fence {
+            if is_closing_fence(line, ch, len) {
+                fence = None;
+            }
+            // A table cannot start or continue inside a code sample.
+            if start.is_some() {
+                break;
+            }
+            continue;
+        }
+        if let Some(opened) = opening_fence(line) {
+            if start.is_some() {
+                break;
+            }
+            fence = Some(opened);
+            continue;
+        }
         let trimmed = line.trim();
         if trimmed.starts_with('|') && trimmed.ends_with('|') {
             if start.is_none() {
@@ -852,6 +897,112 @@ mod tests {
         let input = format!("Plan below.\n\n```HTML\n{html}\n```");
         let (_, stored) = split_assistant_reply(&input);
         assert!(stored.is_some());
+    }
+
+    #[test]
+    fn keeps_markdown_table_inside_a_code_fence() {
+        let input = [
+            "Paste this README snippet:",
+            "",
+            "```markdown",
+            "| Method | Path |",
+            "| --- | --- |",
+            "| GET | /health |",
+            "```",
+            "",
+            "That is the whole example.",
+        ]
+        .join("\n");
+        let (display, stored) = split_assistant_reply(&input);
+        assert!(stored.is_none(), "fenced sample must not become an artifact");
+        assert_eq!(display, input);
+    }
+
+    #[test]
+    fn keeps_markdown_table_inside_a_python_string() {
+        let input = [
+            "```python",
+            "def render():",
+            "    return \"\"\"",
+            "| Name | Qty |",
+            "| --- | --- |",
+            "| Apples | 3 |",
+            "\"\"\"",
+            "```",
+        ]
+        .join("\n");
+        let (display, stored) = split_assistant_reply(&input);
+        assert!(stored.is_none());
+        assert!(display.contains("def render():"));
+        assert!(display.contains("| Apples | 3 |"));
+    }
+
+    #[test]
+    fn promotes_a_real_table_and_keeps_a_later_fenced_sample() {
+        let input = [
+            "Schedule",
+            "",
+            "| Time | Event |",
+            "| --- | --- |",
+            "| 9:00 | Standup |",
+            "",
+            "```python",
+            "print(\"\"\"",
+            "| Name | Qty |",
+            "| --- | --- |",
+            "| Apples | 3 |",
+            "\"\"\")",
+            "```",
+        ]
+        .join("\n");
+        let (display, stored) = split_assistant_reply(&input);
+        let stored = stored.expect("the schedule table is a real deliverable");
+        let html = parse_stored_artifact(&stored).unwrap().body.as_str().unwrap().to_string();
+        assert!(html.contains("Standup"));
+        assert!(!html.contains("Apples"));
+        assert!(display.contains("| Apples | 3 |"));
+        assert!(display.contains("print("));
+        assert!(!display.contains("Standup"));
+    }
+
+    #[test]
+    fn unclosed_fence_does_not_promote_the_sample_table() {
+        let input = [
+            "```markdown",
+            "| A | B |",
+            "| --- | --- |",
+            "| 1 | 2 |",
+            "",
+            "The fence never closed, so this stays in the reply.",
+        ]
+        .join("\n");
+        let (display, stored) = split_assistant_reply(&input);
+        assert!(stored.is_none());
+        assert_eq!(display, input);
+    }
+
+    #[test]
+    fn keeps_markdown_table_inside_a_tilde_fence() {
+        let input = ["~~~markdown", "| A | B |", "| --- | --- |", "| 1 | 2 |", "~~~"].join("\n");
+        let (display, stored) = split_assistant_reply(&input);
+        assert!(stored.is_none());
+        assert_eq!(display, input);
+    }
+
+    #[test]
+    fn longer_fence_is_not_closed_by_an_inner_backtick_line() {
+        let input = [
+            "````md",
+            "```",
+            "| A | B |",
+            "| --- | --- |",
+            "| 1 | 2 |",
+            "````",
+        ]
+        .join("\n");
+        let (display, stored) = split_assistant_reply(&input);
+        assert!(stored.is_none());
+        assert_eq!(display, input);
     }
 
     #[test]

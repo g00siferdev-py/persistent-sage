@@ -1,5 +1,6 @@
 import { compile, type TopLevelSpec } from "vega-lite";
 import { buildChartHtmlDocument } from "@/lib/chartArtifact";
+import { extractMarkdownTable } from "@/lib/markdownTable";
 
 export { buildChartHtmlDocument } from "@/lib/chartArtifact";
 
@@ -446,47 +447,6 @@ function extractBareHtmlDocument(text: string): { before: string; html: string; 
     html: html.trim(),
     after: endMatch ? htmlPart.slice(endMatch.index! + endMatch[0].length).trimStart() : "",
   };
-}
-
-function extractMarkdownTable(
-  text: string,
-): { before: string; after: string; rows: string[][]; title: string } | null {
-  const lines = text.split(/\r?\n/);
-  let start = -1;
-  let end = -1;
-  for (let i = 0; i < lines.length; i += 1) {
-    if (/^\s*\|.+\|\s*$/.test(lines[i]!)) {
-      if (start < 0) start = i;
-      end = i;
-    } else if (start >= 0) {
-      break;
-    }
-  }
-  if (start < 0 || end - start < 1) return null;
-  const tableLines = lines.slice(start, end + 1);
-  if (tableLines.length < 2) return null;
-  if (!/^\s*\|[\s\-:|]+\|\s*$/.test(tableLines[1]!)) return null;
-
-  const parseRow = (line: string) =>
-    line
-      .trim()
-      .replace(/^\|/, "")
-      .replace(/\|$/, "")
-      .split("|")
-      .map((c) => c.trim());
-
-  const rows = tableLines
-    .filter((_, i) => i !== 1)
-    .map(parseRow)
-    .filter((r) => r.some((c) => c.length > 0));
-  if (rows.length < 1) return null;
-
-  const before = lines.slice(0, start).join("\n").trimEnd();
-  const after = lines.slice(end + 1).join("\n").trimStart();
-  const titleLine = before.split(/\r?\n/).pop()?.trim() ?? "Report";
-  const title = titleLine.length > 120 ? "Report" : titleLine.replace(/[:#*]+$/, "").trim() || "Report";
-
-  return { before, after, rows, title };
 }
 
 function markdownTableToHtmlDocument(rows: string[][], title: string): string {
