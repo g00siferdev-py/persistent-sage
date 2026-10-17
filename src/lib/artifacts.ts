@@ -376,30 +376,111 @@ function splitAssistantContent(content: string): PreparedAssistantMessage {
 
 type FenceParts = { before: string; body: string; after: string };
 
+/** CommonMark opening fence: up to 3 spaces, then ``` or ~~~ (length ≥ 3). */
+function lineOpensFence(line: string): { ch: "`" | "~"; len: number } | null {
+  let indent = 0;
+  while (indent < line.length && line[indent] === " ") indent += 1;
+  if (indent > 3) return null;
+  const rest = line.slice(indent);
+  const fenceChar = rest[0];
+  if (fenceChar !== "`" && fenceChar !== "~") return null;
+  let count = 0;
+  while (count < rest.length && rest[count] === fenceChar) count += 1;
+  if (count < 3) return null;
+  const info = rest.slice(count);
+  if (fenceChar === "`" && info.includes("`")) return null;
+  return { ch: fenceChar, len: count };
+}
+
+function lineClosesFence(line: string, openChar: "`" | "~", openLen: number): boolean {
+  let indent = 0;
+  while (indent < line.length && line[indent] === " ") indent += 1;
+  if (indent > 3) return false;
+  const token = line.slice(indent).trimEnd();
+  if (!token || [...token].some((c) => c !== openChar)) return false;
+  return token.length >= openLen;
+}
+
+/** True when `index` is on a line already inside an outer ``` / ~~~ fence. */
+function positionInsideFence(text: string, index: number): boolean {
+  let offset = 0;
+  let open: { ch: "`" | "~"; len: number } | null = null;
+  while (offset < text.length) {
+    let lineEnd = text.indexOf("\n", offset);
+    if (lineEnd < 0) lineEnd = text.length;
+    else lineEnd += 1;
+    const lineBody = text.slice(offset, lineEnd).replace(/\r?\n$/, "");
+    const onThisLine = index >= offset && index < lineEnd;
+    if (open) {
+      if (onThisLine) return true;
+      if (lineClosesFence(lineBody, open.ch, open.len)) open = null;
+    } else if (onThisLine) {
+      return false;
+    } else {
+      const opened = lineOpensFence(lineBody);
+      if (opened) open = opened;
+    }
+    if (lineEnd === offset) break;
+    offset = lineEnd;
+  }
+  return false;
+}
+
+function findAsciiCi(haystack: string, needle: string, from: number): number {
+  const n = needle.toLowerCase();
+  const limit = haystack.length - n.length;
+  for (let i = from; i <= limit; i += 1) {
+    let ok = true;
+    for (let j = 0; j < n.length; j += 1) {
+      let code = haystack.charCodeAt(i + j);
+      if (code >= 65 && code <= 90) code += 32;
+      if (code !== n.charCodeAt(j)) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return i;
+  }
+  return -1;
+}
+
 function extractCaseInsensitiveFence(text: string, lang: string): FenceParts | null {
-  const lower = text.toLowerCase();
   const marker = `\`\`\`${lang.toLowerCase()}`;
-  const start = lower.indexOf(marker);
-  if (start < 0) return null;
-  const afterMarker = text.slice(start + marker.length).replace(/^[\r\n]+/, "");
-  const end = afterMarker.indexOf("```");
-  if (end < 0) return null;
-  const body = afterMarker.slice(0, end).trim();
-  if (!body) return null;
-  return {
-    before: text.slice(0, start).trimEnd(),
-    body,
-    after: afterMarker.slice(end + 3).trimStart(),
-  };
+  let search = 0;
+  while (search < text.length) {
+    const start = findAsciiCi(text, marker, search);
+    if (start < 0) return null;
+    if (positionInsideFence(text, start)) {
+      search = start + marker.length;
+      continue;
+    }
+    const afterMarker = text.slice(start + marker.length).replace(/^[\r\n]+/, "");
+    const end = afterMarker.indexOf("```");
+    if (end < 0) return null;
+    const body = afterMarker.slice(0, end).trim();
+    if (!body) {
+      search = start + marker.length;
+      continue;
+    }
+    return {
+      before: text.slice(0, start).trimEnd(),
+      body,
+      after: afterMarker.slice(end + 3).trimStart(),
+    };
+  }
+  return null;
 }
 
 function extractUnlabeledHtmlFence(text: string): FenceParts | null {
-  const lower = text.toLowerCase();
   let searchFrom = 0;
   while (true) {
-    const rel = lower.indexOf("```", searchFrom);
+    const rel = text.indexOf("```", searchFrom);
     if (rel < 0) return null;
     const start = rel;
+    if (positionInsideFence(text, start)) {
+      searchFrom = start + 3;
+      continue;
+    }
     let i = start + 3;
     while (i < text.length && /\s/.test(text[i]!)) i += 1;
     if (i < text.length && /[a-zA-Z]/.test(text[i]!)) {
@@ -599,8 +680,16 @@ function inferHtmlTitle(html: string): string {
  * those must reach MessageContent for syntax-highlighted rendering.
  */
 function cleanAssistantDisplayText(text: string): string {
-  return text
-    .replace(/```(?:artifact|html|htm|xml)\b[\s\S]*?```/gi, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  const re = /```(?:artifact|html|htm|xml)\b[\s\S]*?```/gi;
+  let out = "";
+  let last = 0;
+  for (const match of text.matchAll(re)) {
+    const idx = match.index ?? 0;
+    // A fence nested inside another code sample is source text, not an artifact wrapper.
+    if (positionInsideFence(text, idx)) continue;
+    out += text.slice(last, idx);
+    last = idx + match[0].length;
+  }
+  out += text.slice(last);
+  return out.replace(/\n{3,}/g, "\n\n").trim();
 }

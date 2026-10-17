@@ -527,10 +527,88 @@ fn infer_html_title(html: &str) -> String {
     "Report".into()
 }
 
+/// CommonMark opening fence: up to 3 spaces, then ``` or ~~~ (length ≥ 3).
+fn line_opens_fence(line: &str) -> Option<(char, usize)> {
+    let indent = line.bytes().take_while(|b| *b == b' ').count();
+    if indent > 3 {
+        return None;
+    }
+    let rest = &line[indent..];
+    let fence_char = rest.chars().next()?;
+    if fence_char != '`' && fence_char != '~' {
+        return None;
+    }
+    let count = rest.chars().take_while(|c| *c == fence_char).count();
+    if count < 3 {
+        return None;
+    }
+    let info = &rest[fence_char.len_utf8() * count..];
+    if fence_char == '`' && info.contains('`') {
+        return None;
+    }
+    Some((fence_char, count))
+}
+
+fn line_closes_fence(line: &str, open_char: char, open_len: usize) -> bool {
+    let indent = line.bytes().take_while(|b| *b == b' ').count();
+    if indent > 3 {
+        return false;
+    }
+    let token = line[indent..].trim_end();
+    if token.is_empty() || !token.chars().all(|c| c == open_char) {
+        return false;
+    }
+    token.chars().count() >= open_len
+}
+
+/// True when `index` sits on a line that is already inside an outer ``` / ~~~ fence.
+/// The opening fence line itself is not inside. A longer fence stays open across an
+/// inner ``` line (CommonMark: the closer must be at least as long, and only fence chars).
+fn position_inside_code_fence(text: &str, index: usize) -> bool {
+    let mut offset = 0usize;
+    let mut open: Option<(char, usize)> = None;
+    for line in text.split_inclusive('\n') {
+        let line_start = offset;
+        let line_end = offset + line.len();
+        let line_body = line.trim_end_matches(['\r', '\n']);
+        let on_this_line = index >= line_start && index < line_end;
+        if let Some((ch, len)) = open {
+            if on_this_line {
+                return true;
+            }
+            if line_closes_fence(line_body, ch, len) {
+                open = None;
+            }
+        } else if on_this_line {
+            return false;
+        } else if let Some(opened) = line_opens_fence(line_body) {
+            open = Some(opened);
+        }
+        offset = line_end;
+    }
+    false
+}
+
+fn find_ascii_ci_outside_fence(text: &str, needle: &str) -> Option<usize> {
+    let hay = text.as_bytes();
+    let ned = needle.as_bytes();
+    if ned.is_empty() || hay.len() < ned.len() {
+        return None;
+    }
+    let mut i = 0usize;
+    while i + ned.len() <= hay.len() {
+        if hay[i..i + ned.len()].eq_ignore_ascii_case(ned) && !position_inside_code_fence(text, i)
+        {
+            return Some(i);
+        }
+        i += 1;
+    }
+    None
+}
+
 fn extract_language_fence_ci<'a>(text: &'a str, lang: &str) -> Option<(&'a str, &'a str, &'a str)> {
-    let lower = text.to_ascii_lowercase();
     let marker = format!("```{lang}");
-    let start = lower.find(&marker)?;
+    let start = find_ascii_ci_outside_fence(text, &marker)?;
     let after_marker = text[start + marker.len()..].trim_start_matches(['\r', '\n']);
     let end_fence = after_marker.find("```")?;
     let body = after_marker[..end_fence].trim();
@@ -683,6 +761,10 @@ fn extract_unlabeled_html_fence<'a>(text: &'a str) -> Option<(&'a str, &'a str, 
     let mut search_from = 0;
     while let Some(rel) = lower[search_from..].find("```") {
         let start = search_from + rel;
+        if position_inside_code_fence(text, start) {
+            search_from = start + 3;
+            continue;
+        }
         let after_ticks = &text[start + 3..];
         let mut i = 0;
         let bytes = after_ticks.as_bytes();
@@ -717,9 +799,8 @@ pub fn parse_stored_artifact(json: &str) -> Option<ChatArtifact> {
 }
 
 fn extract_artifact_fence(text: &str) -> Option<(&str, &str, &str)> {
-    let lower = text.to_ascii_lowercase();
     let marker = format!("```{ARTIFACT_FENCE}");
-    let start = lower.find(&marker)?;
+    let start = find_ascii_ci_outside_fence(text, &marker)?;
     let after_marker = text[start + marker.len()..]
         .trim_start_matches(['\r', '\n']);
     let end_fence = after_marker.find("```")?;
@@ -852,6 +933,90 @@ mod tests {
         let input = format!("Plan below.\n\n```HTML\n{html}\n```");
         let (_, stored) = split_assistant_reply(&input);
         assert!(stored.is_some());
+    }
+
+    #[test]
+    fn nested_html_fence_inside_python_is_not_promoted() {
+        let input = "\
+```python
+page = \"\"\"
+```html
+<table>
+<tr><td>Ada</td></tr>
+</table>
+```
+\"\"\"
+print(page)
+```
+";
+        let (display, stored) = split_assistant_reply(input);
+        assert!(stored.is_none(), "nested html fence must stay in the sample");
+        assert_eq!(display, input);
+        assert!(display.contains("<td>Ada</td>"));
+        assert!(display.contains("print(page)"));
+    }
+
+    #[test]
+    fn html_fence_after_closed_python_fence_still_promotes() {
+        let input = "\
+```python
+print(\"hi\")
+```
+
+```html
+<table><tr><td>Ada</td></tr></table>
+```
+";
+        let (display, stored) = split_assistant_reply(input);
+        assert!(stored.is_some());
+        assert!(display.contains("print(\"hi\")"));
+        assert!(!display.contains("<td>Ada</td>"));
+    }
+
+    #[test]
+    fn tilde_fence_protects_inner_html_fence() {
+        let input = "\
+~~~markdown
+```html
+<table><tr><td>Ada</td></tr></table>
+```
+~~~
+";
+        let (display, stored) = split_assistant_reply(input);
+        assert!(stored.is_none());
+        assert_eq!(display, input);
+    }
+
+    #[test]
+    fn longer_fence_is_not_closed_by_inner_backticks() {
+        let input = "\
+````
+```html
+<table><tr><td>Ada</td></tr></table>
+```
+````
+";
+        let (display, stored) = split_assistant_reply(input);
+        assert!(stored.is_none());
+        assert_eq!(display, input);
+    }
+
+    #[test]
+    fn nested_vega_json_fence_is_not_promoted() {
+        let input = "\
+```python
+spec = \"\"\"
+```json
+{\"mark\":\"bar\",\"data\":{\"values\":[{\"x\":1}]}}
+```
+\"\"\"
+print(spec)
+```
+";
+        let (display, stored) = split_assistant_reply(input);
+        assert!(stored.is_none());
+        assert!(display.contains("\"mark\":\"bar\""));
+        assert!(display.contains("print(spec)"));
     }
 
     #[test]
