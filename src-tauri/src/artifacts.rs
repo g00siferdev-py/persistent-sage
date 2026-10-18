@@ -437,13 +437,103 @@ fn humanize_field_name(field: &str) -> String {
         .join(" ")
 }
 
+/// A Vega-Lite spec names a chart mark plus encoding channels, a layered mark
+/// with those channels, or a Vega `$schema`. A lone `encoding`, `mark`, or
+/// `layer` field is ordinary JSON (charset, grade, network layer) and must
+/// stay in the reply.
 fn looks_like_vega_lite(v: &Value) -> bool {
-    if v.get("mark").is_some() || v.get("layer").is_some() || v.get("encoding").is_some() {
-        return true;
-    }
-    v.get("$schema")
+    let Some(obj) = v.as_object() else {
+        return false;
+    };
+    if obj
+        .get("$schema")
         .and_then(|s| s.as_str())
         .is_some_and(|s| s.to_ascii_lowercase().contains("vega"))
+    {
+        return true;
+    }
+    if has_chart_mark(obj.get("mark")) && has_vega_encoding(obj.get("encoding")) {
+        return true;
+    }
+    if let Some(Value::Array(layers)) = obj.get("layer") {
+        return layers.iter().any(|layer| {
+            let Some(layer_obj) = layer.as_object() else {
+                return false;
+            };
+            has_chart_mark(layer_obj.get("mark"))
+                && (has_vega_encoding(layer_obj.get("encoding"))
+                    || has_vega_encoding(obj.get("encoding")))
+        });
+    }
+    false
+}
+
+fn has_chart_mark(mark: Option<&Value>) -> bool {
+    match mark {
+        Some(Value::String(name)) => is_vega_mark_name(name),
+        Some(Value::Object(obj)) => obj
+            .get("type")
+            .and_then(|t| t.as_str())
+            .is_some_and(is_vega_mark_name),
+        _ => false,
+    }
+}
+
+fn is_vega_mark_name(name: &str) -> bool {
+    matches!(
+        name.trim().to_ascii_lowercase().as_str(),
+        "arc"
+            | "area"
+            | "bar"
+            | "boxplot"
+            | "circle"
+            | "errorband"
+            | "errorbar"
+            | "geoshape"
+            | "image"
+            | "line"
+            | "point"
+            | "rect"
+            | "rule"
+            | "square"
+            | "text"
+            | "tick"
+            | "trail"
+    )
+}
+
+fn has_vega_encoding(encoding: Option<&Value>) -> bool {
+    let Some(Value::Object(obj)) = encoding else {
+        return false;
+    };
+    const CHANNELS: &[&str] = &[
+        "x",
+        "y",
+        "x2",
+        "y2",
+        "theta",
+        "theta2",
+        "radius",
+        "radius2",
+        "color",
+        "fill",
+        "stroke",
+        "size",
+        "shape",
+        "opacity",
+        "text",
+        "tooltip",
+        "href",
+        "longitude",
+        "latitude",
+        "longitude2",
+        "latitude2",
+        "xOffset",
+        "yOffset",
+        "order",
+        "detail",
+    ];
+    CHANNELS.iter().any(|channel| obj.contains_key(*channel))
 }
 
 fn looks_like_html(s: &str) -> bool {
@@ -862,5 +952,68 @@ mod tests {
         assert!(!user_requests_visual_deliverable(
             "write python code to parse csv"
         ));
+    }
+
+    #[test]
+    fn json_encoding_config_stays_in_the_reply() {
+        let input = "Use this config.\n\n```json\n{\n  \"path\": \"data/sales.csv\",\n  \"encoding\": \"utf-8\",\n  \"delimiter\": \",\"\n}\n```\n";
+        let (display, stored) = split_assistant_reply(input);
+        assert!(stored.is_none());
+        assert!(display.contains("utf-8"));
+        assert!(display.contains("sales.csv"));
+        assert!(display.contains("delimiter"));
+    }
+
+    #[test]
+    fn json_layer_name_and_grade_stay_in_the_reply() {
+        let layer = "```json\n{\"layer\": \"conv1\", \"units\": 32}\n```\n";
+        let (display, stored) = split_assistant_reply(layer);
+        assert!(stored.is_none());
+        assert!(display.contains("conv1"));
+
+        let grade = "```json\n{\"student\": \"Ada\", \"mark\": \"A\"}\n```\n";
+        let (display, stored) = split_assistant_reply(grade);
+        assert!(stored.is_none());
+        assert!(display.contains("Ada"));
+    }
+
+    #[test]
+    fn vega_lite_json_fence_still_promotes() {
+        let input = r#"Chart:
+
+```json
+{
+  "title": "Sales",
+  "data": {"values": [{"day": "Mon", "amount": 3}]},
+  "mark": "bar",
+  "encoding": {
+    "x": {"field": "day", "type": "ordinal"},
+    "y": {"field": "amount", "type": "quantitative"}
+  }
+}
+```
+"#;
+        let (display, stored) = split_assistant_reply(input);
+        let stored = stored.expect("chart artifact");
+        let parsed = parse_stored_artifact(&stored).unwrap();
+        assert_eq!(parsed.artifact_type, "vegaLite");
+        assert!(display.contains("Chart:"));
+        assert!(!display.contains("amount"));
+    }
+
+    #[test]
+    fn layered_vega_lite_json_fence_still_promotes() {
+        let input = r#"```json
+{
+  "data": {"values": [{"a": "x", "b": 1}]},
+  "layer": [
+    {"mark": "bar", "encoding": {"x": {"field": "a"}, "y": {"field": "b"}}}
+  ]
+}
+```"#;
+        let (_, stored) = split_assistant_reply(input);
+        let stored = stored.expect("layered chart");
+        let parsed = parse_stored_artifact(&stored).unwrap();
+        assert_eq!(parsed.artifact_type, "vegaLite");
     }
 }
