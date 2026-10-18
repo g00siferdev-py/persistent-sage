@@ -522,23 +522,104 @@ function markdownTableToHtmlDocument(rows: string[][], title: string): string {
 </html>`;
 }
 
+const VEGA_MARKS = new Set([
+  "arc",
+  "area",
+  "bar",
+  "boxplot",
+  "circle",
+  "errorband",
+  "errorbar",
+  "geoshape",
+  "image",
+  "line",
+  "point",
+  "rect",
+  "rule",
+  "square",
+  "text",
+  "tick",
+  "trail",
+]);
+
+const VEGA_CHANNELS = [
+  "x",
+  "y",
+  "x2",
+  "y2",
+  "theta",
+  "theta2",
+  "radius",
+  "radius2",
+  "color",
+  "fill",
+  "stroke",
+  "size",
+  "shape",
+  "opacity",
+  "text",
+  "tooltip",
+  "href",
+  "longitude",
+  "latitude",
+  "longitude2",
+  "latitude2",
+  "xOffset",
+  "yOffset",
+  "order",
+  "detail",
+];
+
+function isVegaMarkName(name: string): boolean {
+  return VEGA_MARKS.has(name.trim().toLowerCase());
+}
+
+function hasChartMark(mark: unknown): boolean {
+  if (typeof mark === "string") return isVegaMarkName(mark);
+  if (mark && typeof mark === "object" && !Array.isArray(mark)) {
+    const type = (mark as { type?: unknown }).type;
+    return typeof type === "string" && isVegaMarkName(type);
+  }
+  return false;
+}
+
+function hasVegaEncoding(encoding: unknown): boolean {
+  if (!encoding || typeof encoding !== "object" || Array.isArray(encoding)) return false;
+  return VEGA_CHANNELS.some((channel) =>
+    Object.prototype.hasOwnProperty.call(encoding, channel),
+  );
+}
+
+/** Mirror of the Rust check: ordinary JSON keys must not become a chart. */
+function looksLikeVegaLite(value: Record<string, unknown>): boolean {
+  const schema = value.$schema;
+  if (typeof schema === "string" && schema.toLowerCase().includes("vega")) return true;
+  if (hasChartMark(value.mark) && hasVegaEncoding(value.encoding)) return true;
+  if (Array.isArray(value.layer)) {
+    return value.layer.some((layer) => {
+      if (!layer || typeof layer !== "object" || Array.isArray(layer)) return false;
+      const spec = layer as { mark?: unknown; encoding?: unknown };
+      return (
+        hasChartMark(spec.mark) &&
+        (hasVegaEncoding(spec.encoding) || hasVegaEncoding(value.encoding))
+      );
+    });
+  }
+  return false;
+}
+
 function tryVegaArtifact(body: string): ChatArtifact | null {
   try {
-    const value = JSON.parse(body.trim()) as Record<string, unknown>;
-    if (
-      value.mark ||
-      value.layer ||
-      value.encoding ||
-      (typeof value.$schema === "string" && value.$schema.toLowerCase().includes("vega"))
-    ) {
-      const title =
-        typeof value.title === "string" && value.title.trim() ? value.title : "Chart";
-      return { type: "vegaLite", title, body: value };
-    }
+    const value = JSON.parse(body.trim()) as unknown;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const spec = value as Record<string, unknown>;
+    if (!looksLikeVegaLite(spec)) return null;
+    const title =
+      typeof spec.title === "string" && spec.title.trim() ? spec.title : "Chart";
+    return { type: "vegaLite", title, body: spec };
   } catch {
-    /* ignore */
+    return null;
   }
-  return null;
 }
 
 function buildHtmlArtifact(title: string, html: string): ChatArtifact {
