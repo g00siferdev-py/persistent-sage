@@ -301,7 +301,7 @@ export function prepareAssistantMessage(
   if (existingArtifactJson?.trim()) {
     const parsed = parseArtifactJson(existingArtifactJson);
     if (parsed) {
-      const cleaned = cleanAssistantDisplayText(content);
+      const cleaned = cleanAssistantDisplayText(content, existingArtifactJson);
       return {
         content: cleaned || parsed.title,
         artifactJson: existingArtifactJson,
@@ -593,14 +593,54 @@ function inferHtmlTitle(html: string): string {
   return "Report";
 }
 
+function fenceInner(fence: string): string {
+  const withoutOpen = fence.replace(/^```[^\n\r]*\r?\n?/, "");
+  return withoutOpen.replace(/```\s*$/, "").trim();
+}
+
 /**
- * Strip leftover artifact/html fences that were already promoted to `artifactJson`.
- * Do NOT strip normal markdown code fences (`bash`, `typescript`, plain ```, etc.) —
- * those must reach MessageContent for syntax-highlighted rendering.
+ * True when this fence is the artifact already stored on the message.
+ * A later sample (a button, an XML config, a second page) must stay in the bubble.
  */
-function cleanAssistantDisplayText(text: string): string {
-  return text
-    .replace(/```(?:artifact|html|htm|xml)\b[\s\S]*?```/gi, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+function fenceDuplicatesStoredArtifact(
+  fence: string,
+  artifact: ChatArtifact,
+  storedBody: string,
+  artifactJson: string,
+): boolean {
+  const inner = fenceInner(fence);
+  if (!inner) return false;
+  if (inner === storedBody || inner === artifactJson.trim()) return true;
+  try {
+    const parsed = JSON.parse(inner) as {
+      type?: string;
+      artifactType?: string;
+      body?: unknown;
+    };
+    const kind = (parsed.type ?? parsed.artifactType ?? "").toString().toLowerCase();
+    if (!kind || kind !== artifact.type.toLowerCase()) return false;
+    if (typeof parsed.body === "string") return parsed.body.trim() === storedBody;
+    if (parsed.body && typeof parsed.body === "object" && typeof artifact.body === "object") {
+      return JSON.stringify(parsed.body) === JSON.stringify(artifact.body);
+    }
+  } catch {
+    /* fence is source, not artifact JSON */
+  }
+  return false;
+}
+
+/** With a stored artifact, drop only a duplicate of that body. Otherwise strip html/xml/artifact fences. */
+function cleanAssistantDisplayText(text: string, artifactJson?: string): string {
+  const artifact = artifactJson ? parseArtifactJson(artifactJson) : null;
+  const storedBody = artifact ? artifactBodyString(artifact.body).trim() : "";
+  const stripped = artifact
+    ? storedBody
+      ? text.replace(/```(?:artifact|html|htm|xml)\b[\s\S]*?```/gi, (fence) =>
+          fenceDuplicatesStoredArtifact(fence, artifact, storedBody, artifactJson ?? "")
+            ? ""
+            : fence,
+        )
+      : text
+    : text.replace(/```(?:artifact|html|htm|xml)\b[\s\S]*?```/gi, "");
+  return stripped.replace(/\n{3,}/g, "\n\n").trim();
 }
