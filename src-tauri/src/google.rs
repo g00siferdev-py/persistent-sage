@@ -989,6 +989,22 @@ struct Attachment {
     bytes: Vec<u8>,
 }
 
+/// MIME base64 folded at 76 characters (RFC 2045).
+///
+/// SMTP rejects or truncates a text line longer than 998 octets (RFC 5321). An
+/// unfolded body of a few paragraphs is already over that limit, so relays and
+/// some clients deliver a cut-off message after the app reports success.
+fn mime_base64(data: &[u8]) -> String {
+    const LINE: usize = 76;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(data);
+    let mut out = String::with_capacity(encoded.len() + (encoded.len() / LINE) * 2);
+    for chunk in encoded.as_bytes().chunks(LINE) {
+        out.push_str(&String::from_utf8_lossy(chunk));
+        out.push_str("\r\n");
+    }
+    out
+}
+
 fn build_mime(
     to: &str,
     cc: &str,
@@ -1020,7 +1036,7 @@ fn build_mime(
     if attachments.is_empty() {
         headers.push_str("Content-Type: text/plain; charset=UTF-8\r\n");
         headers.push_str("Content-Transfer-Encoding: base64\r\n\r\n");
-        headers.push_str(&base64::engine::general_purpose::STANDARD.encode(body.as_bytes()));
+        headers.push_str(&mime_base64(body.as_bytes()));
         return headers;
     }
 
@@ -1031,8 +1047,7 @@ fn build_mime(
     headers.push_str(&format!("--{boundary}\r\n"));
     headers.push_str("Content-Type: text/plain; charset=UTF-8\r\n");
     headers.push_str("Content-Transfer-Encoding: base64\r\n\r\n");
-    headers.push_str(&base64::engine::general_purpose::STANDARD.encode(body.as_bytes()));
-    headers.push_str("\r\n");
+    headers.push_str(&mime_base64(body.as_bytes()));
     for att in attachments {
         headers.push_str(&format!("--{boundary}\r\n"));
         headers.push_str(&format!(
@@ -1044,11 +1059,7 @@ fn build_mime(
             att.filename
         ));
         headers.push_str("Content-Transfer-Encoding: base64\r\n\r\n");
-        let encoded = base64::engine::general_purpose::STANDARD.encode(&att.bytes);
-        for chunk in encoded.as_bytes().chunks(76) {
-            headers.push_str(&String::from_utf8_lossy(chunk));
-            headers.push_str("\r\n");
-        }
+        headers.push_str(&mime_base64(&att.bytes));
     }
     headers.push_str(&format!("--{boundary}--\r\n"));
     headers
@@ -2387,5 +2398,74 @@ mod tests {
             .expect("write");
         let code = wait.join().expect("join").expect("code");
         assert_eq!(code, "test-auth-code");
+    }
+
+    fn decoded_base64_parts(mime: &str) -> Vec<Vec<u8>> {
+        mime.split("\r\n\r\n")
+            .skip(1)
+            .filter_map(|part| {
+                let compact: String = part
+                    .chars()
+                    .take_while(|c| *c != '-')
+                    .filter(|c| !c.is_whitespace())
+                    .collect();
+                if compact.is_empty() {
+                    None
+                } else {
+                    Some(
+                        base64::engine::general_purpose::STANDARD
+                            .decode(compact)
+                            .expect("folded base64"),
+                    )
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn long_message_body_stays_within_smtp_line_limit() {
+        let body = "Please review the notes from today's meeting. ".repeat(40);
+        assert!(body.len() > 998, "fixture must exceed one SMTP line");
+        let mime = build_mime("ada@example.com", "", "Meeting notes", &body, &[], "", "");
+        for line in mime.split("\r\n") {
+            assert!(
+                line.len() <= 998,
+                "SMTP line is {} octets: {line}",
+                line.len()
+            );
+        }
+        let parts = decoded_base64_parts(&mime);
+        assert_eq!(parts.len(), 1);
+        assert_eq!(String::from_utf8(parts[0].clone()).unwrap(), body);
+    }
+
+    #[test]
+    fn long_body_and_attachment_stay_within_smtp_line_limit() {
+        let body = "x".repeat(2_000);
+        let bytes = vec![b'a'; 2_000];
+        let mime = build_mime(
+            "ada@example.com",
+            "bob@example.com",
+            "Notes",
+            &body,
+            &[Attachment {
+                filename: "notes.txt".into(),
+                mime: "text/plain".into(),
+                bytes: bytes.clone(),
+            }],
+            "",
+            "",
+        );
+        for line in mime.split("\r\n") {
+            assert!(
+                line.len() <= 998,
+                "SMTP line is {} octets",
+                line.len()
+            );
+        }
+        let parts = decoded_base64_parts(&mime);
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0], body.as_bytes());
+        assert_eq!(parts[1], bytes);
     }
 }
