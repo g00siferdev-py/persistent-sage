@@ -225,6 +225,77 @@ fn anthropic_user_tool_results(tool_calls: &[ToolCall], bodies: &[String]) -> se
     json!({ "role": "user", "content": blocks })
 }
 
+/// Attach workspace-vision bytes to the tool-result user turn.
+///
+/// Anthropic rejects a transcript whose roles do not alternate. The tool
+/// result is already a `user` message, so a following image `user` turn
+/// makes `messages` return 400 and the turn ends with no reply.
+fn append_vision_to_last_anthropic_user(
+    messages: &mut Vec<ChatTurn>,
+    data_directory: &Path,
+    display_body: &str,
+    rel: &str,
+    mime: &str,
+) -> bool {
+    let caption = if display_body.trim().is_empty() {
+        "The workspace image is attached. Review it and answer the user.".to_string()
+    } else {
+        format!(
+            "{}\n\n(Image bytes follow for vision — review the screenshot and answer the user.)",
+            display_body.trim()
+        )
+    };
+    let turn = match attachments::chat_turn_from_attachment(
+        "anthropic",
+        data_directory,
+        rel,
+        mime,
+        &caption,
+    ) {
+        Ok(turn) => turn,
+        Err(e) => {
+            eprintln!("persistent-sage: workspace vision inject failed: {e}");
+            if let Some(last) = messages.last_mut() {
+                if let Some(msg) = last.anthropic_message.as_mut() {
+                    if let Some(blocks) = msg.get_mut("content").and_then(|c| c.as_array_mut()) {
+                        blocks.push(json!({
+                            "type": "text",
+                            "text": format!("Tool note: could not attach workspace image for vision ({e}).")
+                        }));
+                    }
+                }
+            }
+            return false;
+        }
+    };
+    let Some(extra) = turn.anthropic_message else {
+        return false;
+    };
+    let Some(image_blocks) = extra.get("content").and_then(|c| c.as_array()).cloned() else {
+        return false;
+    };
+    let Some(last) = messages.last_mut() else {
+        return false;
+    };
+    if last.role != "user" {
+        return false;
+    }
+    let Some(msg) = last.anthropic_message.as_mut() else {
+        return false;
+    };
+    let Some(blocks) = msg.get_mut("content").and_then(|c| c.as_array_mut()) else {
+        return false;
+    };
+    blocks.extend(image_blocks);
+    if !turn.content.trim().is_empty() {
+        if !last.content.is_empty() {
+            last.content.push_str("\n\n");
+        }
+        last.content.push_str(turn.content.trim());
+    }
+    true
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum AgentWebToolBackend {
     OpenAI,
@@ -570,15 +641,15 @@ async fn apply_tool_round_messages(
             });
             for (body, vision) in bodies.iter().zip(visions.into_iter()) {
                 if let Some((rel, mime)) = vision {
-                    push_vision_followup(
+                    if append_vision_to_last_anthropic_user(
                         messages,
-                        &provider_id,
                         data_directory,
                         body,
                         &rel,
                         &mime,
-                        &mut vision_injected,
-                    );
+                    ) {
+                        vision_injected = true;
+                    }
                 }
             }
         }
@@ -1916,6 +1987,82 @@ pub async fn chat_send_message(
         provider_id: info.provider_id,
         model_id: info.model_id,
     })
+}
+
+#[cfg(test)]
+mod anthropic_vision_tests {
+    use super::*;
+
+    #[test]
+    fn anthropic_vision_stays_on_the_tool_result_user_turn() {
+        let dir = std::env::temp_dir().join(format!(
+            "ps-anthropic-vision-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let rel = "attachments/c1/shot.png";
+        let abs = dir.join(rel);
+        std::fs::create_dir_all(abs.parent().unwrap()).unwrap();
+        std::fs::write(&abs, b"\x89PNG fake").unwrap();
+
+        let mut messages = vec![
+            ChatTurn {
+                role: "assistant".into(),
+                content: String::new(),
+                openai_message: None,
+                ollama_message: None,
+                anthropic_message: Some(json!({
+                    "role": "assistant",
+                    "content": [{
+                        "type": "tool_use",
+                        "id": "toolu_1",
+                        "name": "workspace_view_image",
+                        "input": {"path": "shot.png"}
+                    }]
+                })),
+            },
+            ChatTurn {
+                role: "user".into(),
+                content: "Loaded workspace image `shot.png` for vision review.".into(),
+                openai_message: None,
+                ollama_message: None,
+                anthropic_message: Some(json!({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": "toolu_1",
+                        "content": "Loaded workspace image `shot.png` for vision review."
+                    }]
+                })),
+            },
+        ];
+
+        assert!(append_vision_to_last_anthropic_user(
+            &mut messages,
+            &dir,
+            "Loaded workspace image `shot.png` for vision review.",
+            rel,
+            "image/png",
+        ));
+        assert_eq!(messages.len(), 2, "image must not add a second user turn");
+        assert_eq!(messages[0].role, "assistant");
+        assert_eq!(messages[1].role, "user");
+
+        let blocks = messages[1]
+            .anthropic_message
+            .as_ref()
+            .and_then(|m| m.get("content"))
+            .and_then(|c| c.as_array())
+            .expect("anthropic user content");
+        assert!(
+            blocks.iter().any(|b| b.get("type").and_then(|t| t.as_str()) == Some("tool_result")),
+            "tool result stays on the same user turn"
+        );
+        assert!(
+            blocks.iter().any(|b| b.get("type").and_then(|t| t.as_str()) == Some("image")),
+            "image bytes are on the tool-result user turn"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[tauri::command]
