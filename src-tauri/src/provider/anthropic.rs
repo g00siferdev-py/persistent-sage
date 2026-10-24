@@ -18,6 +18,35 @@ const ANTHROPIC_API: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 const DEFAULT_MAX_TOKENS: u32 = 8192;
 const CLAUDE_CTX: u32 = 200_000;
+const LEADING_ASSISTANT_USER_NOTE: &str =
+    "(No user message was stored before the assistant reply that follows.)";
+
+fn merge_message_content(left: &Value, right: &Value) -> Value {
+    match (left, right) {
+        (Value::String(a), Value::String(b)) => {
+            if a.is_empty() {
+                Value::String(b.clone())
+            } else if b.is_empty() {
+                Value::String(a.clone())
+            } else {
+                Value::String(format!("{a}\n\n{b}"))
+            }
+        }
+        _ => {
+            let mut blocks = content_as_blocks(left);
+            blocks.extend(content_as_blocks(right));
+            Value::Array(blocks)
+        }
+    }
+}
+
+fn content_as_blocks(content: &Value) -> Vec<Value> {
+    match content {
+        Value::String(s) => vec![json!({ "type": "text", "text": s })],
+        Value::Array(arr) => arr.clone(),
+        other => vec![json!({ "type": "text", "text": other.to_string() })],
+    }
+}
 
 pub struct AnthropicProvider {
     client: reqwest::Client,
@@ -75,7 +104,42 @@ impl AnthropicProvider {
         } else {
             Some(system_parts.join("\n\n"))
         };
-        (system, messages)
+        (system, Self::coalesce_alternating_messages(messages))
+    }
+
+    /// Anthropic rejects a request unless `user` and `assistant` alternate and the
+    /// first message is `user`. Stored transcripts violate that after a Pulse, form,
+    /// or email-agent reply (assistant row with no user row), after a failed send
+    /// (two user rows), and once the 32-message window opens on an assistant turn.
+    fn coalesce_alternating_messages(messages: Vec<Value>) -> Vec<Value> {
+        let mut out: Vec<Value> = Vec::with_capacity(messages.len());
+        for msg in messages {
+            let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
+            if let Some(last) = out.last_mut() {
+                let last_role = last.get("role").and_then(|r| r.as_str()).unwrap_or("");
+                if !role.is_empty() && role == last_role {
+                    let merged = merge_message_content(&last["content"], &msg["content"]);
+                    last["content"] = merged;
+                    continue;
+                }
+            }
+            out.push(msg);
+        }
+        if out
+            .first()
+            .and_then(|m| m.get("role"))
+            .and_then(|r| r.as_str())
+            == Some("assistant")
+        {
+            out.insert(
+                0,
+                json!({
+                    "role": "user",
+                    "content": LEADING_ASSISTANT_USER_NOTE
+                }),
+            );
+        }
+        out
     }
 
     fn anthropic_tools(tools: &[ToolDefinition]) -> Vec<Value> {
@@ -327,4 +391,132 @@ pub async fn fetch_anthropic_model_ids(
     names.sort();
     names.dedup();
     Ok(names)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::provider::ChatTurn;
+
+    fn messages_of(turns: Vec<ChatTurn>) -> Vec<Value> {
+        let (_, messages) = AnthropicProvider::split_system_and_messages(&CompletionRequest {
+            messages: turns,
+            ..CompletionRequest::default()
+        });
+        messages
+    }
+
+    #[test]
+    fn merges_consecutive_assistant_replies() {
+        let messages = messages_of(vec![
+            ChatTurn::text("system", "persona"),
+            ChatTurn::text("user", "draft a budget"),
+            ChatTurn::text("assistant", "Here is the form."),
+            ChatTurn::text("assistant", "Updated the living document."),
+            ChatTurn::text("user", "tighten rent"),
+        ]);
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0]["role"], "user");
+        assert_eq!(messages[0]["content"], "draft a budget");
+        assert_eq!(messages[1]["role"], "assistant");
+        assert_eq!(
+            messages[1]["content"],
+            "Here is the form.\n\nUpdated the living document."
+        );
+        assert_eq!(messages[2]["content"], "tighten rent");
+    }
+
+    #[test]
+    fn prefixes_user_when_context_window_opens_on_assistant() {
+        let messages = messages_of(vec![
+            ChatTurn::text("assistant", "Earlier reply that the window kept."),
+            ChatTurn::text("user", "what did we decide?"),
+        ]);
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0]["role"], "user");
+        assert_eq!(messages[0]["content"], LEADING_ASSISTANT_USER_NOTE);
+        assert_eq!(messages[1]["role"], "assistant");
+        assert_eq!(
+            messages[1]["content"],
+            "Earlier reply that the window kept."
+        );
+        assert_eq!(messages[2]["role"], "user");
+        assert_eq!(messages[2]["content"], "what did we decide?");
+    }
+
+    #[test]
+    fn merges_consecutive_user_turns_after_a_failed_send() {
+        let messages = messages_of(vec![
+            ChatTurn::text("user", "first try"),
+            ChatTurn::text("user", "second try"),
+            ChatTurn::text("assistant", "answer"),
+        ]);
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0]["role"], "user");
+        assert_eq!(messages[0]["content"], "first try\n\nsecond try");
+        assert_eq!(messages[1]["role"], "assistant");
+        assert_eq!(messages[1]["content"], "answer");
+    }
+
+    #[test]
+    fn leaves_alternating_transcript_unchanged() {
+        let messages = messages_of(vec![
+            ChatTurn::text("user", "hello"),
+            ChatTurn::text("assistant", "hi"),
+        ]);
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0]["content"], "hello");
+        assert_eq!(messages[1]["content"], "hi");
+    }
+
+    #[test]
+    fn keeps_tool_result_attached_when_a_user_turn_follows() {
+        let messages = messages_of(vec![
+            ChatTurn::text("user", "look at the screenshot"),
+            ChatTurn {
+                role: "assistant".into(),
+                content: String::new(),
+                openai_message: None,
+                ollama_message: None,
+                anthropic_message: Some(json!({
+                    "role": "assistant",
+                    "content": [
+                        { "type": "tool_use", "id": "toolu_1", "name": "workspace_view_image", "input": {} }
+                    ]
+                })),
+            },
+            ChatTurn {
+                role: "user".into(),
+                content: "loaded".into(),
+                openai_message: None,
+                ollama_message: None,
+                anthropic_message: Some(json!({
+                    "role": "user",
+                    "content": [
+                        { "type": "tool_result", "tool_use_id": "toolu_1", "content": "loaded" }
+                    ]
+                })),
+            },
+            ChatTurn {
+                role: "user".into(),
+                content: "image follows".into(),
+                openai_message: None,
+                ollama_message: None,
+                anthropic_message: Some(json!({
+                    "role": "user",
+                    "content": [
+                        { "type": "text", "text": "image follows" },
+                        { "type": "image", "source": { "type": "base64", "media_type": "image/png", "data": "abc" } }
+                    ]
+                })),
+            },
+        ]);
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[1]["role"], "assistant");
+        assert_eq!(messages[1]["content"][0]["type"], "tool_use");
+        assert_eq!(messages[2]["role"], "user");
+        assert_eq!(messages[2]["content"][0]["type"], "tool_result");
+        assert_eq!(messages[2]["content"][1]["type"], "text");
+        assert_eq!(messages[2]["content"][2]["type"], "image");
+    }
 }
