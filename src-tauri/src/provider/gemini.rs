@@ -13,6 +13,8 @@ use super::types::{
 use crate::settings::SettingsManager;
 
 const GEMINI_CTX: u32 = 1_000_000;
+const LEADING_MODEL_USER_NOTE: &str =
+    "(No user message was stored before the assistant reply that follows.)";
 
 pub struct GeminiProvider {
     client: reqwest::Client,
@@ -80,7 +82,44 @@ impl GeminiProvider {
             }
         }
         let system = (!system.is_empty()).then(|| system.join("\n\n"));
-        (system, contents)
+        (system, Self::coalesce_alternating_contents(contents))
+    }
+
+    /// Gemini `generateContent` rejects a request unless `user` and `model` alternate
+    /// and the first content is `user`. The same stored-transcript gaps that break
+    /// Claude (Pulse, form, and email-agent replies, a failed send, or a 32-message
+    /// window that opens on an assistant turn) break Gemini too.
+    fn coalesce_alternating_contents(contents: Vec<Value>) -> Vec<Value> {
+        let mut out: Vec<Value> = Vec::with_capacity(contents.len());
+        for msg in contents {
+            let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
+            if let Some(last) = out.last_mut() {
+                let last_role = last.get("role").and_then(|r| r.as_str()).unwrap_or("");
+                if !role.is_empty() && role == last_role {
+                    let mut parts = last
+                        .get("parts")
+                        .and_then(|p| p.as_array())
+                        .cloned()
+                        .unwrap_or_default();
+                    if let Some(more) = msg.get("parts").and_then(|p| p.as_array()) {
+                        parts.extend(more.iter().cloned());
+                    }
+                    last["parts"] = Value::Array(parts);
+                    continue;
+                }
+            }
+            out.push(msg);
+        }
+        if out.first().and_then(|m| m["role"].as_str()) == Some("model") {
+            out.insert(
+                0,
+                json!({
+                    "role": "user",
+                    "parts": [{ "text": LEADING_MODEL_USER_NOTE }]
+                }),
+            );
+        }
+        out
     }
 
     fn thinking_budget(effort: Option<&str>) -> Option<i32> {
@@ -254,4 +293,79 @@ pub async fn fetch_gemini_model_ids(
     names.sort();
     names.dedup();
     Ok(names)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::provider::ChatTurn;
+
+    fn contents_of(turns: Vec<ChatTurn>) -> Vec<Value> {
+        let (_, contents) = GeminiProvider::split_system_and_contents(&turns);
+        contents
+    }
+
+    #[test]
+    fn merges_consecutive_model_turns() {
+        let contents = contents_of(vec![
+            ChatTurn::text("system", "persona"),
+            ChatTurn::text("user", "draft a budget"),
+            ChatTurn::text("assistant", "Here is the form."),
+            ChatTurn::text("assistant", "Updated the living document."),
+            ChatTurn::text("user", "tighten rent"),
+        ]);
+        assert_eq!(contents.len(), 3);
+        assert_eq!(contents[0]["role"], "user");
+        assert_eq!(contents[0]["parts"][0]["text"], "draft a budget");
+        assert_eq!(contents[1]["role"], "model");
+        assert_eq!(contents[1]["parts"][0]["text"], "Here is the form.");
+        assert_eq!(
+            contents[1]["parts"][1]["text"],
+            "Updated the living document."
+        );
+        assert_eq!(contents[2]["parts"][0]["text"], "tighten rent");
+    }
+
+    #[test]
+    fn prefixes_user_when_context_window_opens_on_model() {
+        let contents = contents_of(vec![
+            ChatTurn::text("assistant", "Earlier reply that the window kept."),
+            ChatTurn::text("user", "what did we decide?"),
+        ]);
+        assert_eq!(contents.len(), 3);
+        assert_eq!(contents[0]["role"], "user");
+        assert_eq!(contents[0]["parts"][0]["text"], LEADING_MODEL_USER_NOTE);
+        assert_eq!(contents[1]["role"], "model");
+        assert_eq!(
+            contents[1]["parts"][0]["text"],
+            "Earlier reply that the window kept."
+        );
+        assert_eq!(contents[2]["role"], "user");
+        assert_eq!(contents[2]["parts"][0]["text"], "what did we decide?");
+    }
+
+    #[test]
+    fn merges_consecutive_user_turns_after_a_failed_send() {
+        let contents = contents_of(vec![
+            ChatTurn::text("user", "first try"),
+            ChatTurn::text("user", "second try"),
+        ]);
+        assert_eq!(contents.len(), 1);
+        assert_eq!(contents[0]["role"], "user");
+        assert_eq!(contents[0]["parts"][0]["text"], "first try");
+        assert_eq!(contents[0]["parts"][1]["text"], "second try");
+    }
+
+    #[test]
+    fn leaves_alternating_transcript_unchanged() {
+        let contents = contents_of(vec![
+            ChatTurn::text("user", "hello"),
+            ChatTurn::text("assistant", "hi"),
+        ]);
+        assert_eq!(contents.len(), 2);
+        assert_eq!(contents[0]["role"], "user");
+        assert_eq!(contents[0]["parts"].as_array().map(|p| p.len()), Some(1));
+        assert_eq!(contents[1]["role"], "model");
+        assert_eq!(contents[1]["parts"][0]["text"], "hi");
+    }
 }
