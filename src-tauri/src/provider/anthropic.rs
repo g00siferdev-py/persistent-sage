@@ -42,11 +42,35 @@ impl AnthropicProvider {
         })
     }
 
-    fn max_out_tokens(request: &CompletionRequest) -> u32 {
-        request
-            .max_tokens
-            .unwrap_or(DEFAULT_MAX_TOKENS)
-            .clamp(1, 128_000)
+    /// Highest `max_tokens` this model accepts.
+    ///
+    /// Chat passes the context window (200k) when the user leaves generation on
+    /// "model default". That figure is an input budget. Anthropic rejects any
+    /// `max_tokens` above the model's output ceiling (`max_tokens: N > limit`).
+    fn output_token_limit(model: &str) -> u32 {
+        let m = model.trim().to_ascii_lowercase();
+        // Claude 3 Opus / Sonnet / Haiku. Exclude 3.5 and 3.7, whose ids also
+        // contain "claude-3-".
+        let original_claude3 = (m.contains("claude-3-opus")
+            || m.contains("claude-3-sonnet")
+            || m.contains("claude-3-haiku"))
+            && !m.contains("3-5")
+            && !m.contains("3.5")
+            && !m.contains("3-7")
+            && !m.contains("3.7");
+        if original_claude3 {
+            4096
+        } else {
+            // Claude 3.5's ceiling is 8192. Newer Claude models accept at least that.
+            // Caps of 16k–128k 400 on the models this app ships unless a beta header
+            // is set, which this client does not send.
+            8192
+        }
+    }
+
+    fn max_out_tokens(&self, request: &CompletionRequest) -> u32 {
+        let requested = request.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS);
+        requested.clamp(1, Self::output_token_limit(&self.model))
     }
 
     /// Split OpenAI-shaped transcript into Anthropic `system` + `messages` (no system role in messages).
@@ -93,7 +117,7 @@ impl AnthropicProvider {
 
     fn build_body(&self, request: &CompletionRequest, stream: bool) -> Value {
         let (system, messages) = Self::split_system_and_messages(request);
-        let max_tokens = Self::max_out_tokens(request);
+        let max_tokens = self.max_out_tokens(request);
         let mut body = json!({
             "model": self.model,
             "max_tokens": max_tokens,
@@ -327,4 +351,58 @@ pub async fn fetch_anthropic_model_ids(
     names.sort();
     names.dedup();
     Ok(names)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::provider::types::ChatTurn;
+
+    fn provider(model: &str) -> AnthropicProvider {
+        AnthropicProvider {
+            client: reqwest::Client::new(),
+            api_key: "test".into(),
+            model: model.into(),
+        }
+    }
+
+    fn body_max_tokens(model: &str, requested: Option<u32>) -> u64 {
+        let req = CompletionRequest {
+            messages: vec![ChatTurn::text("user", "hello")],
+            tools: None,
+            max_tokens: requested,
+            temperature: None,
+            thinking_effort: None,
+        };
+        provider(model).build_body(&req, false)["max_tokens"]
+            .as_u64()
+            .expect("max_tokens")
+    }
+
+    #[test]
+    fn context_window_budget_stays_within_default_claude_output_limit() {
+        // Unset generation cap: chat.rs sends the 200k context window.
+        assert_eq!(
+            body_max_tokens("claude-3-5-sonnet-20241022", Some(200_000)),
+            8192
+        );
+        assert_eq!(
+            body_max_tokens("claude-3-5-haiku-20241022", Some(128_000)),
+            8192
+        );
+    }
+
+    #[test]
+    fn original_claude3_rejects_above_4096_so_requests_stay_under_it() {
+        assert_eq!(body_max_tokens("claude-3-opus-20240229", Some(200_000)), 4096);
+        assert_eq!(body_max_tokens("claude-3-sonnet-20240229", Some(8192)), 4096);
+        assert_eq!(body_max_tokens("claude-3-haiku-20240307", Some(8192)), 4096);
+    }
+
+    #[test]
+    fn explicit_budget_under_the_ceiling_is_preserved() {
+        assert_eq!(body_max_tokens("claude-3-5-sonnet-20241022", Some(1000)), 1000);
+        assert_eq!(body_max_tokens("claude-3-opus-20240229", Some(512)), 512);
+        assert_eq!(body_max_tokens("claude-3-5-sonnet-20241022", None), 8192);
+    }
 }
