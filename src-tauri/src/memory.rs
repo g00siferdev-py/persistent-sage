@@ -2297,11 +2297,29 @@ impl ConversationMemory for MemoryAnchor {
     fn delete_conversation(&self, conversation_id: &str) -> Result<(), MemoryError> {
         self.assert_conversation_exists(conversation_id)?;
         let pid = self.active_personality()?;
-        let conn = self.conn()?;
-        conn.execute(
+        let mut conn = self.conn()?;
+        let tx = conn.transaction()?;
+        // Anchors reference conversations(id) ON DELETE SET NULL. Removing only the
+        // conversation row would clear that id and publish thread-only memories as
+        // global ones, so every later chat's briefing and sidebar would include them.
+        // Delete the thread anchors first. Messages are removed explicitly so a
+        // database created before ON DELETE CASCADE still drops the transcript.
+        tx.execute(
+            "DELETE FROM anchors WHERE conversation_id = ?1",
+            params![conversation_id],
+        )?;
+        tx.execute(
+            "DELETE FROM messages WHERE conversation_id = ?1",
+            params![conversation_id],
+        )?;
+        let removed = tx.execute(
             "DELETE FROM conversations WHERE id = ?1 AND personality_id = ?2",
             params![conversation_id, pid],
         )?;
+        if removed == 0 {
+            return Err(MemoryError::UnknownConversation(conversation_id.to_string()));
+        }
+        tx.commit()?;
         Ok(())
     }
 
@@ -2878,6 +2896,81 @@ mod anchor_storage_tests {
             bundle.anchors,
             bundle.messages
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn delete_conversation_removes_thread_anchors_instead_of_publishing_them() {
+        let dir = std::env::temp_dir().join(format!("nova_mem_delete_{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        let path = dir.join("m.sqlite");
+        let mem = MemoryAnchor::new_with_profile(&path, SqliteProfile::Portable).expect("open db");
+        let secret = ConversationMemory::create_conversation(&mem, "private").expect("secret");
+        let other = ConversationMemory::create_conversation(&mem, "other").expect("other");
+        ConversationMemory::store_message(
+            &mem,
+            &secret,
+            MessageRole::User,
+            "thread-only secret passphrase zebra-quark",
+            None,
+            None,
+            None,
+        )
+        .expect("msg");
+        let thread_anchor = ConversationMemory::create_anchor(
+            &mem,
+            Some(&secret),
+            AnchorType::Fact,
+            "Thread-only: the zebra-quark passphrase is 42",
+            5,
+        )
+        .expect("thread anchor");
+        let global = ConversationMemory::create_anchor(
+            &mem,
+            None,
+            AnchorType::Fact,
+            "Global preference: dark theme",
+            3,
+        )
+        .expect("global anchor");
+
+        ConversationMemory::delete_conversation(&mem, &secret).expect("delete");
+
+        assert!(
+            ConversationMemory::get_conversation(&mem, &secret).is_err(),
+            "deleted conversation should be gone"
+        );
+        let visible = ConversationMemory::list_anchors_for_thread(&mem, &other, 50).expect("list");
+        assert!(
+            visible.iter().all(|a| a.id != thread_anchor),
+            "thread anchor was published into another chat: {visible:?}"
+        );
+        assert!(
+            visible.iter().all(|a| !a.content.contains("zebra-quark")),
+            "thread memory leaked after delete: {visible:?}"
+        );
+        assert!(
+            visible.iter().any(|a| a.id == global),
+            "global memories must survive deleting one chat: {visible:?}"
+        );
+
+        let conn = mem.conn().expect("conn");
+        let leftover_anchors: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM anchors WHERE content LIKE '%zebra-quark%'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("count anchors");
+        let leftover_messages: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM messages WHERE content LIKE '%zebra-quark%'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("count messages");
+        assert_eq!(leftover_anchors, 0);
+        assert_eq!(leftover_messages, 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
