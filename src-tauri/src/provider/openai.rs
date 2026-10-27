@@ -9,8 +9,8 @@ use serde_json::{json, Value};
 use super::engine::LLMProviderEngine;
 use super::error::ProviderError;
 use super::types::{
-    CompletionRequest, CompletionResponse, ModelCatalogEntry, ModelInfo, StreamChunk, TokenUsage,
-    ToolCall,
+    ChatTurn, CompletionRequest, CompletionResponse, ModelCatalogEntry, ModelInfo, StreamChunk,
+    TokenUsage, ToolCall,
 };
 use crate::settings::SettingsManager;
 
@@ -142,36 +142,67 @@ impl OpenAIProvider {
         requested.min(cap).max(1)
     }
 
+    /// Model id without an OpenRouter-style `vendor/` prefix.
+    fn model_slug(model: &str) -> String {
+        let m = model.trim().to_lowercase();
+        m.rsplit('/').next().unwrap_or(&m).to_string()
+    }
+
+    /// o1, o3, and o4 chat models reject `max_tokens` and `temperature`.
+    fn is_o_series_model(model: &str) -> bool {
+        let id = Self::model_slug(model);
+        id.starts_with("o1") || id.starts_with("o3") || id.starts_with("o4")
+    }
+
+    /// These snapshots reject both `reasoning_effort` and a `system` role.
+    fn o_series_rejects_system_and_effort(model: &str) -> bool {
+        let id = Self::model_slug(model);
+        id.starts_with("o1-mini") || id.starts_with("o1-preview")
+    }
+
     fn build_body(&self, request: &CompletionRequest, stream: bool) -> Value {
+        let o_series = Self::is_o_series_model(&self.model);
+        let legacy_o1 = Self::o_series_rejects_system_and_effort(&self.model);
         let mut body = json!({
             "model": self.model,
             "messages": request.messages.iter().map(|m| {
                 if let Some(ref raw) = m.openai_message {
                     raw.clone()
+                } else if legacy_o1 && m.role.eq_ignore_ascii_case("system") {
+                    // o1-mini and o1-preview return 400 if any message role is `system`.
+                    json!({"role": "user", "content": &m.content})
                 } else {
                     json!({"role": &m.role, "content": &m.content})
                 }
             }).collect::<Vec<_>>(),
             "stream": stream,
         });
+        // o-series models return 400 if `temperature` is present at all, including 1.
         if let Some(t) = request.temperature {
-            body.as_object_mut()
-                .unwrap()
-                .insert("temperature".into(), json!(t));
+            if !o_series {
+                body.as_object_mut()
+                    .unwrap()
+                    .insert("temperature".into(), json!(t));
+            }
         }
         if let Some(mt) = request.max_tokens {
             let capped = Self::clamp_completion_tokens_for_model(&self.model, mt);
+            // `max_tokens` is not compatible with o-series models. They require
+            // `max_completion_tokens` and 400 the deprecated field.
+            let key = if o_series {
+                "max_completion_tokens"
+            } else {
+                "max_tokens"
+            };
             body.as_object_mut()
                 .unwrap()
-                .insert("max_tokens".into(), json!(capped));
+                .insert(key.into(), json!(capped));
         }
         if let Some(effort) = request.thinking_effort.as_deref() {
             let effort = effort.trim().to_lowercase();
             let m = self.model.to_lowercase();
             let supports_reasoning_effort = self.provider_id == "xai"
-                || m.starts_with("o1")
-                || m.starts_with("o3")
-                || m.starts_with("o4")
+                || (o_series && !legacy_o1)
                 || m.contains("reasoning");
             if supports_reasoning_effort && matches!(effort.as_str(), "low" | "medium" | "high") {
                 body.as_object_mut()
@@ -819,6 +850,73 @@ mod tests {
         assert!(openrouter_entry_from_value(&zero_priced, "2026-07-30")
             .expect("kept")
             .is_free);
+    }
+
+    fn provider(model: &str) -> OpenAIProvider {
+        OpenAIProvider {
+            client: reqwest::Client::new(),
+            api_key: "test".into(),
+            model: model.into(),
+            base_url: "https://api.openai.com/v1".into(),
+            provider_id: "openai",
+        }
+    }
+
+    fn sample_request() -> CompletionRequest {
+        CompletionRequest {
+            messages: vec![
+                ChatTurn::text("system", "You are Persistent Sage."),
+                ChatTurn::text("user", "Hello"),
+            ],
+            tools: None,
+            // Unset max tokens is replaced with the context window before the provider runs.
+            max_tokens: Some(128_000),
+            temperature: Some(0.7),
+            thinking_effort: Some("medium".into()),
+        }
+    }
+
+    #[test]
+    fn gpt4o_mini_keeps_temperature_and_max_tokens() {
+        let body = provider("gpt-4o-mini").build_body(&sample_request(), false);
+        let temperature = body["temperature"].as_f64().expect("temperature");
+        assert!((temperature - 0.7).abs() < 0.001);
+        assert_eq!(body["max_tokens"], json!(16_384));
+        assert!(body.get("max_completion_tokens").is_none());
+        assert!(body.get("reasoning_effort").is_none());
+        assert_eq!(body["messages"][0]["role"], "system");
+    }
+
+    #[test]
+    fn o3_mini_omits_rejected_sampling_fields() {
+        let body = provider("o3-mini").build_body(&sample_request(), false);
+        assert!(body.get("temperature").is_none());
+        assert!(body.get("max_tokens").is_none());
+        assert_eq!(body["max_completion_tokens"], json!(16_384));
+        assert_eq!(body["reasoning_effort"], "medium");
+        assert_eq!(body["messages"][0]["role"], "system");
+    }
+
+    #[test]
+    fn o1_mini_drops_system_role_and_reasoning_effort() {
+        let body = provider("o1-mini").build_body(&sample_request(), false);
+        assert!(body.get("temperature").is_none());
+        assert!(body.get("max_tokens").is_none());
+        assert_eq!(body["max_completion_tokens"], json!(16_384));
+        assert!(body.get("reasoning_effort").is_none());
+        assert_eq!(body["messages"][0]["role"], "user");
+        assert_eq!(body["messages"][0]["content"], "You are Persistent Sage.");
+        assert_eq!(body["messages"][1]["role"], "user");
+    }
+
+    #[test]
+    fn openrouter_o_series_id_uses_completion_token_budget() {
+        let body = provider("openai/o1").build_body(&sample_request(), false);
+        assert!(body.get("temperature").is_none());
+        assert!(body.get("max_tokens").is_none());
+        assert_eq!(body["max_completion_tokens"], json!(16_384));
+        assert_eq!(body["reasoning_effort"], "medium");
+        assert_eq!(body["messages"][0]["role"], "system");
     }
 }
 
