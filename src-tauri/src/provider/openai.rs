@@ -129,6 +129,71 @@ impl OpenAIProvider {
         }
     }
 
+    /// Value to send as Chat Completions `reasoning_effort`, if the model accepts it.
+    ///
+    /// xAI rejects the field on most ids, including the default `grok-4-fast-reasoning`.
+    /// Those requests return HTTP 400 (`does not support parameter reasoningEffort`)
+    /// before any assistant text is produced. OpenAI o-series and other reasoning
+    /// model ids keep the previous behavior.
+    fn reasoning_effort_for_request(
+        provider_id: &str,
+        model: &str,
+        effort: &str,
+    ) -> Option<String> {
+        let effort = effort.trim().to_lowercase();
+        if !matches!(effort.as_str(), "low" | "medium" | "high") {
+            return None;
+        }
+        if provider_id == "xai" {
+            return Self::xai_reasoning_effort(model, &effort);
+        }
+        let m = model.to_lowercase();
+        let supports = m.starts_with("o1")
+            || m.starts_with("o3")
+            || m.starts_with("o4")
+            || m.contains("reasoning");
+        if supports {
+            Some(effort)
+        } else {
+            None
+        }
+    }
+
+    /// xAI's legacy request contract rejects `reasoning_effort` on retired aliases
+    /// (`grok-4-fast-reasoning`, `grok-3`, `grok-2-*`, bare `grok-4`) even when the
+    /// slug redirects to a newer model. `grok-3-mini` accepts only `low` and `high`.
+    /// `grok-4.3` and later accept `low`, `medium`, and `high`.
+    fn xai_reasoning_effort(model: &str, effort: &str) -> Option<String> {
+        let id = model
+            .trim()
+            .rsplit('/')
+            .next()
+            .unwrap_or(model)
+            .to_lowercase();
+        if id.contains("non-reasoning") {
+            return None;
+        }
+        if id.contains("grok-3-mini") {
+            // Default thinking effort is `medium`, which this model rejects.
+            let mapped = if effort == "low" { "low" } else { "high" };
+            return Some(mapped.to_string());
+        }
+        let Some(rest) = id.strip_prefix("grok-4.") else {
+            return None;
+        };
+        let ver: u32 = rest
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .collect::<String>()
+            .parse()
+            .unwrap_or(0);
+        if ver >= 3 {
+            Some(effort.to_string())
+        } else {
+            None
+        }
+    }
+
     /// Chat Completions `max_tokens` is an output cap; never send values the API rejects.
     fn clamp_completion_tokens_for_model(model: &str, requested: u32) -> u32 {
         let m = model.to_lowercase();
@@ -166,14 +231,9 @@ impl OpenAIProvider {
                 .insert("max_tokens".into(), json!(capped));
         }
         if let Some(effort) = request.thinking_effort.as_deref() {
-            let effort = effort.trim().to_lowercase();
-            let m = self.model.to_lowercase();
-            let supports_reasoning_effort = self.provider_id == "xai"
-                || m.starts_with("o1")
-                || m.starts_with("o3")
-                || m.starts_with("o4")
-                || m.contains("reasoning");
-            if supports_reasoning_effort && matches!(effort.as_str(), "low" | "medium" | "high") {
+            if let Some(effort) =
+                Self::reasoning_effort_for_request(self.provider_id, &self.model, effort)
+            {
                 body.as_object_mut()
                     .unwrap()
                     .insert("reasoning_effort".into(), json!(effort));
@@ -726,7 +786,30 @@ pub async fn fetch_openrouter_model_catalog(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::types::ChatTurn;
     use serde_json::json;
+
+    fn provider(provider_id: &'static str, model: &str) -> OpenAIProvider {
+        OpenAIProvider {
+            client: reqwest::Client::new(),
+            api_key: String::new(),
+            model: model.to_string(),
+            base_url: "https://example.invalid/v1".into(),
+            provider_id,
+        }
+    }
+
+    fn body_with_effort(provider_id: &'static str, model: &str, effort: &str) -> Value {
+        provider(provider_id, model).build_body(
+            &CompletionRequest {
+                messages: vec![ChatTurn::text("user", "hello")],
+                thinking_effort: Some(effort.to_string()),
+                temperature: Some(0.7),
+                ..CompletionRequest::default()
+            },
+            false,
+        )
+    }
 
     #[test]
     fn keeps_openai_chat_models_only() {
@@ -820,5 +903,51 @@ mod tests {
             .expect("kept")
             .is_free);
     }
-}
 
+    #[test]
+    fn xai_default_model_omits_reasoning_effort() {
+        for model in [
+            "grok-4-fast-reasoning",
+            "grok-4-fast-non-reasoning",
+            "grok-3",
+            "grok-2-vision-1212",
+            "grok-4",
+            "xai/grok-4-fast-reasoning",
+            "grok-4.20-non-reasoning",
+        ] {
+            let body = body_with_effort("xai", model, "medium");
+            assert!(
+                body.get("reasoning_effort").is_none(),
+                "{model} must not send reasoning_effort, got {body}"
+            );
+            assert!(body.get("temperature").is_some(), "{model}");
+        }
+    }
+
+    #[test]
+    fn xai_models_that_accept_reasoning_effort_still_send_it() {
+        let flash = body_with_effort("xai", "grok-4.3", "medium");
+        assert_eq!(flash["reasoning_effort"], json!("medium"));
+
+        let later = body_with_effort("xai", "grok-4.7", "low");
+        assert_eq!(later["reasoning_effort"], json!("low"));
+
+        let multi = body_with_effort("xai", "grok-4.20-multi-agent", "high");
+        assert_eq!(multi["reasoning_effort"], json!("high"));
+
+        // grok-3-mini rejects `medium` (the app default). Map it to `high`.
+        let mini_medium = body_with_effort("xai", "grok-3-mini", "medium");
+        assert_eq!(mini_medium["reasoning_effort"], json!("high"));
+        let mini_low = body_with_effort("xai", "grok-3-mini", "low");
+        assert_eq!(mini_low["reasoning_effort"], json!("low"));
+    }
+
+    #[test]
+    fn openai_reasoning_effort_is_unchanged() {
+        let mini = body_with_effort("openai", "gpt-4o-mini", "medium");
+        assert!(mini.get("reasoning_effort").is_none());
+
+        let o3 = body_with_effort("openai", "o3-mini", "medium");
+        assert_eq!(o3["reasoning_effort"], json!("medium"));
+    }
+}
