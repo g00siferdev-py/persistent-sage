@@ -73,7 +73,11 @@ pub fn ensure_askpass_script(data_dir: &Path) -> Result<std::path::PathBuf, Prov
     Ok(path)
 }
 
-fn apply_git_auth_env(cmd: &mut impl GitAuthCommand, data_dir: &Path, pat: &str) -> Result<(), ProviderError> {
+fn apply_git_auth_env(
+    cmd: &mut impl GitAuthCommand,
+    data_dir: &Path,
+    pat: &str,
+) -> Result<(), ProviderError> {
     let script = ensure_askpass_script(data_dir)?;
     cmd.set_env("GIT_TERMINAL_PROMPT", "0");
     cmd.set_env("GIT_ASKPASS_NO_TTY", "1");
@@ -109,7 +113,11 @@ impl GitAuthCommand for tokio::process::Command {
     }
 }
 
-pub fn apply_git_auth(cmd: &mut StdCommand, data_dir: &Path, pat: &str) -> Result<(), ProviderError> {
+pub fn apply_git_auth(
+    cmd: &mut StdCommand,
+    data_dir: &Path,
+    pat: &str,
+) -> Result<(), ProviderError> {
     apply_git_auth_env(cmd, data_dir, pat)
 }
 
@@ -122,12 +130,10 @@ pub fn apply_git_auth_tokio(
 }
 
 pub fn save_github_pat(settings: &SettingsManager, token: &str) -> Result<(), ProviderError> {
-    settings
-        .save_api_key("github", token)
-        .map_err(|e| match e {
-            SettingsError::InvalidKeySlot(s) => tool_err(format!("invalid key slot: {s}")),
-            other => tool_err(other.to_string()),
-        })
+    settings.save_api_key("github", token).map_err(|e| match e {
+        SettingsError::InvalidKeySlot(s) => tool_err(format!("invalid key slot: {s}")),
+        other => tool_err(other.to_string()),
+    })
 }
 
 pub fn validate_https_git_url(url: &str) -> Result<(), ProviderError> {
@@ -146,14 +152,61 @@ pub fn validate_https_git_url(url: &str) -> Result<(), ProviderError> {
     Ok(())
 }
 
+/// Remote and branch arguments for `push` / `pull` / `fetch` must be plain names.
+///
+/// Git treats a leading `+` as a force refspec (`git push origin +main` rewrites
+/// remote history) and a leading `-` as an option (`--mirror`, `--delete`, `--force`).
+/// A URL in the remote slot is fetched or pushed with the saved GitHub token,
+/// because askpass supplies that token for any credential prompt.
 pub fn reject_force_git_args(args: &[&str]) -> Result<(), ProviderError> {
-    for a in args {
-        let lower = a.to_ascii_lowercase();
-        if lower.contains("--force") || lower == "-f" || lower.contains("force-with-lease") {
+    for a in args.iter().skip(1) {
+        if !is_plain_git_name(a) {
             return Err(tool_err(
-                "force push is blocked. Remove --force / -f from the request.",
+                "remote and branch must be plain names such as origin and main. Force refspecs (+branch), git options (--force, --mirror, --delete), and URLs are blocked.",
             ));
         }
     }
     Ok(())
+}
+
+fn is_plain_git_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !first.is_alphanumeric() {
+        return false;
+    }
+    if name.contains("..") || name.contains("//") || name.ends_with('/') || name.ends_with('.') {
+        return false;
+    }
+    name.chars()
+        .all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | '/'))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::reject_force_git_args;
+
+    #[test]
+    fn allows_plain_push() {
+        assert!(reject_force_git_args(&["push", "origin"]).is_ok());
+        assert!(reject_force_git_args(&["push", "origin", "main"]).is_ok());
+        assert!(reject_force_git_args(&["push", "upstream", "feature/login"]).is_ok());
+        assert!(reject_force_git_args(&["pull", "origin", "HEAD"]).is_ok());
+        assert!(reject_force_git_args(&["push", "origin", "機能/修正"]).is_ok());
+    }
+
+    #[test]
+    fn blocks_force_refspec_and_options_and_urls() {
+        assert!(reject_force_git_args(&["push", "origin", "+main"]).is_err());
+        assert!(reject_force_git_args(&["push", "origin", "+HEAD:main"]).is_err());
+        assert!(reject_force_git_args(&["push", "--force"]).is_err());
+        assert!(reject_force_git_args(&["push", "--mirror"]).is_err());
+        assert!(reject_force_git_args(&["push", "origin", "--delete"]).is_err());
+        assert!(reject_force_git_args(&["push", "origin", "main:release"]).is_err());
+        assert!(reject_force_git_args(&["push", "https://evil.example/repo.git"]).is_err());
+        assert!(reject_force_git_args(&["fetch", "--upload-pack=evil"]).is_err());
+        assert!(reject_force_git_args(&["pull", "--rebase"]).is_err());
+    }
 }

@@ -873,15 +873,18 @@ pub async fn run_coding_tool(
             if let Some(b) = branch {
                 args.push(b);
             }
+            crate::git_auth::reject_force_git_args(&args)?;
             run_git_with_auth(&repo_dir, &args, Some(data_directory), Some(&pat)).await
         }
         "coding_git_fetch" => {
             let settings = settings.ok_or_else(|| tool_err("git remote tools unavailable"))?;
             let pat = crate::git_auth::require_github_pat(settings)?;
             let remote = v["remote"].as_str().unwrap_or("origin").trim();
+            let args = ["fetch", remote];
+            crate::git_auth::reject_force_git_args(&args)?;
             run_git_with_auth(
                 &repo_dir,
-                &["fetch", remote],
+                &args,
                 Some(data_directory),
                 Some(&pat),
             )
