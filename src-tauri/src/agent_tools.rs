@@ -524,6 +524,34 @@ pub(crate) fn tool_err(msg: impl Into<String>) -> ProviderError {
     ProviderError::Api(msg.into())
 }
 
+fn ipv4_is_blocked(v4: std::net::Ipv4Addr) -> bool {
+    v4.is_private()
+        || v4.is_loopback()
+        || v4.is_link_local()
+        || v4.is_broadcast()
+        || v4.is_unspecified()
+}
+
+fn ipv4_mapped(v6: std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
+    let s = v6.segments();
+    if s[0] == 0 && s[1] == 0 && s[2] == 0 && s[3] == 0 && s[4] == 0 && s[5] == 0xffff {
+        let hi = s[6].to_be_bytes();
+        let lo = s[7].to_be_bytes();
+        Some(std::net::Ipv4Addr::new(hi[0], hi[1], lo[0], lo[1]))
+    } else {
+        None
+    }
+}
+
+fn ipv6_is_blocked(v6: std::net::Ipv6Addr) -> bool {
+    if let Some(v4) = ipv4_mapped(v6) {
+        return ipv4_is_blocked(v4);
+    }
+    // fe80::/10
+    let link_local = (v6.segments()[0] & 0xffc0) == 0xfe80;
+    v6.is_loopback() || v6.is_unspecified() || v6.is_unique_local() || link_local
+}
+
 fn blocked_host(host: &str) -> bool {
     let h = host.trim().trim_end_matches('.').to_lowercase();
     if h == "localhost"
@@ -532,20 +560,32 @@ fn blocked_host(host: &str) -> bool {
         || h == "0.0.0.0"
         || h == "127.0.0.1"
         || h == "::1"
+        || h == "[::1]"
         || h == "metadata.google.internal"
         || h == "169.254.169.254"
     {
         return true;
     }
-    if let Ok(ip) = h.parse::<IpAddr>() {
+    let bare = h.trim_start_matches('[').trim_end_matches(']');
+    if let Ok(ip) = bare.parse::<IpAddr>() {
         return match ip {
-            IpAddr::V4(v4) => {
-                v4.is_private() || v4.is_loopback() || v4.is_link_local() || v4.is_broadcast()
-            }
-            IpAddr::V6(v6) => v6.is_loopback() || v6.is_unique_local(),
+            IpAddr::V4(v4) => ipv4_is_blocked(v4),
+            IpAddr::V6(v6) => ipv6_is_blocked(v6),
         };
     }
     false
+}
+
+/// IP literals must be classified from [`Url::host`]. `host_str()` keeps the
+/// brackets on IPv6 (`[::1]`), which does not parse as an address and used to
+/// skip the SSRF guard entirely.
+fn blocked_url_host(u: &Url) -> bool {
+    match u.host() {
+        None => true,
+        Some(url::Host::Domain(host)) => blocked_host(host),
+        Some(url::Host::Ipv4(v4)) => ipv4_is_blocked(v4),
+        Some(url::Host::Ipv6(v6)) => ipv6_is_blocked(v6),
+    }
 }
 
 /// Only `http:` / `https:` to public-looking hosts (best-effort SSRF guard).
@@ -562,10 +602,10 @@ pub fn validate_fetch_url(raw: &str) -> Result<Url, ProviderError> {
     if u.username() != "" || u.password().is_some() {
         return Err(tool_err("URLs with embedded credentials are not allowed"));
     }
-    let host = u
-        .host_str()
-        .ok_or_else(|| tool_err("URL must include a host"))?;
-    if blocked_host(host) {
+    if u.host_str().is_none() {
+        return Err(tool_err("URL must include a host"));
+    }
+    if blocked_url_host(&u) {
         return Err(tool_err(
             "URL host is not allowed (private or local addresses blocked)",
         ));
@@ -598,15 +638,66 @@ fn validate_agent_https_url(raw: &str) -> Result<Url, ProviderError> {
             "URLs with embedded credentials are not allowed; put tokens in headers instead",
         ));
     }
-    let host = u
-        .host_str()
-        .ok_or_else(|| tool_err("URL must include a host"))?;
-    if blocked_host(host) {
+    if u.host_str().is_none() {
+        return Err(tool_err("URL must include a host"));
+    }
+    if blocked_url_host(&u) {
         return Err(tool_err(
             "URL host is not allowed (private or local addresses blocked)",
         ));
     }
     Ok(u)
+}
+
+const MAX_TOOL_REDIRECTS: usize = 8;
+
+/// Same host rules as the initial URL, applied to every redirect hop.
+/// `https_only` matches `http_request` (plain `http:` stays blocked after a redirect).
+fn redirect_hop_allowed(url: &str, https_only: bool) -> Result<(), ProviderError> {
+    if https_only {
+        validate_agent_https_url(url)?;
+    } else {
+        validate_fetch_url(url)?;
+    }
+    Ok(())
+}
+
+/// Client that re-checks the SSRF guard before following a redirect.
+/// The shared app client follows up to 10 redirects with no host check, so a public
+/// URL can 302 to loopback or the cloud metadata address.
+fn ssrf_guarded_client(https_only: bool) -> Result<reqwest::Client, ProviderError> {
+    let policy = reqwest::redirect::Policy::custom(move |attempt| {
+        if attempt.previous().len() >= MAX_TOOL_REDIRECTS {
+            return attempt.error(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("too many redirects (max {MAX_TOOL_REDIRECTS})"),
+            ));
+        }
+        match redirect_hop_allowed(attempt.url().as_str(), https_only) {
+            Ok(()) => attempt.follow(),
+            Err(e) => attempt.error(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                e.to_string(),
+            )),
+        }
+    });
+    reqwest::Client::builder()
+        .redirect(policy)
+        .build()
+        .map_err(|e| tool_err(format!("http client: {e}")))
+}
+
+fn tool_http_error(e: reqwest::Error) -> ProviderError {
+    let msg = e.to_string();
+    let lower = msg.to_ascii_lowercase();
+    if lower.contains("not allowed")
+        || lower.contains("too many redirects")
+        || lower.contains("unsupported url scheme")
+    {
+        tool_err(format!("request blocked: {msg}"))
+    } else {
+        ProviderError::Http(e)
+    }
 }
 
 /// Parse `headers` object into validated HTTP headers (rejects header injection / invalid tokens).
@@ -707,7 +798,7 @@ fn response_headers_to_json_map(
     out
 }
 
-async fn http_request_tool(http: &reqwest::Client, v: &Value) -> Result<String, ProviderError> {
+async fn http_request_tool(_http: &reqwest::Client, v: &Value) -> Result<String, ProviderError> {
     let raw_url = v
         .get("url")
         .and_then(|u| u.as_str())
@@ -743,6 +834,7 @@ async fn http_request_tool(http: &reqwest::Client, v: &Value) -> Result<String, 
         None
     };
 
+    let http = ssrf_guarded_client(true)?;
     let mut rb = http
         .request(method, url.as_str())
         .timeout(Duration::from_secs(HTTP_REQUEST_TIMEOUT_SECS));
@@ -763,6 +855,13 @@ async fn http_request_tool(http: &reqwest::Client, v: &Value) -> Result<String, 
                 return Err(tool_err(
                     "http_request timed out — try again later, increase server responsiveness, or narrow the request",
                 ));
+            }
+            let msg = e.to_string().to_ascii_lowercase();
+            if msg.contains("not allowed")
+                || msg.contains("too many redirects")
+                || msg.contains("unsupported url scheme")
+            {
+                return Err(tool_err(format!("http_request blocked: {e}")));
             }
             if e.is_connect() {
                 return Err(tool_err(format!(
@@ -1144,16 +1243,18 @@ pub async fn ddg_web_search(http: &reqwest::Client, query: &str) -> Result<Strin
 }
 
 pub async fn fetch_url_text(
-    http: &reqwest::Client,
+    _http: &reqwest::Client,
     raw_url: &str,
 ) -> Result<String, ProviderError> {
     let url = validate_fetch_url(raw_url)?;
+    let http = ssrf_guarded_client(false)?;
     let res = http
         .get(url.clone())
         .header("User-Agent", crate::browser_fetch::BROWSER_USER_AGENT)
         .timeout(Duration::from_secs(FETCH_TIMEOUT_SECS))
         .send()
-        .await?
+        .await
+        .map_err(tool_http_error)?
         .error_for_status()?;
 
     let mut buf: Vec<u8> = Vec::new();
@@ -1548,6 +1649,83 @@ mod tests {
     fn https_url_validator_rejects_http() {
         let err = validate_agent_https_url("http://example.com/path").unwrap_err();
         assert!(err.to_string().to_lowercase().contains("https"), "{err}");
+    }
+
+    #[test]
+    fn redirect_hop_rejects_loopback_and_metadata() {
+        for raw in [
+            "http://127.0.0.1/latest/meta-data/",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://[::1]/",
+            "http://[::ffff:127.0.0.1]/",
+            "http://[::ffff:169.254.169.254]/latest/meta-data/",
+            "https://192.168.1.5/admin",
+        ] {
+            match redirect_hop_allowed(raw, false) {
+                Ok(()) => panic!("redirect hop allowed private URL {raw}"),
+                Err(err) => assert!(
+                    err.to_string().to_lowercase().contains("not allowed"),
+                    "{raw}: {err}"
+                ),
+            }
+        }
+        let err = redirect_hop_allowed("http://example.com/after-https", true).unwrap_err();
+        assert!(err.to_string().to_lowercase().contains("https"), "{err}");
+        assert!(redirect_hop_allowed("https://example.com/ok", false).is_ok());
+        assert!(redirect_hop_allowed("https://example.com/ok", true).is_ok());
+        assert!(redirect_hop_allowed("https://[2606:4700:4700::1111]/", false).is_ok());
+    }
+
+    #[tokio::test]
+    async fn guarded_client_does_not_follow_redirect_to_loopback() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        let secret_hit = Arc::new(AtomicBool::new(false));
+        let secret_flag = secret_hit.clone();
+        let secret = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let secret_addr = secret.local_addr().unwrap();
+        tokio::spawn(async move {
+            if let Ok((mut sock, _)) = secret.accept().await {
+                secret_flag.store(true, Ordering::SeqCst);
+                let _ = sock
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\nSECRET")
+                    .await;
+            }
+        });
+
+        let redir = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let redir_addr = redir.local_addr().unwrap();
+        let location = format!("http://{secret_addr}/secret");
+        tokio::spawn(async move {
+            let (mut sock, _) = redir.accept().await.unwrap();
+            let mut buf = [0u8; 2048];
+            let _ = sock.read(&mut buf).await;
+            let resp = format!(
+                "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            );
+            let _ = sock.write_all(resp.as_bytes()).await;
+        });
+
+        let client = ssrf_guarded_client(false).unwrap();
+        let err = client
+            .get(format!("http://{redir_addr}/go"))
+            .timeout(Duration::from_secs(3))
+            .send()
+            .await
+            .expect_err("redirect to loopback must fail");
+        let msg = err.to_string().to_lowercase();
+        assert!(
+            msg.contains("not allowed") || msg.contains("redirect"),
+            "{err}"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(
+            !secret_hit.load(Ordering::SeqCst),
+            "guarded client fetched the loopback redirect target"
+        );
     }
 
     #[test]
