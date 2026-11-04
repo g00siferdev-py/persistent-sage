@@ -76,6 +76,9 @@ pub struct CompletionResponse {
     pub finish_reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<TokenUsage>,
+    /// Provider message body to replay unchanged (Anthropic thinking + tool_use blocks).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_content: Option<Value>,
 }
 
 /// Static metadata for settings UI and context budgeting.

@@ -168,6 +168,19 @@ fn ollama_assistant_with_tool_calls(resp: &CompletionResponse) -> serde_json::Va
 }
 
 fn anthropic_assistant_with_tool_calls(resp: &CompletionResponse) -> serde_json::Value {
+    // Claude 5 thinking blocks must be replayed unchanged or the next tool round 400s.
+    if let Some(raw) = resp.raw_content.as_ref().filter(|raw| {
+        raw.as_array().is_some_and(|arr| {
+            arr.iter().any(|b| {
+                matches!(
+                    b.get("type").and_then(|t| t.as_str()),
+                    Some("thinking") | Some("redacted_thinking") | Some("tool_use")
+                )
+            })
+        })
+    }) {
+        return json!({ "role": "assistant", "content": raw });
+    }
     let mut blocks = Vec::new();
     if !resp.content.trim().is_empty() {
         blocks.push(json!({"type": "text", "text": resp.content}));
@@ -207,6 +220,7 @@ fn completion_for_tool_round(
         tool_calls: tool_calls.to_vec(),
         finish_reason: resp.finish_reason.clone(),
         usage: resp.usage.clone(),
+        raw_content: resp.raw_content.clone(),
     }
 }
 
@@ -736,6 +750,7 @@ async fn try_complete_after_embedded_tool_xml(
         tool_calls: calls.clone(),
         finish_reason: None,
         usage: None,
+        raw_content: None,
     };
     let round = completion_for_tool_round(&resp, &calls);
     let vision_followup = apply_tool_round_messages(
@@ -1923,4 +1938,33 @@ pub async fn chat_vision_supported(state: State<'_, NovaState>) -> Result<bool, 
     let engine = state.llm.read().await.clone();
     let info = engine.model_info();
     Ok(model_supports_vision(&info.provider_id, &info.model_id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::anthropic_assistant_with_tool_calls;
+    use crate::provider::{CompletionResponse, ToolCall};
+    use serde_json::json;
+
+    #[test]
+    fn claude_tool_round_replays_thinking_blocks() {
+        let raw = json!([
+            {"type": "thinking", "thinking": "", "signature": "sig"},
+            {"type": "tool_use", "id": "t1", "name": "weather_get", "input": {"place": "Paris"}}
+        ]);
+        let resp = CompletionResponse {
+            content: String::new(),
+            tool_calls: vec![ToolCall {
+                id: "t1".into(),
+                name: "weather_get".into(),
+                arguments_json: r#"{"place":"Paris"}"#.into(),
+            }],
+            finish_reason: None,
+            usage: None,
+            raw_content: Some(raw.clone()),
+        };
+        let msg = anthropic_assistant_with_tool_calls(&resp);
+        assert_eq!(msg["role"], "assistant");
+        assert_eq!(msg["content"], raw);
+    }
 }

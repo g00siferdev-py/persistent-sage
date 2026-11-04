@@ -51,11 +51,11 @@ const DEFAULT_OPENROUTER_MODELS = [
 ] as const;
 
 const DEFAULT_ANTHROPIC_MODELS = [
-  "claude-3-5-sonnet-20241022",
-  "claude-3-5-haiku-20241022",
-  "claude-3-opus-20240229",
-  "claude-3-sonnet-20240229",
-  "claude-3-haiku-20240307",
+  "claude-sonnet-5-5",
+  "claude-haiku-4-5-20251001",
+  "claude-sonnet-4-6",
+  "claude-opus-4-6",
+  "claude-haiku-5-5",
 ] as const;
 
 const DEFAULT_GEMINI_MODELS = [
@@ -834,7 +834,7 @@ export function ProviderSettingsTab({
           <summary className="cursor-pointer text-[11px] text-ps-faint">Type model name…</summary>
           <input
             type="text"
-            placeholder="e.g. claude-3-5-sonnet-20241022"
+            placeholder="e.g. claude-sonnet-5-5"
             value={settings?.anthropicModel ?? ""}
             disabled={!settings}
             onChange={(e) => {

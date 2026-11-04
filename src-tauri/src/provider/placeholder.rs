@@ -60,6 +60,7 @@ impl LLMProviderEngine for PlaceholderEngine {
             tool_calls: vec![],
             finish_reason: Some("stop".into()),
             usage: None,
+            raw_content: None,
         })
     }
 

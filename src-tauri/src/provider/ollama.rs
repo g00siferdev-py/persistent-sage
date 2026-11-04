@@ -271,6 +271,7 @@ impl LLMProviderEngine for OllamaProvider {
                 .as_bool()
                 .and_then(|d| d.then_some("stop".to_string())),
             usage: None,
+            raw_content: None,
         })
     }
 
