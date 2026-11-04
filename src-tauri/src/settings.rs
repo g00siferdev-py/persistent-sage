@@ -447,6 +447,28 @@ fn default_openrouter_model() -> String {
     "openai/gpt-4o-mini".into()
 }
 
+/// Live Claude id for new installs and for the retired ids this app used to ship.
+pub const DEFAULT_ANTHROPIC_MODEL: &str = "claude-sonnet-5-5";
+
+/// Map Claude ids Anthropic has retired onto the replacement named in their deprecation table.
+/// A stored settings file from 3.0 still says `claude-3-5-sonnet-20241022`, and that id now 404s.
+pub fn canonical_anthropic_model(model: &str) -> String {
+    let id = model.trim();
+    let mapped = match id {
+        "claude-3-5-sonnet-20241022"
+        | "claude-3-5-sonnet-20240620"
+        | "claude-3-sonnet-20240229"
+        | "claude-3-7-sonnet-20250219"
+        | "claude-sonnet-4-20250514" => DEFAULT_ANTHROPIC_MODEL,
+        "claude-3-5-haiku-20241022" | "claude-3-haiku-20240307" => "claude-haiku-4-5-20251001",
+        "claude-3-opus-20240229" | "claude-opus-4-20250514" | "claude-opus-4-1-20250805" => {
+            "claude-opus-4-8"
+        }
+        _ => id,
+    };
+    mapped.to_string()
+}
+
 fn default_openrouter_base_url() -> String {
     "https://openrouter.ai/api/v1".into()
 }
@@ -461,7 +483,7 @@ impl Default for SettingsFile {
             ollama_model: "llama3.2".into(),
             ollama_cloud_model: default_ollama_cloud_model(),
             ollama_base_url: "http://127.0.0.1:11434".into(),
-            anthropic_model: "claude-3-5-sonnet-20241022".into(),
+            anthropic_model: DEFAULT_ANTHROPIC_MODEL.into(),
             gemini_model: default_gemini_model(),
             gemini_base_url: default_gemini_base_url(),
             xai_model: default_xai_model(),
@@ -1238,7 +1260,7 @@ impl SettingsManager {
             ollama_model: inner.ollama_model.clone(),
             ollama_cloud_model: inner.ollama_cloud_model.clone(),
             ollama_base_url: inner.ollama_base_url.clone(),
-            anthropic_model: inner.anthropic_model.clone(),
+            anthropic_model: canonical_anthropic_model(&inner.anthropic_model),
             gemini_model: inner.gemini_model.clone(),
             gemini_base_url: inner.gemini_base_url.clone(),
             xai_model: inner.xai_model.clone(),
@@ -1727,8 +1749,8 @@ impl SettingsManager {
     pub fn anthropic_model(&self) -> String {
         self.inner
             .read()
-            .map(|g| g.anthropic_model.clone())
-            .unwrap_or_else(|_| "claude-3-5-sonnet-20241022".into())
+            .map(|g| canonical_anthropic_model(&g.anthropic_model))
+            .unwrap_or_else(|_| DEFAULT_ANTHROPIC_MODEL.into())
     }
 
     pub fn gemini_model(&self) -> String {
@@ -2249,11 +2271,31 @@ fn normalize_key_slot(provider: &str) -> Result<String, SettingsError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{default_ollama_cloud_model, normalize_key_slot};
+    use super::{canonical_anthropic_model, default_ollama_cloud_model, normalize_key_slot, DEFAULT_ANTHROPIC_MODEL};
 
     #[test]
     fn ollama_cloud_defaults_to_a_supported_cloud_model() {
         assert_eq!(default_ollama_cloud_model(), "kimi-k2.6");
+    }
+
+    #[test]
+    fn retired_claude_picker_ids_map_to_live_models() {
+        assert_eq!(
+            canonical_anthropic_model("claude-3-5-sonnet-20241022"),
+            DEFAULT_ANTHROPIC_MODEL
+        );
+        assert_eq!(
+            canonical_anthropic_model("claude-3-5-haiku-20241022"),
+            "claude-haiku-4-5-20251001"
+        );
+        assert_eq!(
+            canonical_anthropic_model("claude-3-opus-20240229"),
+            "claude-opus-4-8"
+        );
+        assert_eq!(
+            canonical_anthropic_model("claude-sonnet-4-6"),
+            "claude-sonnet-4-6"
+        );
     }
 
     #[test]

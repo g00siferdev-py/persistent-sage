@@ -323,6 +323,7 @@ impl LLMProviderEngine for OpenAIProvider {
             tool_calls,
             finish_reason,
             usage: Self::parse_usage(&v),
+            raw_content: None,
         })
     }
 

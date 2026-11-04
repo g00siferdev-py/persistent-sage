@@ -156,6 +156,7 @@ impl GeminiProvider {
             tool_calls: Vec::new(),
             finish_reason,
             usage,
+            raw_content: None,
         })
     }
 }

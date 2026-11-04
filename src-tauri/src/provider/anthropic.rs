@@ -106,8 +106,11 @@ impl AnthropicProvider {
                 obj.insert("system".into(), json!(s));
             }
         }
+        // Claude 4.7+ and Claude 5 reject temperature (400). Older models still honor it.
         if let Some(t) = request.temperature {
-            obj.insert("temperature".into(), json!(t));
+            if !model_rejects_sampling_params(&self.model) {
+                obj.insert("temperature".into(), json!(t));
+            }
         }
         if let Some(ref tools) = request.tools {
             if !tools.is_empty() {
@@ -160,6 +163,11 @@ impl AnthropicProvider {
             return Err(ProviderError::Api(err.to_string()));
         }
         let (content, tool_calls) = Self::parse_content_blocks(&v["content"])?;
+        // Keep the original blocks so a tool round can echo thinking signatures.
+        let raw_content = v
+            .get("content")
+            .filter(|c| c.as_array().is_some())
+            .cloned();
         let stop = v["stop_reason"].as_str().map(String::from);
         let usage = v["usage"].as_object().and_then(|u| {
             Some(TokenUsage {
@@ -172,6 +180,7 @@ impl AnthropicProvider {
             tool_calls,
             finish_reason: stop,
             usage,
+            raw_content,
         })
     }
 
@@ -293,6 +302,21 @@ impl LLMProviderEngine for AnthropicProvider {
     }
 }
 
+/// Claude 4.7+ and the Claude 5 family reject `temperature` / `top_p` / `top_k`.
+fn model_rejects_sampling_params(model: &str) -> bool {
+    let m = model.trim().to_ascii_lowercase();
+    let m = m.rsplit('/').next().unwrap_or(&m);
+    m.contains("sonnet-5")
+        || m.contains("opus-5")
+        || m.contains("haiku-5")
+        || m.contains("fable")
+        || m.contains("mythos")
+        || m.contains("opus-4-7")
+        || m.contains("opus-4-8")
+        || m.contains("sonnet-4-7")
+        || m.contains("haiku-4-7")
+}
+
 const ANTHROPIC_MODELS_URL: &str = "https://api.anthropic.com/v1/models";
 
 /// Lists Claude model ids from `GET /v1/models` (requires saved Anthropic API key).
@@ -327,4 +351,53 @@ pub async fn fetch_anthropic_model_ids(
     names.sort();
     names.dedup();
     Ok(names)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::types::{ChatTurn, CompletionRequest};
+    use super::*;
+    use serde_json::json;
+
+    fn body_for(model: &str, temperature: Option<f32>, max_tokens: Option<u32>) -> Value {
+        let provider = AnthropicProvider {
+            client: reqwest::Client::new(),
+            api_key: "test".into(),
+            model: model.into(),
+        };
+        let request = CompletionRequest {
+            messages: vec![ChatTurn::text("user", "Hello")],
+            temperature,
+            max_tokens,
+            ..CompletionRequest::default()
+        };
+        provider.build_body(&request, false)
+    }
+
+    #[test]
+    fn sonnet_5_5_omits_temperature_and_caps_output() {
+        let body = body_for("claude-sonnet-5-5", Some(0.7), Some(200_000));
+        assert_eq!(body["model"], "claude-sonnet-5-5");
+        assert!(body.get("temperature").is_none(), "{body}");
+        assert_eq!(body["max_tokens"], 128_000);
+    }
+
+    #[test]
+    fn haiku_4_5_still_sends_temperature() {
+        let body = body_for("claude-haiku-4-5-20251001", Some(0.7), Some(1024));
+        let temperature = body["temperature"].as_f64().expect("temperature");
+        assert!((temperature - 0.7).abs() < 0.001, "{body}");
+        assert_eq!(body["max_tokens"], 1024);
+    }
+
+    #[test]
+    fn text_after_thinking_block_is_kept() {
+        let content = json!([
+            {"type": "thinking", "thinking": "", "signature": "sig"},
+            {"type": "text", "text": "Hello"}
+        ]);
+        let (text, tools) = AnthropicProvider::parse_content_blocks(&content).unwrap();
+        assert_eq!(text, "Hello");
+        assert!(tools.is_empty());
+    }
 }
