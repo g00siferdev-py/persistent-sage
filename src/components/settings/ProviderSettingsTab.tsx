@@ -59,11 +59,10 @@ const DEFAULT_ANTHROPIC_MODELS = [
 ] as const;
 
 const DEFAULT_GEMINI_MODELS = [
-  "gemini-2.5-pro",
-  "gemini-2.5-flash",
-  "gemini-2.0-flash",
-  "gemini-1.5-pro",
-  "gemini-1.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.6-flash",
+  "gemini-3.8-flash",
+  "gemini-2.5-flash-lite",
 ] as const;
 
 const DEFAULT_XAI_MODELS = [
@@ -910,7 +909,7 @@ export function ProviderSettingsTab({
           <summary className="cursor-pointer text-[11px] text-ps-faint">Type model name…</summary>
           <input
             type="text"
-            placeholder="e.g. gemini-2.5-flash"
+            placeholder="e.g. gemini-3.5-flash-lite"
             value={settings?.geminiModel ?? ""}
             disabled={!settings}
             onChange={(e) => {

@@ -423,8 +423,40 @@ fn default_thinking_effort() -> String {
     "medium".into()
 }
 
+/// Live Gemini id for new installs and for the retired ids this app used to ship.
+pub const DEFAULT_GEMINI_MODEL: &str = "gemini-3.5-flash-lite";
+
 fn default_gemini_model() -> String {
-    "gemini-2.5-flash".into()
+    DEFAULT_GEMINI_MODEL.into()
+}
+
+/// Map Gemini ids this app shipped that Google no longer serves onto the
+/// replacement named in the Gemini deprecation table.
+///
+/// `gemini-2.5-flash` is the stored default. New API projects get HTTP 404
+/// (`no longer available to new users`) and on December 1, 2026 Google reroutes
+/// that id to `gemini-3.5-flash-lite`. `gemini-2.0-flash` and the Gemini 1.5
+/// chat ids are already shut down.
+pub fn canonical_gemini_model(model: &str) -> String {
+    let id = model.trim();
+    let id = id.strip_prefix("models/").unwrap_or(id);
+    let mapped = match id {
+        "gemini-2.5-flash" => DEFAULT_GEMINI_MODEL,
+        "gemini-2.5-pro" => "gemini-3.8-flash",
+        "gemini-2.0-flash" | "gemini-2.0-flash-001" => "gemini-3.6-flash",
+        "gemini-1.5-pro"
+        | "gemini-1.5-pro-latest"
+        | "gemini-1.5-pro-001"
+        | "gemini-1.5-pro-002"
+        | "gemini-1.5-flash"
+        | "gemini-1.5-flash-latest"
+        | "gemini-1.5-flash-001"
+        | "gemini-1.5-flash-002"
+        | "gemini-1.5-flash-8b"
+        | "gemini-1.5-flash-8b-001" => DEFAULT_GEMINI_MODEL,
+        _ => id,
+    };
+    mapped.to_string()
 }
 
 fn default_ollama_cloud_model() -> String {
@@ -1239,7 +1271,7 @@ impl SettingsManager {
             ollama_cloud_model: inner.ollama_cloud_model.clone(),
             ollama_base_url: inner.ollama_base_url.clone(),
             anthropic_model: inner.anthropic_model.clone(),
-            gemini_model: inner.gemini_model.clone(),
+            gemini_model: canonical_gemini_model(&inner.gemini_model),
             gemini_base_url: inner.gemini_base_url.clone(),
             xai_model: inner.xai_model.clone(),
             xai_base_url: inner.xai_base_url.clone(),
@@ -1734,7 +1766,7 @@ impl SettingsManager {
     pub fn gemini_model(&self) -> String {
         self.inner
             .read()
-            .map(|g| g.gemini_model.clone())
+            .map(|g| canonical_gemini_model(&g.gemini_model))
             .unwrap_or_else(|_| default_gemini_model())
     }
 
@@ -2249,11 +2281,44 @@ fn normalize_key_slot(provider: &str) -> Result<String, SettingsError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{default_ollama_cloud_model, normalize_key_slot};
+    use super::{
+        canonical_gemini_model, default_gemini_model, default_ollama_cloud_model, normalize_key_slot,
+        DEFAULT_GEMINI_MODEL,
+    };
 
     #[test]
     fn ollama_cloud_defaults_to_a_supported_cloud_model() {
         assert_eq!(default_ollama_cloud_model(), "kimi-k2.6");
+    }
+
+    #[test]
+    fn retired_gemini_picker_ids_map_to_live_models() {
+        assert_eq!(default_gemini_model(), DEFAULT_GEMINI_MODEL);
+        assert_eq!(
+            canonical_gemini_model("gemini-2.5-flash"),
+            DEFAULT_GEMINI_MODEL
+        );
+        assert_eq!(
+            canonical_gemini_model("models/gemini-2.5-flash"),
+            DEFAULT_GEMINI_MODEL
+        );
+        assert_eq!(canonical_gemini_model("gemini-2.5-pro"), "gemini-3.8-flash");
+        assert_eq!(
+            canonical_gemini_model("gemini-2.0-flash"),
+            "gemini-3.6-flash"
+        );
+        assert_eq!(
+            canonical_gemini_model("gemini-1.5-flash"),
+            DEFAULT_GEMINI_MODEL
+        );
+        assert_eq!(
+            canonical_gemini_model("gemini-2.5-flash-lite"),
+            "gemini-2.5-flash-lite"
+        );
+        assert_eq!(
+            canonical_gemini_model("gemini-3.6-flash"),
+            "gemini-3.6-flash"
+        );
     }
 
     #[test]

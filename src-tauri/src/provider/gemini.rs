@@ -14,6 +14,19 @@ use crate::settings::SettingsManager;
 
 const GEMINI_CTX: u32 = 1_000_000;
 
+fn gemini_major(model: &str) -> Option<u32> {
+    let m = model.trim().to_ascii_lowercase();
+    let m = m.strip_prefix("models/").unwrap_or(&m);
+    let rest = m.strip_prefix("gemini-")?;
+    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    digits.parse().ok()
+}
+
+fn uses_legacy_thinking_budget(model: &str) -> bool {
+    let m = model.to_ascii_lowercase();
+    gemini_major(&m) == Some(2) && m.contains("2.5")
+}
+
 pub struct GeminiProvider {
     client: reqwest::Client,
     api_key: String,
@@ -104,14 +117,17 @@ impl GeminiProvider {
         }
 
         let mut generation = serde_json::Map::new();
+        // Gemini 3+ ignores temperature today and later generations reject it.
         if let Some(t) = request.temperature {
-            generation.insert("temperature".into(), json!(t));
+            if gemini_major(&self.model).unwrap_or(0) < 3 {
+                generation.insert("temperature".into(), json!(t));
+            }
         }
         if let Some(max) = request.max_tokens {
             generation.insert("maxOutputTokens".into(), json!(max.clamp(1, 65_536)));
         }
-        let model_supports_thinking = self.model.to_lowercase().contains("2.5");
-        if model_supports_thinking {
+        // `thinkingBudget` is the Gemini 2.5 control. `gemini-3.5-*` must not match it.
+        if uses_legacy_thinking_budget(&self.model) {
             if let Some(budget) = Self::thinking_budget(request.thinking_effort.as_deref()) {
                 generation.insert(
                     "thinkingConfig".into(),
@@ -254,4 +270,48 @@ pub async fn fetch_gemini_model_ids(
     names.sort();
     names.dedup();
     Ok(names)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn provider(model: &str) -> GeminiProvider {
+        GeminiProvider {
+            client: reqwest::Client::new(),
+            api_key: "test".into(),
+            model: model.into(),
+            base_url: "https://generativelanguage.googleapis.com/v1beta".into(),
+        }
+    }
+
+    fn request() -> CompletionRequest {
+        CompletionRequest {
+            messages: vec![ChatTurn::text("user", "Hello")],
+            temperature: Some(0.7),
+            thinking_effort: Some("medium".into()),
+            max_tokens: Some(1024),
+            ..CompletionRequest::default()
+        }
+    }
+
+    #[test]
+    fn flash_lite_omits_sampling_and_legacy_thinking_budget() {
+        let body = provider("gemini-3.5-flash-lite").build_body(&request());
+        assert_eq!(body["contents"][0]["parts"][0]["text"], "Hello");
+        let gen = &body["generationConfig"];
+        assert!(gen.get("temperature").is_none(), "{body}");
+        assert!(gen.get("thinkingConfig").is_none(), "{body}");
+        assert_eq!(gen["maxOutputTokens"], 1024);
+    }
+
+    #[test]
+    fn gemini_2_5_still_sends_temperature_and_budget() {
+        let body = provider("gemini-2.5-flash-lite").build_body(&request());
+        let gen = &body["generationConfig"];
+        let temperature = gen["temperature"].as_f64().expect("temperature");
+        assert!((temperature - 0.7).abs() < 0.001, "{body}");
+        assert_eq!(gen["thinkingConfig"]["thinkingBudget"], 4096);
+        assert_eq!(gen["thinkingConfig"]["includeThoughts"], false);
+    }
 }
