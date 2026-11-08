@@ -132,7 +132,12 @@ impl OpenAIProvider {
     /// Chat Completions `max_tokens` is an output cap; never send values the API rejects.
     fn clamp_completion_tokens_for_model(model: &str, requested: u32) -> u32 {
         let m = model.to_lowercase();
-        let cap = if m.contains("gpt-3.5") && !m.contains("16k") && !m.contains("1106") {
+        let cap = if uses_completion_token_budget(model) {
+            // Reasoning models spend this budget before any visible tokens. The chat
+            // path substitutes the context window when Settings leaves the cap unset,
+            // so keep enough room for a normal reply.
+            32_768u32
+        } else if m.contains("gpt-3.5") && !m.contains("16k") && !m.contains("1106") {
             4096u32
         } else if m.contains("gpt-4") || m.contains("gpt-3.5") || m.contains("gpt-4o") {
             16_384
@@ -154,16 +159,26 @@ impl OpenAIProvider {
             }).collect::<Vec<_>>(),
             "stream": stream,
         });
+        // GPT-5 and GPT-6 reject `max_tokens` (use `max_completion_tokens`) and
+        // reject any `temperature` other than the API default.
+        let completion_budget = uses_completion_token_budget(&self.model);
         if let Some(t) = request.temperature {
-            body.as_object_mut()
-                .unwrap()
-                .insert("temperature".into(), json!(t));
+            if !completion_budget {
+                body.as_object_mut()
+                    .unwrap()
+                    .insert("temperature".into(), json!(t));
+            }
         }
         if let Some(mt) = request.max_tokens {
             let capped = Self::clamp_completion_tokens_for_model(&self.model, mt);
+            let key = if completion_budget {
+                "max_completion_tokens"
+            } else {
+                "max_tokens"
+            };
             body.as_object_mut()
                 .unwrap()
-                .insert("max_tokens".into(), json!(capped));
+                .insert(key.into(), json!(capped));
         }
         if let Some(effort) = request.thinking_effort.as_deref() {
             let effort = effort.trim().to_lowercase();
@@ -429,6 +444,16 @@ fn model_id_is_non_chat(lowered: &str) -> bool {
     lowered
         .split(|c: char| !c.is_ascii_alphanumeric())
         .any(|seg| LEGACY_COMPLETION_FAMILIES.contains(&seg))
+}
+
+/// GPT-5 / GPT-6 Chat Completions reject the legacy sampling fields.
+///
+/// OpenRouter ids (`openai/gpt-5.4`) use the segment after the last slash.
+fn uses_completion_token_budget(model: &str) -> bool {
+    let trimmed = model.trim();
+    let leaf = trimmed.rsplit('/').next().unwrap_or(trimmed);
+    let leaf = leaf.to_ascii_lowercase();
+    leaf.starts_with("gpt-5") || leaf.starts_with("gpt-6")
 }
 
 /// Whether an OpenAI model id looks like a chat model usable with `/chat/completions` + tools.
@@ -726,7 +751,55 @@ pub async fn fetch_openrouter_model_catalog(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::types::{ChatTurn, CompletionRequest};
     use serde_json::json;
+
+    fn provider_for(model: &str) -> OpenAIProvider {
+        OpenAIProvider {
+            client: reqwest::Client::new(),
+            api_key: "test".into(),
+            model: model.into(),
+            base_url: "https://api.openai.com/v1".into(),
+            provider_id: "openai",
+        }
+    }
+
+    fn default_shaped_request() -> CompletionRequest {
+        CompletionRequest {
+            messages: vec![ChatTurn::text("user", "Hello")],
+            tools: None,
+            max_tokens: Some(128_000),
+            temperature: Some(0.7),
+            thinking_effort: Some("medium".into()),
+        }
+    }
+
+    #[test]
+    fn gpt5_request_omits_rejected_sampling_fields() {
+        let body = provider_for("gpt-5.4").build_body(&default_shaped_request(), false);
+        assert!(body.get("temperature").is_none(), "{body}");
+        assert!(body.get("max_tokens").is_none(), "{body}");
+        assert!(body.get("reasoning_effort").is_none(), "{body}");
+        assert_eq!(body["max_completion_tokens"], json!(32_768));
+        assert_eq!(body["model"], "gpt-5.4");
+    }
+
+    #[test]
+    fn openrouter_gpt6_request_uses_completion_token_budget() {
+        let body = provider_for("openai/gpt-6-luna").build_body(&default_shaped_request(), false);
+        assert!(body.get("temperature").is_none(), "{body}");
+        assert!(body.get("max_tokens").is_none(), "{body}");
+        assert_eq!(body["max_completion_tokens"], json!(32_768));
+    }
+
+    #[test]
+    fn gpt4o_mini_keeps_legacy_sampling_fields() {
+        let body = provider_for("gpt-4o-mini").build_body(&default_shaped_request(), false);
+        let temperature = body["temperature"].as_f64().expect("temperature");
+        assert!((temperature - 0.7).abs() < 0.001, "{temperature}");
+        assert_eq!(body["max_tokens"], json!(16_384));
+        assert!(body.get("max_completion_tokens").is_none(), "{body}");
+    }
 
     #[test]
     fn keeps_openai_chat_models_only() {
