@@ -782,6 +782,9 @@ fn stretch_ikm_to_aes_key(ikm: &[u8; 32], salt: &[u8; 16]) -> Result<[u8; 32], S
 #[cfg(unix)]
 fn write_secret_file(path: &Path, data: &[u8]) -> std::io::Result<()> {
     use std::os::unix::fs::OpenOptionsExt;
+    // Test hook sits before the truncate so a concurrent saver can finish a
+    // newer snapshot while this call is still inside the write.
+    stall_secret_write_for_test();
     let mut f = OpenOptions::new()
         .create(true)
         .write(true)
@@ -794,8 +797,27 @@ fn write_secret_file(path: &Path, data: &[u8]) -> std::io::Result<()> {
 
 #[cfg(not(unix))]
 fn write_secret_file(path: &Path, data: &[u8]) -> std::io::Result<()> {
+    stall_secret_write_for_test();
     std::fs::write(path, data)
 }
+
+/// Holds an in-flight `settings.json` write so tests can overlap a second save.
+#[cfg(test)]
+fn stall_secret_write_for_test() {
+    let mut gate = SECRET_WRITE_GATE.lock().unwrap_or_else(|e| e.into_inner());
+    if !gate.armed {
+        return;
+    }
+    gate.armed = false;
+    gate.entered = true;
+    SECRET_WRITE_CV.notify_all();
+    while !gate.release {
+        gate = SECRET_WRITE_CV.wait(gate).unwrap_or_else(|e| e.into_inner());
+    }
+}
+
+#[cfg(not(test))]
+fn stall_secret_write_for_test() {}
 
 fn read_exact(path: &Path, n: usize) -> Result<Vec<u8>, SettingsError> {
     let v = std::fs::read(path)?;
@@ -945,7 +967,13 @@ impl SettingsManager {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)?;
         }
+        // Hold the read guard until the write returns. Otherwise non-lexical
+        // lifetimes drop it after serialization, and a newer save (API key,
+        // tool toggle, pulse binding) can land on disk and then be overwritten
+        // by this older snapshot. Chat switches persist `pulseConversationId`
+        // on every thread change, so that overlap is a normal launch/save.
         write_secret_file(&self.path, json.as_bytes())?;
+        drop(inner);
         Ok(())
     }
 
@@ -2248,8 +2276,35 @@ fn normalize_key_slot(provider: &str) -> Result<String, SettingsError> {
 }
 
 #[cfg(test)]
+struct SecretWriteGate {
+    armed: bool,
+    entered: bool,
+    release: bool,
+}
+
+#[cfg(test)]
+static SECRET_WRITE_GATE: std::sync::Mutex<SecretWriteGate> = std::sync::Mutex::new(SecretWriteGate {
+    armed: false,
+    entered: false,
+    release: false,
+});
+
+#[cfg(test)]
+static SECRET_WRITE_CV: std::sync::Condvar = std::sync::Condvar::new();
+
+#[cfg(test)]
 mod tests {
-    use super::{default_ollama_cloud_model, normalize_key_slot};
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    use serde_json::Value as JsonValue;
+
+    use super::{
+        default_ollama_cloud_model, normalize_key_slot, SettingsManager, SettingsUpdatePayload,
+        SECRET_WRITE_CV, SECRET_WRITE_GATE,
+    };
+    use crate::memory::MemoryAnchor;
 
     #[test]
     fn ollama_cloud_defaults_to_a_supported_cloud_model() {
@@ -2277,6 +2332,91 @@ mod tests {
         for (provider, slot) in cases {
             assert_eq!(normalize_key_slot(provider).unwrap(), slot);
         }
+    }
+
+    /// A pulse-binding save that is already inside `settings.json` write must not
+    /// publish a snapshot taken before a concurrent API-key save.
+    #[test]
+    fn overlapping_settings_writes_keep_the_api_key() {
+        let dir = std::env::temp_dir().join(format!(
+            "ps-settings-race-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mem = Arc::new(
+            MemoryAnchor::new(dir.join("mem.sqlite")).expect("memory db"),
+        );
+        let mgr = Arc::new(
+            SettingsManager::load(dir.clone(), mem).expect("settings"),
+        );
+
+        struct ReleaseWriteGate;
+        impl Drop for ReleaseWriteGate {
+            fn drop(&mut self) {
+                let mut gate = SECRET_WRITE_GATE.lock().unwrap_or_else(|e| e.into_inner());
+                gate.armed = false;
+                gate.release = true;
+                SECRET_WRITE_CV.notify_all();
+            }
+        }
+        let _release = ReleaseWriteGate;
+        {
+            let mut gate = SECRET_WRITE_GATE.lock().unwrap_or_else(|e| e.into_inner());
+            gate.armed = true;
+            gate.entered = false;
+            gate.release = false;
+        }
+
+        let pulse_mgr = mgr.clone();
+        let pulse = thread::spawn(move || {
+            pulse_mgr
+                .apply_update(SettingsUpdatePayload {
+                    pulse_conversation_id: Some(JsonValue::String("conv-open".into())),
+                    ..SettingsUpdatePayload::default()
+                })
+                .expect("pulse binding");
+        });
+
+        let entered = Instant::now();
+        loop {
+            let gate = SECRET_WRITE_GATE.lock().unwrap_or_else(|e| e.into_inner());
+            if gate.entered {
+                break;
+            }
+            drop(gate);
+            if entered.elapsed() > Duration::from_secs(10) {
+                panic!("pulse save did not reach the settings write");
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+
+        let key_mgr = mgr.clone();
+        let key_save = thread::spawn(move || {
+            key_mgr
+                .save_api_key("openai", "sk-race-key")
+                .expect("save api key");
+        });
+
+        // Give the key save time to finish if the pulse write is not holding
+        // the settings lock. With the lock held, this thread blocks until release.
+        thread::sleep(Duration::from_millis(200));
+        {
+            let mut gate = SECRET_WRITE_GATE.lock().unwrap_or_else(|e| e.into_inner());
+            gate.release = true;
+            SECRET_WRITE_CV.notify_all();
+        }
+        pulse.join().expect("pulse thread");
+        key_save.join().expect("key thread");
+
+        let mem = Arc::new(
+            MemoryAnchor::new(dir.join("reload.sqlite")).expect("reload memory"),
+        );
+        let reloaded = SettingsManager::load(dir, mem).expect("reload settings");
+        let stored = reloaded
+            .decrypt_api_key("openai")
+            .expect("decrypt")
+            .unwrap_or_default();
+        assert_eq!(stored, "sk-race-key");
     }
 }
 
